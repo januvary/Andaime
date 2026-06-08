@@ -16,7 +16,6 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 STAGING_DIR = "_update_staging"
-COMMITTED_MARKER = "_internal/.update_committed"
 OLD_INTERNAL_DIR = "_internal_old"
 
 
@@ -67,50 +66,15 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _confirm_update() -> None:
-    app = _app_dir()
-    marker = app / COMMITTED_MARKER
-
-    if not marker.exists():
-        return
-
-    old_internal = app / OLD_INTERNAL_DIR
-    with contextlib.suppress(Exception):
-        if old_internal.is_dir():
-            shutil.rmtree(old_internal)
-
-    current_exe = Path(sys.executable)
-    new_exe_dir = app / "_update_exe"
-    new_exe = new_exe_dir / current_exe.name
-
-    if new_exe.is_file():
-        old_exe = app / (current_exe.name + ".old")
-        with contextlib.suppress(Exception):
-            if old_exe.exists():
-                old_exe.unlink()
-            os.rename(current_exe, old_exe)
-            shutil.copy2(new_exe, current_exe)
-            shutil.rmtree(new_exe_dir, ignore_errors=True)
-
-    with contextlib.suppress(Exception):
-        marker.unlink()
-
-
-def _cleanup_old_exe() -> None:
-    app = _app_dir()
-    current_exe = Path(sys.executable)
-    old_exe = app / (current_exe.name + ".old")
-    with contextlib.suppress(Exception):
-        if old_exe.exists():
-            old_exe.unlink()
-
-
 def apply_pending_update() -> bool:
     if not getattr(sys, "frozen", False):
         return False
 
-    _confirm_update()
-    _cleanup_old_exe()
+    app = _app_dir()
+    old_internal = app / OLD_INTERNAL_DIR
+    with contextlib.suppress(Exception):
+        if old_internal.is_dir():
+            shutil.rmtree(old_internal)
 
     staging = staging_path()
     if not staging.is_dir():
@@ -122,9 +86,7 @@ def apply_pending_update() -> bool:
             shutil.rmtree(staging)
         return False
 
-    app = _app_dir()
     internal = app / "_internal"
-    old_internal = app / OLD_INTERNAL_DIR
 
     try:
         if old_internal.is_dir():
@@ -132,18 +94,6 @@ def apply_pending_update() -> bool:
 
         os.rename(internal, old_internal)
         os.rename(staging_internal, internal)
-
-        marker = app / COMMITTED_MARKER
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.touch()
-
-        current_exe = Path(sys.executable)
-        new_exe = staging / current_exe.name
-        if new_exe.is_file():
-            exe_staging = app / "_update_exe"
-            exe_staging.mkdir(exist_ok=True)
-            shutil.copy2(new_exe, exe_staging / current_exe.name)
-
         shutil.rmtree(staging, ignore_errors=True)
 
         subprocess.Popen([sys.executable], start_new_session=True)
@@ -196,6 +146,11 @@ class UpdateCheckWorker(QThread):
 
     def run(self):
         try:
+            staging = staging_path()
+            tag_file = staging / ".update_tag"
+            if staging.is_dir() and tag_file.exists():
+                return
+
             import urllib.request
 
             headers = {
@@ -220,7 +175,6 @@ class UpdateCheckWorker(QThread):
                 if name.endswith(".zip"):
                     asset_url = asset.get("browser_download_url")
                     expected_digest = asset.get("digest")
-                    print(f"[Updater] Asset digest: {expected_digest}")
                     break
 
             if not asset_url:
@@ -256,22 +210,24 @@ class UpdateCheckWorker(QThread):
                         shutil.rmtree(staging)
                     zf.extractall(staging)
 
-                app_name = _app_dir().name
-                nested = staging / app_name
-                if nested.is_dir():
-                    for item in nested.iterdir():
-                        dest = staging / item.name
-                        if dest.exists():
-                            if item.is_dir():
-                                shutil.rmtree(dest)
-                            else:
-                                dest.unlink()
-                        if item.is_dir():
-                            shutil.copytree(item, dest)
-                        else:
-                            shutil.copy2(item, dest)
-                    shutil.rmtree(nested)
+                if not (staging / "_internal").is_dir():
+                    for child in staging.iterdir():
+                        if child.is_dir() and (child / "_internal").is_dir():
+                            for item in child.iterdir():
+                                dest = staging / item.name
+                                if dest.exists():
+                                    if item.is_dir():
+                                        shutil.rmtree(dest)
+                                    else:
+                                        dest.unlink()
+                                if item.is_dir():
+                                    shutil.copytree(item, dest)
+                                else:
+                                    shutil.copy2(item, dest)
+                            shutil.rmtree(child)
+                            break
 
+                (staging / ".update_tag").write_text(tag)
                 self.update_ready.emit(tag)
             finally:
                 with contextlib.suppress(Exception):
