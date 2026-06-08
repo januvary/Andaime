@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, ParamSpec, TypeVar
+from typing import Any, Callable, Iterator, Literal, ParamSpec, TypeVar
 
 from andaime.paths import resolve_db_path
 from andaime.error_handler import ErrorHandler, ErrorLevel
@@ -19,7 +19,7 @@ _P = ParamSpec("_P")
 _R = TypeVar("_R")
 
 
-def _db_op(op_type: str = "read") -> Callable[[Callable[_P, _R]], Callable[_P, _R]]:
+def db_op(op_type: str = "read") -> Callable[[Callable[_P, _R]], Callable[_P, _R]]:
     def decorator(func: Callable[_P, _R]) -> Callable[_P, _R]:
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
             db: Any = args[0]  # type: ignore[assignment]
@@ -37,7 +37,7 @@ def _db_op(op_type: str = "read") -> Callable[[Callable[_P, _R]], Callable[_P, _
 
 class BaseDatabase(ABC):
     def __init__(
-        self, db_path: Optional[str] = None, entity_name: str = "registros"
+        self, db_path: str | None = None, entity_name: str = "registros"
     ) -> None:
         if db_path is None:
             db_path = self._resolve_default_db_path()
@@ -49,8 +49,8 @@ class BaseDatabase(ABC):
 
         self.db_path = db_path
         self._entity_name = entity_name
-        self.conn: Optional[sqlite3.Connection] = None
-        self._conn_open_time: Optional[float] = None
+        self.conn: sqlite3.Connection | None = None
+        self._conn_open_time: float | None = None
         self._lock = threading.RLock()
         self._initialize()
 
@@ -216,7 +216,7 @@ class BaseDatabase(ABC):
             return self.conn
 
     @contextmanager
-    def _cursor(self):
+    def _cursor(self) -> Iterator[sqlite3.Cursor]:
         cursor = self._get_cursor()
         try:
             yield cursor

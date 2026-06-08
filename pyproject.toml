@@ -7,7 +7,10 @@ name = "andaime"
 version = "0.1.0"
 description = "Shared toolkit for PySide6 desktop apps"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["holidays>=0.40"]
 
 [tool.setuptools.packages.find]
 include = ["andaime*"]
+
+[tool.setuptools.package-data]
+andaime = ["data/*.json"]

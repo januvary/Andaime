@@ -10,7 +10,7 @@ import traceback
 from contextlib import suppress
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 
 class ErrorLevel(Enum):
@@ -22,8 +22,8 @@ class ErrorLevel(Enum):
 
 
 class ErrorHandler:
-    _logger: Optional[logging.Logger] = None
-    _show_dialog_callback: Optional[Callable[[str, str, ErrorLevel], None]] = None
+    _logger: logging.Logger | None = None
+    _show_dialog_callback: Callable[[str, str, ErrorLevel], None] | None = None
     _initialized: bool = False
 
     @staticmethod
@@ -81,7 +81,7 @@ class ErrorHandler:
         context: str = "Unknown",
         level: ErrorLevel = ErrorLevel.ERROR,
         show_dialog: bool = True,
-        recovery_hint: Optional[str] = None,
+        recovery_hint: str | None = None,
     ) -> str:
         handler = ErrorHandler()
 
@@ -163,7 +163,7 @@ class ErrorHandler:
     def handle_validation_error(
         error: Exception,
         field: str,
-        recovery_hint: Optional[str] = None,
+        recovery_hint: str | None = None,
         show_dialog: bool = True,
     ) -> str:
         if recovery_hint is None:
@@ -181,7 +181,7 @@ class ErrorHandler:
     def handle_database_error(
         error: Exception,
         operation: str = "database operation",
-        recovery_hint: Optional[str] = None,
+        recovery_hint: str | None = None,
         show_dialog: bool = True,
     ) -> str:
         if recovery_hint is None:
@@ -205,7 +205,7 @@ class ErrorHandler:
         func: Callable[..., Any],
         *args: Any,
         operation_name: str = "operation",
-        on_error: Optional[Callable[[Exception], None]] = None,
+        on_error: Callable[[Exception], None] | None = None,
         context: str = "Unknown",
         **kwargs: Any,
     ) -> Any:
