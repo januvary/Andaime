@@ -223,6 +223,69 @@ class BaseDatabase(ABC):
         finally:
             cursor.close()
 
+    def _fetch_one(self, sql: str, params: tuple = ()) -> dict | None:
+        with self._cursor() as cur:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def _fetch_all(self, sql: str, params: tuple = ()) -> list[dict]:
+        with self._cursor() as cur:
+            cur.execute(sql, params)
+            return [dict(row) for row in cur.fetchall()]
+
+    def _fetch_value(self, sql: str, params: tuple = ()) -> Any:
+        with self._cursor() as cur:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            return row[0] if row else None
+
+    def _execute_write(self, sql: str, params: tuple = ()) -> bool:
+        with self._cursor() as cur:
+            cur.execute(sql, params)
+        self._commit()
+        return True
+
+    def _execute_insert(self, sql: str, params: tuple = ()) -> int:
+        with self._cursor() as cur:
+            cur.execute(sql, params)
+            last_id = cur.lastrowid
+        self._commit()
+        return last_id
+
+    def _fetch_by_id(self, table: str, row_id: int) -> dict | None:
+        return self._fetch_one(f"SELECT * FROM {table} WHERE id = ?", (row_id,))
+
+    def _fetch_all_table(self, table: str, order_by: str = "") -> list[dict]:
+        sql = f"SELECT * FROM {table}"
+        if order_by:
+            sql += f" ORDER BY {order_by}"
+        return self._fetch_all(sql)
+
+    def _fetch_count(self, table: str, where: str = "", params: tuple = ()) -> int:
+        sql = f"SELECT COUNT(*) FROM {table}"
+        if where:
+            sql += f" WHERE {where}"
+        val = self._fetch_value(sql, params)
+        return val if val is not None else 0
+
+    def _insert_row(self, table: str, **kwargs) -> int:
+        cols = ", ".join(kwargs.keys())
+        placeholders = ", ".join("?" for _ in kwargs)
+        sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
+        return self._execute_insert(sql, tuple(kwargs.values()))
+
+    def _update_row(self, table: str, row_id: int, **kwargs) -> bool:
+        sets = ", ".join(f"{k} = ?" for k in kwargs)
+        sql = f"UPDATE {table} SET {sets} WHERE id = ?"
+        return self._execute_write(sql, tuple(kwargs.values()) + (row_id,))
+
+    def _delete_row(self, table: str, row_id: int, guards: list[tuple[str, str]] = []) -> bool:
+        for guard_table, fk_col in guards:
+            if self._fetch_count(guard_table, f"{fk_col} = ?", (row_id,)) > 0:
+                return False
+        return self._execute_write(f"DELETE FROM {table} WHERE id = ?", (row_id,))
+
     def _commit(self) -> None:
         with self._lock:
             assert self.conn is not None, "Database connection not initialized"
