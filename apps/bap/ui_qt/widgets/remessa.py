@@ -31,10 +31,10 @@ from andaime.qt.theme import make_button
 from andaime.dates import parse_date, format_date
 import operator
 
-from bap.database.ss54_database import SS54Database
-from bap.models import Lote
-from bap.utils.date_utils import format_date_display
-from bap.ui_qt.styles import context_menu_stylesheet
+from src.database.ss54_database import SS54Database
+from src.models import Lote
+from src.utils.date_utils import format_date_display
+from src.ui_qt.styles import context_menu_stylesheet
 
 
 class RemessaLabel(QWidget):

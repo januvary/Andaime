@@ -191,6 +191,9 @@ ok "Stage: $STAGE"
 cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/launchers/"
 ok "shortcuts.bat copied"
 
+cp "$ANDAIME_REPO/LICENSE" "$STAGE/LICENSE"
+ok "LICENSE copied (GPLv3 — accompanies distributed source)"
+
 # ============================================
 # 4. Copy Python tree
 # ============================================

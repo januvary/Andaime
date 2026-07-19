@@ -19,14 +19,14 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
-from bap.constants import (
+from src.constants import (
     STATUS_LABELS,
     NULL_STATUS,
     allowed_status_transitions,
     status_display_label,
 )
-from bap.ui_qt.widgets.dialogs import scaffold_dialog, make_dialog_button_row
-from bap.ui_qt.widgets.labels import SectionLabel
+from src.ui_qt.widgets.dialogs import scaffold_dialog, make_dialog_button_row
+from src.ui_qt.widgets.labels import SectionLabel
 
 _STATUS_DEFAULT = NULL_STATUS
 

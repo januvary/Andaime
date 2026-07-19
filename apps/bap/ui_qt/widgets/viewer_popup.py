@@ -16,9 +16,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from bap.ui_qt.styles import colors, context_menu_stylesheet
-from bap.constants import DOC_TYPE_LABELS
-from bap.models import GridItem
+from src.ui_qt.styles import colors, context_menu_stylesheet
+from src.constants import DOC_TYPE_LABELS
+from src.models import GridItem
 
 
 def _build_classify_menu(parent, *, current: str, exclusions: set[str],

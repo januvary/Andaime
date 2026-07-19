@@ -6,7 +6,7 @@ from pathlib import Path
 import andaime
 from andaime.config import ConfigManager
 
-from bap.utils.config import SS54Config
+from src.utils.config import SS54Config
 
 
 def ensure_initialized() -> None:

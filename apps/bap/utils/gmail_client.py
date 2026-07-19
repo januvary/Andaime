@@ -26,7 +26,7 @@ from email.mime.text import MIMEText
 from email.utils import make_msgid
 from pathlib import Path
 
-from bap.utils.config import bap_data_dir
+from src.utils.config import bap_data_dir
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.compose",

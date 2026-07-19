@@ -21,19 +21,19 @@ from typing import Any
 
 import openpyxl
 from andaime.text import to_upper_normalized
-from bap.utils.text_utils import fold_diacritics
+from src.utils.text_utils import fold_diacritics
 from andaime.dates import parse_date
 
-from bap.database.ss54_database import SS54Database
-from bap.constants import Status
+from src.database.ss54_database import SS54Database
+from src.constants import Status
 
 def _default_xlsx_path() -> str:
-    from bap.utils.config import bap_data_dir
+    from src.utils.config import bap_data_dir
     return str(bap_data_dir() / "REMESSAS ENVIADAS.xlsx")
 
 
 def _default_temp_db_path() -> str:
-    from bap.utils.config import bap_data_dir
+    from src.utils.config import bap_data_dir
     return str(bap_data_dir() / "remessas_import.db")
 
 _SECTION_PRIMEIRA = "PRIMEIRA SOLICITAÇÃO"
@@ -635,7 +635,7 @@ def run_import(
     temp_db_path: str = None,
 ) -> dict[str, Any]:
     """Executa extração + transferência de pacientes. Retorna estatísticas."""
-    from bap.utils.bootstrap import ensure_initialized
+    from src.utils.bootstrap import ensure_initialized
 
     ensure_initialized()
 

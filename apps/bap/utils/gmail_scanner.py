@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from rapidfuzz import fuzz
 from rapidfuzz.process import extractOne
 
-from bap.utils.import_remessas import _infer_status, _status_norm
+from src.utils.import_remessas import _infer_status, _status_norm
 
 
 # Limite inferior (exclusivo) para o escaneamento de e-mails DRS.

@@ -14,10 +14,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from bap.constants import TIPO_LABELS, SOLICITACAO_LABELS, Status
-from bap.database.ss54_database import SS54Database
-from bap.models import Lote, Processo
-from bap.utils.arquivo_storage import (
+from src.constants import TIPO_LABELS, SOLICITACAO_LABELS, Status
+from src.database.ss54_database import SS54Database
+from src.models import Lote, Processo
+from src.utils.arquivo_storage import (
     _safe_filename,
     build_processo_dir,
     compute_processo_sig,
@@ -25,7 +25,7 @@ from bap.utils.arquivo_storage import (
     remessa_folder_relpath,
     resolve_arquivos_root,
 )
-from bap.utils.config import SS54Config
+from src.utils.config import SS54Config
 
 
 @dataclass

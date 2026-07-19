@@ -36,10 +36,10 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 
-from bap.ui_qt.styles import colors, get_theme
-from bap.constants import DOC_TYPE_LABELS, DOC_TYPE_ORDER
-from bap.models import GridItem
-from bap.ui_qt.widgets.viewer_popup import (
+from src.ui_qt.styles import colors, get_theme
+from src.constants import DOC_TYPE_LABELS, DOC_TYPE_ORDER
+from src.models import GridItem
+from src.ui_qt.widgets.viewer_popup import (
     ViewerPopup,
     _build_classify_menu,
     _resolve_item_page,
@@ -399,8 +399,8 @@ def _archive_to_items(path: str) -> list[GridItem]:
     original da entrada é preservado em ``arquivo_original``. Entradas que não
     podem ser decodificadas são silenciosamente ignoradas.
     """
-    from bap.utils.archive_migrate import IMAGE_EXT
-    from bap.models import image_to_pdf_bytes
+    from src.utils.archive_migrate import IMAGE_EXT
+    from src.models import image_to_pdf_bytes
     from andaime.pdf import split_pages
 
     items: list[GridItem] = []

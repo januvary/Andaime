@@ -16,12 +16,12 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget, QFrame
 
-from bap.ui_qt.widgets.header import Header
-from bap.ui_qt.widgets.remessa import RemessaLabel
-from bap.ui_qt.widgets.status_label import StatusLabel
-from bap.ui_qt.widgets.document_grid import DocumentGrid
+from src.ui_qt.widgets.header import Header
+from src.ui_qt.widgets.remessa import RemessaLabel
+from src.ui_qt.widgets.status_label import StatusLabel
+from src.ui_qt.widgets.document_grid import DocumentGrid
 from andaime.qt import StatusLine
-from bap.models import Paciente
+from src.models import Paciente
 from andaime.qt.bottom_bar import BottomBar
 
 
