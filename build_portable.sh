@@ -29,9 +29,14 @@
 set -euo pipefail
 
 # --- Paths ---
-BAP_REPO="$HOME/Projects/SS 54 - Vindication"
-EMISSOR_REPO="$HOME/Projects/Emissor"
-ANDAIME_REPO="$HOME/Projects/Andaime"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Original local repos (source of truth for app code)
+SRC_BAP="$HOME/Projects/SS 54 - Vindication"
+SRC_EMISSOR="$HOME/Projects/Emissor"
+# Vendored copies committed into this repo (synced from the above)
+BAP_REPO="$SCRIPT_DIR/apps/bap"
+EMISSOR_REPO="$SCRIPT_DIR/apps/emissor"
+ANDAIME_REPO="$SCRIPT_DIR"
 WINE_PY_DIR="$HOME/.wine/drive_c/Python310"
 WINE_PYTHON='C:\Python310\python.exe'
 
@@ -108,6 +113,44 @@ ok "BAP:       $BAP_REPO"
 ok "Emissor:   $EMISSOR_REPO"
 ok "Andaime:   $ANDAIME_REPO"
 ok "Wine Py:   $WINE_PY_DIR"
+
+# ============================================
+# 1b. Sync app sources into committed apps/ dir
+# ============================================
+# Copy app code from the original local repos into apps/ so the result is
+# committed to this repo (self-contained, no need to download dist). Mirrors
+# the staging transforms (src.->pkg. rename, main.py->__main__.py, root= patch).
+sync_app() {
+    local pkg="$1" src="$2" dst="$3" icon="$4"
+    local patch_root
+    patch_root='s/root=get_shared_root()/root=Path(__file__).resolve().parent/'
+    if [ "$pkg" = "bap" ]; then
+        patch_root='s/db_cls=SS54Database)/db_cls=SS54Database, root=Path(__file__).resolve().parent)/'
+    fi
+
+    rm -rf "$dst"
+    mkdir -p "$dst"
+    cp -r "$src/src/"* "$dst/"
+    cp "$src/main.py" "$dst/__main__.py"
+    cp "$icon" "$dst/icon.ico"
+    rename_imports "$pkg" "$dst"
+    if [ "$pkg" = "bap" ]; then
+        sed -i '/sys\.path\.insert(0, os\.path\.dirname/d' "$dst/__main__.py"
+        sed -i '1a from pathlib import Path' "$dst/__main__.py"
+    fi
+    sed -i "$patch_root" "$dst/__main__.py"
+}
+
+if [ $BUILD_BAP -eq 1 ]; then
+    step "1b" "Syncing BAP source -> apps/bap/"
+    sync_app "bap" "$SRC_BAP" "$BAP_REPO" "$ANDAIME_REPO/launchers/icons/bap.ico"
+    ok "apps/bap/ updated"
+fi
+if [ $BUILD_EMISSOR -eq 1 ]; then
+    step "1b" "Syncing Emissor source -> apps/emissor/"
+    sync_app "emissor" "$SRC_EMISSOR" "$EMISSOR_REPO" "$ANDAIME_REPO/launchers/icons/emissor.ico"
+    ok "apps/emissor/ updated"
+fi
 
 # ============================================
 # 2. Prepare Wine Python (install/clean deps)
@@ -206,23 +249,7 @@ compile_launcher() {
 if [ $BUILD_BAP -eq 1 ]; then
     step "6a" "Staging BAP..."
     mkdir -p "$STAGE/apps/bap"
-    cp -r "$BAP_REPO/src/"* "$STAGE/apps/bap/"
-    cp "$BAP_REPO/main.py" "$STAGE/apps/bap/__main__.py"
-    cp "$ANDAIME_REPO/launchers/icons/bap.ico" "$STAGE/apps/bap/icon.ico"
-
-    # Rename all src. → bap. (including __main__.py)
-    rename_imports "bap" "$STAGE/apps/bap"
-
-    # Patch __main__.py:
-    #   - Remove the sys.path bootstrap (not needed with python -m)
-    #   - Add `from pathlib import Path`
-    #   - Add root= to the App() call
-    sed -i '/sys\.path\.insert(0, os\.path\.dirname/d' \
-        "$STAGE/apps/bap/__main__.py"
-    sed -i '1a from pathlib import Path' \
-        "$STAGE/apps/bap/__main__.py"
-    sed -i 's/db_cls=SS54Database)/db_cls=SS54Database, root=Path(__file__).resolve().parent)/' \
-        "$STAGE/apps/bap/__main__.py"
+    cp -r "$BAP_REPO/"* "$STAGE/apps/bap/"
 
     # Verify no stale src. imports remain
     if grep -r "from src\.\|import src\b" "$STAGE/apps/bap/" --include="*.py" -q; then
@@ -241,16 +268,7 @@ fi
 if [ $BUILD_EMISSOR -eq 1 ]; then
     step "6b" "Staging Emissor..."
     mkdir -p "$STAGE/apps/emissor"
-    cp -r "$EMISSOR_REPO/src/"* "$STAGE/apps/emissor/"
-    cp "$EMISSOR_REPO/main.py" "$STAGE/apps/emissor/__main__.py"
-    cp "$ANDAIME_REPO/launchers/icons/emissor.ico" "$STAGE/apps/emissor/icon.ico"
-
-    # Rename all src. → emissor.
-    rename_imports "emissor" "$STAGE/apps/emissor"
-
-    # Patch __main__.py: change root=get_shared_root() to root=Path(__file__).resolve().parent
-    sed -i 's/root=get_shared_root()/root=Path(__file__).resolve().parent/' \
-        "$STAGE/apps/emissor/__main__.py"
+    cp -r "$EMISSOR_REPO/"* "$STAGE/apps/emissor/"
 
     # Verify no stale src. imports remain
     if grep -r "from src\.\|import src\b" "$STAGE/apps/emissor/" --include="*.py" -q; then
