@@ -200,13 +200,15 @@ cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/launchers/"
 ok "shortcuts.bat copied"
 
 # GPLv3 LICENSE accompanies each piece of *our* code that ships:
-#   apps/                     (app source)
+#   apps/<app>/               (app source, one dir per app — mirrors andaime layout)
 #   python/.../site-packages/andaime  (chassis)
 #   launchers/                (launcher.c / .exe)
-cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/LICENSE"
+for app_dir in "$STAGE/apps"/*/; do
+    cp "$ANDAIME_REPO/LICENSE" "$app_dir/LICENSE"
+done
 cp "$ANDAIME_REPO/LICENSE" "$STAGE/python/Lib/site-packages/andaime/LICENSE"
 cp "$ANDAIME_REPO/LICENSE" "$STAGE/launchers/LICENSE"
-ok "LICENSE copied alongside shipped source (apps/, andaime, launchers/)"
+ok "LICENSE copied alongside shipped source (apps/<app>/, andaime, launchers/)"
 
 # ============================================
 # 4. Copy Python tree
