@@ -199,16 +199,8 @@ ok "Stage: $STAGE"
 cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/launchers/"
 ok "shortcuts.bat copied"
 
-# GPLv3 LICENSE accompanies each piece of *our* code that ships:
-#   apps/<app>/               (app source, one dir per app — mirrors andaime layout)
-#   python/.../site-packages/andaime  (chassis)
-#   launchers/                (launcher.c / .exe)
-for app_dir in "$STAGE/apps"/*/; do
-    cp "$ANDAIME_REPO/LICENSE" "$app_dir/LICENSE"
-done
-cp "$ANDAIME_REPO/LICENSE" "$STAGE/python/Lib/site-packages/andaime/LICENSE"
-cp "$ANDAIME_REPO/LICENSE" "$STAGE/launchers/LICENSE"
-ok "LICENSE copied alongside shipped source (apps/<app>/, andaime, launchers/)"
+# GPLv3 LICENSE is copied alongside each shipped component after staging
+# (apps/<app>/, site-packages/andaime) — see steps 6a/6b below.
 
 # ============================================
 # 4. Copy Python tree
@@ -231,7 +223,8 @@ ok "Python copied ($PY_SIZE)"
 # ============================================
 step "5" "Copying andaime chassis..."
 cp -r "$ANDAIME_REPO/andaime" "$STAGE/python/Lib/site-packages/andaime"
-ok "Chassis → site-packages/andaime/"
+cp "$ANDAIME_REPO/LICENSE" "$STAGE/python/Lib/site-packages/andaime/LICENSE"
+ok "Chassis → site-packages/andaime/ (+ LICENSE)"
 
 # ============================================
 # 6. Stage app(s)
@@ -270,6 +263,9 @@ if [ $BUILD_BAP -eq 1 ]; then
     fi
     ok "BAP staged (imports renamed, root= patched)"
 
+    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/bap/LICENSE"
+    ok "LICENSE copied to apps/bap/"
+
     # Compile launcher (.exe) with icon if available
     compile_launcher "$STAGE/launchers/bap.exe" "$ANDAIME_REPO/launchers/icons/bap.ico"
     ok "bap.exe compiled"
@@ -288,6 +284,9 @@ if [ $BUILD_EMISSOR -eq 1 ]; then
         exit 1
     fi
     ok "Emissor staged (imports renamed, root= patched)"
+
+    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/emissor/LICENSE"
+    ok "LICENSE copied to apps/emissor/"
 
     # Compile launcher (.exe) with icon
     compile_launcher "$STAGE/launchers/emissor.exe" "$ANDAIME_REPO/launchers/icons/emissor.ico"
