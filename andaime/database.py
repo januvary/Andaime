@@ -2,15 +2,18 @@
 Base SQLite database class with connection management, retries, and backups.
 """
 
+import os
+import re
 import sqlite3
-import time
+import sys
 import threading
+import time
 import shutil
 from abc import ABC, abstractmethod
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal, ParamSpec, TypeVar
+from typing import Any, Callable, Iterator, Literal, ParamSpec, TypeVar, cast
 
 from andaime.paths import resolve_db_path
 from andaime.error_handler import ErrorHandler, ErrorLevel
@@ -19,13 +22,123 @@ _P = ParamSpec("_P")
 _R = TypeVar("_R")
 
 
+# Tipos de filesystem de rede conhecidos (coluna fstype do /proc/mounts).
+# WAL do SQLite é não-confiável nestes filesystems (riscos de hang e
+# corrupção documentados), então usamos rollback-journal (DELETE) neles.
+_NETWORK_FS_TYPES = frozenset(
+    {
+        "cifs",
+        "smbfs",
+        "smb2",
+        "smb3",
+        "nfs",
+        "nfs4",
+        "ncpfs",
+        "fuse.sshfs",
+        "fuse.curlftpfs",
+        "fuse.gvfs-fuse-daemon",
+        "davfs",
+        "lustre",
+        "gpfs",
+        "ocfs2",
+    }
+)
+
+# DRIVE_REMOTE do GetDriveTypeW (Windows).
+_DRIVE_REMOTE = 4
+
+
+def _decode_mount_point(raw: str) -> str:
+    """Decodifica escapes octais do /proc/mounts (ex.: \\040 -> espaço)."""
+    return re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), raw)
+
+
+def _read_proc_mounts() -> list[tuple[str, str, str]]:
+    """
+    Lê /proc/mounts e devolve (device, mount_point, fstype) por linha.
+
+    Isolado em função própria para permitir teste sem /proc/mounts real.
+    """
+    entries: list[tuple[str, str, str]] = []
+    try:
+        with open("/proc/mounts", "r", encoding="utf-8") as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                entries.append((parts[0], _decode_mount_point(parts[1]), parts[2]))
+    except OSError:
+        pass
+    return entries
+
+
+def _is_network_path(path: str) -> bool:
+    """
+    Detecta se o caminho está num filesystem de rede (SMB/CIFS/NFS/etc.).
+
+    O modo WAL do SQLite é não-confiável em shares de rede: a coordenação
+    via arquivo ``-shm`` memory-mapped quebra, causando hangs (e risco de
+    corrupção) em acesso multi-processo. Usa-se rollback-journal (DELETE)
+    nesses casos.
+
+    Args:
+        path: Caminho do arquivo de banco.
+
+    Returns:
+        True se o caminho parecer estar num filesystem de rede.
+        False se for local ou se não for possível determinar (default WAL).
+    """
+    raw = str(path)
+
+    # Windows: UNC (\\server\share ou //server/share) é sempre rede.
+    # Checamos o path bruto — Path.resolve() normaliza prefixes/drives.
+    if sys.platform == "win32":
+        if raw.startswith("\\\\") or raw.startswith("//"):
+            return True
+        drive_match = re.match(r"^([A-Za-z]:)", raw)
+        if drive_match:
+            try:
+                import ctypes
+
+                drive = drive_match.group(1)
+                return (
+                    ctypes.windll.kernel32.GetDriveTypeW(f"{drive}\\") == _DRIVE_REMOTE
+                )
+            except Exception:
+                pass
+        return False
+
+    # Linux: usa /proc/mounts — match pelo número de dispositivo (st_dev),
+    # que é robusto a espaços/caracteres no caminho do mount.
+    if sys.platform.startswith("linux") and os.path.exists("/proc/mounts"):
+        try:
+            resolved = str(Path(raw).resolve())
+            target_dev = os.stat(resolved).st_dev
+        except OSError:
+            return False
+        for _device, mount_point, fstype in _read_proc_mounts():
+            try:
+                if os.stat(mount_point).st_dev == target_dev:
+                    if fstype in _NETWORK_FS_TYPES:
+                        return True
+            except OSError:
+                continue
+        return False
+
+    # Outros SOs (macOS, etc.): não determinamos — assume local (WAL).
+    return False
+
+
 def db_op(op_type: str = "read") -> Callable[[Callable[_P, _R]], Callable[_P, _R]]:
     def decorator(func: Callable[_P, _R]) -> Callable[_P, _R]:
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
-            db: Any = args[0]  # type: ignore[assignment]
-            return db._retry_on_transient_error(
-                lambda: func(*args, **kwargs),
-                operation_type=op_type,
+            db: Any = args[0]
+            return cast(
+                _R,
+                db._retry_on_transient_error(
+                    lambda: func(*args, **kwargs),
+                    operation_type=op_type,
+                ),
             )
 
         wrapper.__name__ = func.__name__
@@ -49,21 +162,28 @@ class BaseDatabase(ABC):
 
         self.db_path = db_path
         self._entity_name = entity_name
+        self._backup_retention = 10
         self.conn: sqlite3.Connection | None = None
         self._conn_open_time: float | None = None
         self._lock = threading.RLock()
+        self._in_transaction = False
         self._initialize()
 
     @abstractmethod
     def _create_schema(self) -> None:
         pass
 
-    def _ensure_schema_version(self) -> int:
+    def _ensure_schema_meta(self) -> None:
         with self._cursor() as cur:
             cur.execute(
-                "CREATE TABLE IF NOT EXISTS _schema_meta (key TEXT PRIMARY KEY, value TEXT)"
+                "CREATE TABLE IF NOT EXISTS _schema_meta "
+                "(key TEXT PRIMARY KEY, value TEXT)"
             )
-            self._commit()
+        self._commit()
+
+    def _ensure_schema_version(self) -> int:
+        self._ensure_schema_meta()
+        with self._cursor() as cur:
             cur.execute("SELECT value FROM _schema_meta WHERE key = 'version'")
             row = cur.fetchone()
         if row is None:
@@ -72,6 +192,7 @@ class BaseDatabase(ABC):
         return stored
 
     def _set_schema_version(self, version: int) -> None:
+        self._ensure_schema_meta()
         with self._cursor() as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO _schema_meta (key, value) VALUES (?, ?)",
@@ -93,14 +214,28 @@ class BaseDatabase(ABC):
         with suppress(Exception):
             self.close()
 
-    def _setup_pragmas(self) -> None:
-        with self._cursor() as cur:
-            cur.execute("PRAGMA foreign_keys=ON")
-            cur.execute("PRAGMA journal_mode=TRUNCATE")
-            cur.execute("PRAGMA synchronous=FULL")
-            cur.execute("PRAGMA cache_size=-2000")
-            cur.execute("PRAGMA busy_timeout=10000")
-            cur.execute("PRAGMA temp_store=MEMORY")
+    def _apply_pragmas(self, cur: sqlite3.Cursor) -> None:
+        cur.execute("PRAGMA foreign_keys=ON")
+        # WAL é mais rápido em disco local, mas NÃO-confiável em shares de
+        # rede: a coordenação via -shm quebra, causando hangs e risco de
+        # corrupção em acesso multi-processo. DELETE usa locking simples,
+        # robusto em SMB/CIFS/NFS.
+        requested = "DELETE" if _is_network_path(self.db_path) else "WAL"
+        row = cur.execute(f"PRAGMA journal_mode={requested}").fetchone()
+        actual = str(row[0]).upper() if row else requested
+        if actual != requested:
+            # Não foi possível trocar (ex.: outra conexão mantém WAL aberto).
+            ErrorHandler.log(
+                f"journal_mode solicitado={requested} mas efetivo={actual} "
+                f"para {self.db_path}. Se o DB está em share de rede, feche "
+                f"outras instâncias e reabra para converter para {requested}.",
+                level=ErrorLevel.WARNING,
+                context="Database",
+            )
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA cache_size=-2000")
+        cur.execute("PRAGMA busy_timeout=10000")
+        cur.execute("PRAGMA temp_store=MEMORY")
 
     def _initialize(self) -> None:
         max_retries = 5
@@ -114,8 +249,9 @@ class BaseDatabase(ABC):
                 )
                 self.conn.row_factory = sqlite3.Row
                 self._conn_open_time = time.time()
+                with self._cursor() as cur:
+                    self._apply_pragmas(cur)
                 self._create_schema()
-                self._setup_pragmas()
 
                 self._log_initialization_success()
                 return
@@ -177,12 +313,7 @@ class BaseDatabase(ABC):
             self._conn_open_time = time.time()
 
             with self._cursor() as cur:
-                cur.execute("PRAGMA foreign_keys=ON")
-                cur.execute("PRAGMA journal_mode=TRUNCATE")
-                cur.execute("PRAGMA synchronous=FULL")
-                cur.execute("PRAGMA busy_timeout=10000")
-                cur.execute("PRAGMA cache_size=-2000")
-                cur.execute("PRAGMA temp_store=MEMORY")
+                self._apply_pragmas(cur)
 
             ErrorHandler.log(
                 f"Conexão {self.__class__.__name__} renovada",
@@ -251,6 +382,7 @@ class BaseDatabase(ABC):
             cur.execute(sql, params)
             last_id = cur.lastrowid
         self._commit()
+        assert last_id is not None, "INSERT did not produce a row id"
         return last_id
 
     def _fetch_by_id(self, table: str, row_id: int) -> dict | None:
@@ -269,19 +401,21 @@ class BaseDatabase(ABC):
         val = self._fetch_value(sql, params)
         return val if val is not None else 0
 
-    def _insert_row(self, table: str, **kwargs) -> int:
+    def _insert_row(self, table: str, **kwargs: Any) -> int:
         cols = ", ".join(kwargs.keys())
         placeholders = ", ".join("?" for _ in kwargs)
         sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
         return self._execute_insert(sql, tuple(kwargs.values()))
 
-    def _update_row(self, table: str, row_id: int, **kwargs) -> bool:
+    def _update_row(self, table: str, row_id: int, **kwargs: Any) -> bool:
         sets = ", ".join(f"{k} = ?" for k in kwargs)
         sql = f"UPDATE {table} SET {sets} WHERE id = ?"
         return self._execute_write(sql, tuple(kwargs.values()) + (row_id,))
 
-    def _delete_row(self, table: str, row_id: int, guards: list[tuple[str, str]] = []) -> bool:
-        for guard_table, fk_col in guards:
+    def _delete_row(
+        self, table: str, row_id: int, guards: list[tuple[str, str]] | None = None
+    ) -> bool:
+        for guard_table, fk_col in guards or []:
             if self._fetch_count(guard_table, f"{fk_col} = ?", (row_id,)) > 0:
                 return False
         return self._execute_write(f"DELETE FROM {table} WHERE id = ?", (row_id,))
@@ -289,7 +423,38 @@ class BaseDatabase(ABC):
     def _commit(self) -> None:
         with self._lock:
             assert self.conn is not None, "Database connection not initialized"
-            self.conn.commit()
+            if not self._in_transaction:
+                self.conn.commit()
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Group operations into a single commit.
+
+        Calls to ``_commit()`` inside the block are deferred; the outermost
+        block commits once on success or rolls back on error. Nesting is
+        safe — only the outermost block commits.
+        """
+        with self._lock:
+            already = self._in_transaction
+            if not already:
+                self._in_transaction = True
+        try:
+            yield
+            if not already:
+                with self._lock:
+                    assert self.conn is not None, "Database connection not initialized"
+                    self.conn.commit()
+        except Exception:
+            if not already:
+                with self._lock:
+                    assert self.conn is not None, "Database connection not initialized"
+                    with suppress(Exception):
+                        self.conn.rollback()
+            raise
+        finally:
+            with self._lock:
+                if not already:
+                    self._in_transaction = False
 
     def _rollback(self) -> None:
         with self._lock:
@@ -337,7 +502,7 @@ class BaseDatabase(ABC):
             shutil.copy2(self.db_path, backup_path)
 
             backups = sorted(backup_dir.glob(f"{db_name}_*.db"))
-            for old_backup in backups[:-10]:
+            for old_backup in backups[: -self._backup_retention]:
                 old_backup.unlink()
 
             ErrorHandler.log(

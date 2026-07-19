@@ -2,18 +2,22 @@
 
 import sys
 from pathlib import Path
+from typing import Generic, TypeVar
 
 import andaime
 from andaime.config import ConfigManager
+from andaime.database import BaseDatabase
+
+_D = TypeVar("_D", bound=BaseDatabase)
 
 
-class App:
+class App(Generic[_D]):
     def __init__(
         self,
         app_name: str,
         app_folder: str,
         config_cls: type,
-        db_cls: type,
+        db_cls: type[_D],
         root: Path | None = None,
     ) -> None:
         self._app_name = app_name
@@ -23,7 +27,7 @@ class App:
         andaime.init(app_name, app_folder, root=self._root)
 
         ConfigManager.init(config_cls)
-        self._db = db_cls()
+        self._db: _D = db_cls()
         self._config = ConfigManager()
 
     def _detect_root(self) -> Path:
@@ -49,7 +53,7 @@ class App:
         return self._root
 
     @property
-    def db(self):
+    def db(self) -> _D:
         return self._db
 
     @property

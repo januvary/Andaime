@@ -8,11 +8,13 @@ and optional pontos facultativos (optional holidays) loaded from JSON.
 """
 
 import json
+import re
 import shutil
 from datetime import date, datetime, timedelta
-from typing import Optional
 
 import holidays as _holidays_lib
+
+from typing import cast
 
 from andaime.paths import get_root_directory
 
@@ -51,7 +53,7 @@ class DateCalculator:
         try:
             with config_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
-                return data.get("pontos_facultativos", {})
+                return cast("dict[str, list[str]]", data.get("pontos_facultativos", {}))
         except (json.JSONDecodeError, Exception):
             return {}
 
@@ -74,7 +76,7 @@ class DateCalculator:
         holidays_set: set[date] = set()
 
         try:
-            br_holidays = _holidays_lib.Brazil(state="SP", years=range(2020, 2031))
+            br_holidays = _holidays_lib.Brazil(state="SP", years=range(2020, 2031))  # type: ignore[attr-defined]
             holidays_set.update(br_holidays.keys())
         except (ImportError, AttributeError, TypeError):
             try:
@@ -123,3 +125,67 @@ class DateCalculator:
         while dt.weekday() >= 5 or dt in h:
             dt += timedelta(days=1)
         return dt
+
+
+_WEEKDAYS_PT = [
+    "segunda",
+    "terça",
+    "quarta",
+    "quinta",
+    "sexta",
+    "sábado",
+    "domingo",
+]
+
+
+def parse_date(text: str | None) -> date | None:
+    """Parse a date string into a ``date``.
+
+    Accepts both Brazilian and ISO shapes:
+    - ``DD/MM`` (assumes current year), ``DD/MM/AA`` (2-digit year maps to
+      the 2000s) and ``DD/MM/AAAA`` with ``/``, ``-`` or ``.`` separators;
+    - ``AAAA-MM-DD`` (ISO), e.g. values stored in the database.
+    Returns ``None`` for empty or invalid input (including impossible
+    calendar dates).
+    """
+    text = (text or "").strip()
+    if not text:
+        return None
+
+    # ISO YYYY-MM-DD (4-digit year first)
+    iso_match = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", text)
+    if iso_match:
+        try:
+            return date(int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3)))
+        except ValueError:
+            return None
+
+    parts: list[str] | None = None
+    for sep in ("/", "-", "."):
+        if sep in text:
+            parts = text.split(sep)
+            break
+    if parts is None or not (2 <= len(parts) <= 3):
+        return None
+    try:
+        day = int(parts[0])
+        month = int(parts[1])
+        if len(parts) == 2:
+            year = date.today().year
+        else:
+            yp = int(parts[2])
+            year = 2000 + yp if yp < 100 else yp
+        return date(year, month, day)
+    except (ValueError, IndexError):
+        return None
+
+
+def format_date(dt: date, include_weekday: bool = False) -> str:
+    """Format a ``date`` as ``DD/MM/AAAA``.
+
+    With ``include_weekday=True`` appends the Portuguese weekday in
+    parentheses, e.g. ``13/03/2026 (sexta)``.
+    """
+    if include_weekday:
+        return f"{dt.strftime('%d/%m/%Y')} ({_WEEKDAYS_PT[dt.weekday()]})"
+    return dt.strftime("%d/%m/%Y")

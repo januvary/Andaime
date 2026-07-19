@@ -12,16 +12,23 @@ from __future__ import annotations
 
 import json
 from dataclasses import fields, replace
-from typing import Any
+from typing import Any, Protocol, cast
 
 from andaime.paths import get_config_path
 from andaime.error_handler import ErrorHandler, ErrorLevel
 
 
+class _ConfigSchema(Protocol):
+    @classmethod
+    def get_defaults(cls) -> Any: ...
+
+    def to_dict(self) -> dict[str, Any]: ...
+
+
 class ConfigManager:
     _instance: ConfigManager | None = None
     _config: Any = None
-    _config_cls: type | None = None
+    _config_cls: type[_ConfigSchema] | None = None
 
     def __new__(cls) -> ConfigManager:
         if cls._instance is None:
@@ -29,7 +36,7 @@ class ConfigManager:
         return cls._instance
 
     @classmethod
-    def init(cls, config_cls: type) -> None:
+    def init(cls, config_cls: type[_ConfigSchema]) -> None:
         cls._config_cls = config_cls
 
     def __init__(self) -> None:
@@ -116,7 +123,7 @@ class ConfigManager:
         if config_cls is None:
             return False
 
-        valid_fields = {f.name for f in fields(config_cls)}
+        valid_fields = {f.name for f in fields(cast(Any, config_cls))}
         if key not in valid_fields:
             return False
 

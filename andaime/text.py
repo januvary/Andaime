@@ -7,7 +7,8 @@ import unicodedata
 
 def _strip_accents(text: str) -> str:
     return "".join(
-        c for c in unicodedata.normalize("NFKD", text)
+        c
+        for c in unicodedata.normalize("NFKD", text)
         if unicodedata.category(c) != "Mn"
     )
 
@@ -22,6 +23,24 @@ def to_upper_normalized(text: str) -> str:
     if not text:
         return ""
     return _strip_accents(text).upper()
+
+
+def scored_search_dict(
+    results: dict[str, str],
+    query: str,
+    limit: int = 0,
+) -> dict[str, str]:
+    """Reorder a ``key -> label`` dict by match relevance in ``label``.
+
+    Empty query returns the dict unchanged. Otherwise delegates to
+    :func:`scored_search`, promoting labels where the query starts (position 0)
+    ahead of labels that merely contain it.
+    """
+    if not query:
+        return results
+    items = [{"key": k, "label": v} for k, v in results.items()]
+    scored = scored_search(items, query, "label", limit)
+    return {it["key"]: it["label"] for it in scored}
 
 
 def scored_search(
