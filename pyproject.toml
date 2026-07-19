@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "andaime"
-version = "0.1.0"
+version = "1.0.0"
 description = "Shared toolkit for PySide6 desktop apps"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
