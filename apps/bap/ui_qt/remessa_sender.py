@@ -27,14 +27,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.constants import SOLICITACAO_LABELS, Status
-from src.utils.date_utils import format_date_display
-from src.ui_qt.widgets.dialogs import scaffold_dialog, make_dialog_button_row, confirm_dialog
+from bap.constants import SOLICITACAO_LABELS, Status
+from bap.utils.date_utils import format_date_display
+from bap.ui_qt.widgets.dialogs import scaffold_dialog, make_dialog_button_row, confirm_dialog
 
 
 def _gmail_service(cfg):
     """Obtém um serviço Gmail não-interativo a partir da configuração."""
-    from src.utils import gmail_client
+    from bap.utils import gmail_client
 
     return gmail_client.get_service(
         cfg.gmail_credentials_path,
@@ -73,8 +73,8 @@ class _EnviarRemessaWorker(QThread):
 
         Retorna ``(service, creds)`` ou levanta ``GmailError``.
         """
-        from src.utils import gmail_client
-        from src.utils.gmail_client import GmailError
+        from bap.utils import gmail_client
+        from bap.utils.gmail_client import GmailError
         from google.oauth2.credentials import Credentials
 
         try:
@@ -97,7 +97,7 @@ class _EnviarRemessaWorker(QThread):
 
     def _create_drafts(self, service, creds, groups, cfg) -> list:
         """Cria rascunhos no Gmail para cada grupo da remessa."""
-        from src.utils import gmail_client
+        from bap.utils import gmail_client
 
         results = []
         for g in groups:
@@ -115,9 +115,9 @@ class _EnviarRemessaWorker(QThread):
         return results
 
     def run(self) -> None:  # noqa: D401 - QThread entrypoint
-        from src.utils import gmail_client
-        from src.utils.gmail_client import GmailError, GmailAuthRequired
-        from src.utils.remessa_email import build_remessa_groups
+        from bap.utils import gmail_client
+        from bap.utils.gmail_client import GmailError, GmailAuthRequired
+        from bap.utils.remessa_email import build_remessa_groups
 
         cfg = self._cfg
         try:
@@ -284,7 +284,7 @@ class RemessaSender(QObject):
 
         # Solicita os e-mails do DRS (se faltarem) ANTES de montar os grupos,
         # para não reconstruir os PDFs combinados só para descobrir o que falta.
-        from src.utils.remessa_email import missing_drs_emails
+        from bap.utils.remessa_email import missing_drs_emails
 
         faltando = missing_drs_emails(self._db, cfg, lote)
         if faltando:
@@ -345,7 +345,7 @@ class RemessaSender(QObject):
 
     def _on_enviar_done(self, results) -> None:
         self._close_auth_dialog()
-        from src.utils import gmail_client
+        from bap.utils import gmail_client
 
         lote = self._enviar_lote
         if self._db is None or lote is None:
@@ -482,8 +482,8 @@ class RemessaSender(QObject):
                 return 0
 
             cfg = self._config.get_all()
-            from src.utils import gmail_client
-            from src.utils.gmail_client import GmailError
+            from bap.utils import gmail_client
+            from bap.utils.gmail_client import GmailError
 
             try:
                 service = _gmail_service(cfg)
@@ -539,13 +539,13 @@ class RemessaSender(QObject):
 
         def _work():
             cfg = self._config.get_all()
-            from src.utils.gmail_client import GmailError
+            from bap.utils.gmail_client import GmailError
 
             try:
                 service = _gmail_service(cfg)
             except GmailError:
                 return
-            from src.utils.gmail_scanner import scan_drs_messages
+            from bap.utils.gmail_scanner import scan_drs_messages
 
             scan_drs_messages(self._db, service)
 
@@ -565,6 +565,6 @@ class RemessaSender(QObject):
         if remaining:
             return
         self._db.mark_lote_sent(lote_id)
-        from src.utils.remessa_service import ensure_next_open_lote
+        from bap.utils.remessa_service import ensure_next_open_lote
 
         ensure_next_open_lote(self._db)

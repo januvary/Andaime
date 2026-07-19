@@ -16,10 +16,10 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 from andaime.dates import parse_date
-from src.constants import SOLICITACAO_LABELS, TIPO_UPPER, STATUS_LABELS
-from src.database.ss54_database import SS54Database
-from src.utils.text_utils import format_phone
-from src.utils.date_utils import format_date_display
+from bap.constants import SOLICITACAO_LABELS, TIPO_UPPER, STATUS_LABELS
+from bap.database.ss54_database import SS54Database
+from bap.utils.text_utils import format_phone
+from bap.utils.date_utils import format_date_display
 
 THIN = Side(style="thin", color="000000")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -187,7 +187,7 @@ def export_processos_to_xlsx(
 
 
 def main() -> None:
-    from src.utils.bootstrap import ensure_initialized
+    from bap.utils.bootstrap import ensure_initialized
 
     ensure_initialized()
 

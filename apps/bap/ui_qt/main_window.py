@@ -12,23 +12,23 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal
 from andaime.qt import ShortcutManager
 
-from src.database.ss54_database import SS54Database
+from bap.database.ss54_database import SS54Database
 from andaime.config import ConfigManager
-from src.utils.text_utils import normalize_phone
-from src.ui_qt.styles import set_theme, get_stylesheet, get_palette, qpalette
-from src.ui_qt.widgets.document_page import DocumentPage
-from src.ui_qt.widgets.remessas_page import RemessasPage
-from src.ui_qt.remessa_sender import RemessaSender
-from src.models import GridItem, Paciente, Processo
-from src.constants import (
+from bap.utils.text_utils import normalize_phone
+from bap.ui_qt.styles import set_theme, get_stylesheet, get_palette, qpalette
+from bap.ui_qt.widgets.document_page import DocumentPage
+from bap.ui_qt.widgets.remessas_page import RemessasPage
+from bap.ui_qt.remessa_sender import RemessaSender
+from bap.models import GridItem, Paciente, Processo
+from bap.constants import (
     NULL_STATUS,
     RENOVACAO_DOC_EXCLUSIONS,
     Status,
     status_display_label,
 )
-from src.utils.config import bap_data_dir
-from src.utils.archive_migrate import delete_arquivos_before
-from src.utils.date_utils import format_date_display
+from bap.utils.config import bap_data_dir
+from bap.utils.archive_migrate import delete_arquivos_before
+from bap.utils.date_utils import format_date_display
 
 
 class MainWindow(QMainWindow):
@@ -189,8 +189,8 @@ class MainWindow(QMainWindow):
         if self.config is None:
             return
 
-        from src.ui_qt.widgets.config_dialog import QtConfigDialog
-        from src.utils.arquivo_storage import resolve_arquivos_root
+        from bap.ui_qt.widgets.config_dialog import QtConfigDialog
+        from bap.utils.arquivo_storage import resolve_arquivos_root
 
         cfg = self.config.get_all()
         default_root = resolve_arquivos_root(None)
@@ -216,7 +216,7 @@ class MainWindow(QMainWindow):
             return
 
         from PySide6.QtWidgets import QFileDialog
-        from src.utils.arquivo_storage import resolve_arquivos_root
+        from bap.utils.arquivo_storage import resolve_arquivos_root
 
         cfg = self.config.get_all() if self.config else None
         default_dir = resolve_arquivos_root(cfg)
@@ -233,7 +233,7 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(".xlsx"):
             path += ".xlsx"
 
-        from src.utils.export_to_xlsx import export_processos_to_xlsx
+        from bap.utils.export_to_xlsx import export_processos_to_xlsx
 
         try:
             saved = export_processos_to_xlsx(self.db, path)
@@ -313,7 +313,7 @@ class MainWindow(QMainWindow):
         self._db_runner = DbAsyncRunner(self._db_worker)
 
         def _load():
-            from src.utils.remessa_service import ensure_remessas
+            from bap.utils.remessa_service import ensure_remessas
             ensure_remessas(self.db)
             pacientes = self.db.get_all_pacientes()
             active = self._resolve_active_lote()

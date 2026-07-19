@@ -75,6 +75,14 @@ step() { echo -e "\n${YELLOW}[$1]${NC} $2"; }
 ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
 err()  { echo -e "  ${RED}✗${NC} $1"; }
 
+# Rename src. -> <pkg>. imports in all .py files (used by sync_app + staging)
+rename_imports() {
+    local pkg="$1" dir="$2"
+    find "$dir" -name "*.py" -print0 | xargs -0 sed -i \
+        -e "s/from src\\./from ${pkg}./g" \
+        -e "s/import src\\b/import ${pkg}/g"
+}
+
 # ============================================
 echo "============================================"
 echo "SISTEMAS — Portable Build"
@@ -220,14 +228,6 @@ ok "Chassis → site-packages/andaime/"
 # ============================================
 # 6. Stage app(s)
 # ============================================
-
-# --- Helper: rename src. imports in all .py files ---
-rename_imports() {
-    local pkg="$1" dir="$2"
-    find "$dir" -name "*.py" -print0 | xargs -0 sed -i \
-        -e "s/from src\\./from ${pkg}./g" \
-        -e "s/import src\\b/import ${pkg}/g"
-}
 
 # Compile launcher.c into <name>.exe, optionally embedding an .ico icon.
 compile_launcher() {

@@ -7,7 +7,7 @@ from typing import Iterable
 from andaime.paths import get_root_directory
 from andaime.dates import parse_date
 
-from src.utils.config import SS54Config
+from bap.utils.config import SS54Config
 
 
 def resolve_arquivos_root(config: SS54Config | None = None) -> Path:

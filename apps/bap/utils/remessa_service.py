@@ -15,7 +15,7 @@ from datetime import date, timedelta
 
 from andaime.dates import DateCalculator, parse_date
 
-from src.database.ss54_database import SS54Database
+from bap.database.ss54_database import SS54Database
 
 
 def _parse(date_str: str) -> date:

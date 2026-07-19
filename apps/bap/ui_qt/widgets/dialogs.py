@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
-from src.ui_qt.widgets.buttons import make_button
+from bap.ui_qt.widgets.buttons import make_button
 
 
 def pick_from_list(

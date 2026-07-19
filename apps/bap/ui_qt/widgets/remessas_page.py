@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from src.utils.date_utils import format_date_display
+from bap.utils.date_utils import format_date_display
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
@@ -37,26 +37,26 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
 )
 
-from src.ui_qt.styles import colors, context_menu_stylesheet
-from src.ui_qt.widgets.remessa import RemessaLabel
-from src.constants import (
+from bap.ui_qt.styles import colors, context_menu_stylesheet
+from bap.ui_qt.widgets.remessa import RemessaLabel
+from bap.constants import (
     STATUS_LABELS,
     STATUS_SEMANTIC,
     SOLICITACAO_LABELS,
     TIPO_UPPER,
     Status,
 )
-from src.utils.remessa_email import ensure_processo_pdf
-from src.utils.arquivo_storage import resolve_arquivos_root
-from src.utils.text_utils import format_phone
-from src.ui_qt.widgets.dialogs import (
+from bap.utils.remessa_email import ensure_processo_pdf
+from bap.utils.arquivo_storage import resolve_arquivos_root
+from bap.utils.text_utils import format_phone
+from bap.ui_qt.widgets.dialogs import (
     open_input_dialog,
     scaffold_dialog,
     make_dialog_button_row,
     pick_from_list,
     confirm_dialog,
 )
-from src.ui_qt.widgets.status_label import show_status_dialog
+from bap.ui_qt.widgets.status_label import show_status_dialog
 from andaime.qt import StatusLine
 from andaime.qt.bottom_bar import BottomBar
 from andaime.qt.table import (

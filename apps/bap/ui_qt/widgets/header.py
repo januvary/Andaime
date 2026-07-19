@@ -23,9 +23,9 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-from src.models import Paciente
-from src.constants import SOLICITACAO_LABELS
-from src.utils.text_utils import format_phone, format_phone_live, _digits
+from bap.models import Paciente
+from bap.constants import SOLICITACAO_LABELS
+from bap.utils.text_utils import format_phone, format_phone_live, _digits
 from andaime.widgets import static_search_fn, SearchableComboBox, CycleButton
 from andaime.qt.theme import ThemeToggleButton, make_button
 from andaime.qt.toggle_group import ToggleGroup

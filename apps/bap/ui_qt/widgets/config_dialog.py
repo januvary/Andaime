@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.ui_qt.widgets.buttons import make_button
+from bap.ui_qt.widgets.buttons import make_button
 
 
 class QtConfigDialog(QDialog):

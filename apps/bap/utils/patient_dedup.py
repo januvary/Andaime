@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from rapidfuzz import fuzz
 
-from src.utils.import_remessas import _status_norm
+from bap.utils.import_remessas import _status_norm
 
 
 def find_duplicate_patients(

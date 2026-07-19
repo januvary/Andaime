@@ -6,7 +6,7 @@ from typing import Any, Callable, ClassVar
 
 from typing_extensions import Self
 
-from src.constants import Status
+from bap.constants import Status
 
 
 def _identity(value: Any) -> Any:
