@@ -139,29 +139,17 @@ gh release create "$TAG" "$ZIP_PATH" \
     --notes "$NOTES"
 echo ""
 
-echo "[7/7] Syncing public main of each app (squashed)..."
-APP_REPOS=(
-    "$HOME/Projects/SS 54 - Vindication|januvary/BAP"
-    "$HOME/Projects/Emissor|januvary/Emissor"
-)
-for entry in "${APP_REPOS[@]}"; do
-    IFS='|' read -r APP_ROOT APP_GH <<< "$entry"
-    echo "  -> $APP_GH"
-    (
-        cd "$APP_ROOT" || { echo -e "    ${YELLOW}[WARN]${NC} cannot cd to $APP_ROOT"; return 0; }
-        CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-        SQUASH_BRANCH="__public_main_sync"
-        git branch -D "$SQUASH_BRANCH" 2>/dev/null || true
-        git checkout -b "$SQUASH_BRANCH"
-        git reset --soft "$(git rev-list --max-parents=0 HEAD)"
-        git commit -m "SISTEMAS ${TAG}" >/dev/null
-        git push origin "$SQUASH_BRANCH:main" --force 2>/dev/null \
-            || echo -e "    ${YELLOW}[WARN]${NC} could not push $APP_GH main"
-        git checkout "$CURRENT_BRANCH"
-        git branch -D "$SQUASH_BRANCH" 2>/dev/null || true
-    )
-    echo -e "    ${GREEN}main${NC} updated (squashed to ${TAG})"
-done
+echo "[7/7] Squashing dist history (main)..."
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+SQUASH_BRANCH="__release_sync"
+git branch -D "$SQUASH_BRANCH" 2>/dev/null || true
+git checkout -b "$SQUASH_BRANCH"
+git reset --soft "$(git rev-list --max-parents=0 HEAD)"
+git commit -m "SISTEMAS ${TAG}" >/dev/null
+git push origin "$SQUASH_BRANCH:$CURRENT_BRANCH" --force
+git checkout "$CURRENT_BRANCH"
+git branch -D "$SQUASH_BRANCH" 2>/dev/null || true
+echo -e "  ${GREEN}$CURRENT_BRANCH${NC} squashed to ${TAG}"
 echo ""
 
 echo -e "${GREEN}Done!${NC} $ZIP_SIZE uploaded to:"
