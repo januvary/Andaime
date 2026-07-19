@@ -199,8 +199,14 @@ ok "Stage: $STAGE"
 cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/launchers/"
 ok "shortcuts.bat copied"
 
-cp "$ANDAIME_REPO/LICENSE" "$STAGE/LICENSE"
-ok "LICENSE copied (GPLv3 — accompanies distributed source)"
+# GPLv3 LICENSE accompanies each piece of *our* code that ships:
+#   apps/                     (app source)
+#   python/.../site-packages/andaime  (chassis)
+#   launchers/                (launcher.c / .exe)
+cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/LICENSE"
+cp "$ANDAIME_REPO/LICENSE" "$STAGE/python/Lib/site-packages/andaime/LICENSE"
+cp "$ANDAIME_REPO/LICENSE" "$STAGE/launchers/LICENSE"
+ok "LICENSE copied alongside shipped source (apps/, andaime, launchers/)"
 
 # ============================================
 # 4. Copy Python tree
