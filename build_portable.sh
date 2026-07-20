@@ -540,11 +540,16 @@ echo ""
 ZIP_PATH="$STAGE/dist.zip"
 rm -f "$ZIP_PATH"
 cd "$DIST"
-zip -r "$ZIP_PATH" SISTEMAS/ -q -x "SISTEMAS/dist.zip"
+zip -r "$ZIP_PATH" SISTEMAS/ -q \
+    -x "SISTEMAS/dist.zip" \
+       "SISTEMAS/bap.exe" \
+       "SISTEMAS/emissor.exe" \
+       "SISTEMAS/rac.exe" \
+       "SISTEMAS/shortcuts.bat"
 ZIP_SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
 echo -e "  ${GREEN}dist.zip:${NC} $ZIP_SIZE"
 echo ""
 
 echo -e "${GREEN}Done.${NC}"
-echo "  Network share: copy SISTEMAS/ contents to the share root"
+echo "  Network share: copy *.exe + dist.zip + VERSION + shortcuts.bat to the share root"
 echo "  Standalone:    copy SISTEMAS/ folder and double-click the .exe"

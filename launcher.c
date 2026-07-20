@@ -65,17 +65,9 @@ run_hidden_and_wait(const char *cmd, DWORD *exitCode)
 int WINAPI
 WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 {
-    /* Prevent multiple concurrent launcher instances */
-    HANDLE hMutex = CreateMutexA(NULL, TRUE, "SISTEMAS_Launcher");
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(hMutex);
-        return 0;
-    }
-
     /* --- Own exe path + module name --- */
     char exePath[MAX_PATH];
     if (GetModuleFileNameA(NULL, exePath, MAX_PATH) == 0) {
-        ReleaseMutex(hMutex);
         return 1;
     }
 
@@ -86,6 +78,15 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     appName[MAX_PATH - 1] = '\0';
     char *dot = strrchr(appName, '.');
     if (dot) *dot = '\0';
+
+    /* Prevent multiple concurrent launcher instances (per-app) */
+    char mutexName[128];
+    snprintf(mutexName, sizeof(mutexName), "SISTEMAS_Launcher_%s", appName);
+    HANDLE hMutex = CreateMutexA(NULL, TRUE, mutexName);
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(hMutex);
+        return 0;
+    }
 
     /* --- Own directory (share root, with trailing backslash) --- */
     char exeDir[MAX_PATH];

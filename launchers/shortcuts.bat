@@ -19,9 +19,9 @@ echo.
 set /p "app=Escolha (1-4): "
 
 if "%app%"=="4" exit /b 0
-if "%app%"=="1" ( set "CMD=bap.cmd"       & set "NAME=BAP"     )
-if "%app%"=="2" ( set "CMD=emissor.cmd"   & set "NAME=Emissor" )
-if "%app%"=="3" ( set "CMD=rac.cmd"       & set "NAME=RAC"     )
+if "%app%"=="1" ( set "CMD=bap.exe"       & set "NAME=BAP"     )
+if "%app%"=="2" ( set "CMD=emissor.exe"   & set "NAME=Emissor" )
+if "%app%"=="3" ( set "CMD=rac.exe"       & set "NAME=RAC"     )
 if not defined CMD (
     echo   Escolha invalida.
     timeout /t 2 >nul
