@@ -7,6 +7,7 @@
 #
 #   ~/Projects/SS 54 - Vindication/   (BAP source + main.py)
 #   ~/Projects/Emissor/                (Emissor source + main.py)
+#   ~/Projects/RAC - Registros Alto Custo/   (RAC source + main.py)
 #   ~/Projects/Andaime/andaime/        (shared chassis)
 #   ~/.wine/drive_c/Python310/         (Windows Python 3.10)
 #
@@ -16,12 +17,14 @@
 #   ├── apps/
 #   │   ├── bap/          (src/ copied, imports renamed src.→bap.)
 #   │   └── emissor/      (src/ copied, imports renamed src.→emissor.)
-#   └── launchers/        (bap.exe, emissor.exe)
+#   │   └── rac/          (src/ copied, imports renamed src.→rac.)
+#   └── launchers/        (bap.exe, emissor.exe, rac.exe)
 #
 # Usage:
 #   ./build_portable.sh              # build both apps
 #   ./build_portable.sh --app bap     # build only BAP
 #   ./build_portable.sh --app emissor # build only Emissor
+#   ./build_portable.sh --app rac     # build only RAC
 #   ./build_portable.sh --skip-deps   # skip Wine pip (use as-is)
 #   ./build_portable.sh --no-prune    # skip size optimisation
 # ============================================
@@ -29,9 +32,16 @@
 set -euo pipefail
 
 # --- Paths ---
-BAP_REPO="$HOME/Projects/SS 54 - Vindication"
-EMISSOR_REPO="$HOME/Projects/Emissor"
-ANDAIME_REPO="$HOME/Projects/Andaime"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Original local repos (source of truth for app code)
+SRC_BAP="$HOME/Projects/SS 54 - Vindication"
+SRC_EMISSOR="$HOME/Projects/Emissor"
+SRC_RAC="$HOME/Projects/RAC - Registros Alto Custo"
+# Vendored copies committed into this repo (synced from the above)
+BAP_REPO="$SCRIPT_DIR/apps/bap"
+EMISSOR_REPO="$SCRIPT_DIR/apps/emissor"
+RAC_REPO="$SCRIPT_DIR/apps/rac"
+ANDAIME_REPO="$SCRIPT_DIR"
 WINE_PY_DIR="$HOME/.wine/drive_c/Python310"
 WINE_PYTHON='C:\Python310\python.exe'
 
@@ -54,11 +64,13 @@ done
 
 BUILD_BAP=0
 BUILD_EMISSOR=0
+BUILD_RAC=0
 case "$APP_TARGET" in
     bap)     BUILD_BAP=1 ;;
     emissor) BUILD_EMISSOR=1 ;;
-    all)     BUILD_BAP=1; BUILD_EMISSOR=1 ;;
-    *)       echo "Invalid --app: $APP_TARGET (use bap|emissor|all)"; exit 1 ;;
+    rac)     BUILD_RAC=1 ;;
+    all)     BUILD_BAP=1; BUILD_EMISSOR=1; BUILD_RAC=1 ;;
+    *)       echo "Invalid --app: $APP_TARGET (use bap|emissor|rac|all)"; exit 1 ;;
 esac
 
 # --- Colors ---
@@ -69,6 +81,15 @@ NC='\033[0m'
 step() { echo -e "\n${YELLOW}[$1]${NC} $2"; }
 ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
 err()  { echo -e "  ${RED}✗${NC} $1"; }
+
+# Rename src. -> <pkg>. imports in all .py files (used by sync_app + staging)
+rename_imports() {
+    local pkg="$1" dir="$2"
+    find "$dir" -name "*.py" -print0 | xargs -0 sed -i \
+        -e "s/from src\\./from ${pkg}./g" \
+        -e "s/from src import/from ${pkg} import/g" \
+        -e "s/import src\\b/import ${pkg}/g"
+}
 
 # ============================================
 echo "============================================"
@@ -110,14 +131,67 @@ ok "Andaime:   $ANDAIME_REPO"
 ok "Wine Py:   $WINE_PY_DIR"
 
 # ============================================
+# 1b. Sync app sources into committed apps/ dir
+# ============================================
+# Copy app code from the original local repos into apps/ so the result is
+# committed to this repo (self-contained, no need to download dist). Mirrors
+# the staging transforms (src.->pkg. rename, main.py->__main__.py, root= patch).
+sync_app() {
+    local pkg="$1" src="$2" dst="$3" icon="$4" patch="$5"
+    rm -rf "$dst"
+    mkdir -p "$dst"
+    cp -r "$src/src/"* "$dst/"
+    cp "$src/main.py" "$dst/__main__.py"
+    cp "$icon" "$dst/icon.ico"
+    rename_imports "$pkg" "$dst"
+    if [ "$pkg" = "bap" ]; then
+        sed -i '/sys\.path\.insert(0, os\.path\.dirname/d' "$dst/__main__.py"
+        sed -i '1a from pathlib import Path' "$dst/__main__.py"
+    fi
+    sed -i "$patch" "$dst/__main__.py"
+}
+
+if [ $BUILD_BAP -eq 1 ]; then
+    step "1b" "Syncing BAP source -> apps/bap/"
+    if [ -d "$SRC_BAP" ]; then
+        sync_app "bap" "$SRC_BAP" "$BAP_REPO" "$ANDAIME_REPO/launchers/icons/bap.ico" \
+            's/db_cls=SS54Database)/db_cls=SS54Database, root=Path(__file__).resolve().parent)/'
+        ok "apps/bap/ updated from $SRC_BAP"
+    else
+        echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_BAP — building from committed apps/bap/"
+    fi
+fi
+if [ $BUILD_EMISSOR -eq 1 ]; then
+    step "1b" "Syncing Emissor source -> apps/emissor/"
+    if [ -d "$SRC_EMISSOR" ]; then
+        sync_app "emissor" "$SRC_EMISSOR" "$EMISSOR_REPO" "$ANDAIME_REPO/launchers/icons/emissor.ico" \
+            's/root=get_shared_root()/root=Path(__file__).resolve().parent/'
+        ok "apps/emissor/ updated from $SRC_EMISSOR"
+    else
+        echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_EMISSOR — building from committed apps/emissor/"
+    fi
+fi
+if [ $BUILD_RAC -eq 1 ]; then
+    step "1b" "Syncing RAC source -> apps/rac/"
+    if [ -d "$SRC_RAC" ]; then
+        sync_app "rac" "$SRC_RAC" "$RAC_REPO" "$SRC_RAC/RAC.ico" \
+            's/config_cls=RACConfig/config_cls=RACConfig, root=Path(__file__).resolve().parent/'
+        ok "apps/rac/ updated from $SRC_RAC"
+    else
+        echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_RAC — building from committed apps/rac/"
+    fi
+fi
+
+# ============================================
 # 2. Prepare Wine Python (install/clean deps)
 # ============================================
 if [ $SKIP_DEPS -eq 0 ]; then
     step "2" "Preparing Wine Python dependencies..."
 
-    # Remove packages not needed in the portable dist
-    wine "$WINE_PYTHON" -m pip uninstall -y \
-        pyinstaller pyinstaller-hooks-contrib pikepdf PyPDF2 2>/dev/null | grep -i "successfully\|Skipping" || true
+    # NOTE: do NOT uninstall pyinstaller from the source Wine Python here —
+    # the RAC PyInstaller build (build_windows.sh) shares this interpreter and
+    # self-installs its own deps. The portable dist strips build tools from the
+    # staged copy in the prune step (7) instead.
 
     # Install the correct dependency set.
     # Packages already present are skipped by pip; missing ones are fetched.
@@ -148,6 +222,14 @@ ok "Stage: $STAGE"
 cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/launchers/"
 ok "shortcuts.bat copied"
 
+# Third-party license pointer (GPL corresponding-source requirement) — lives
+# inside python/ since it documents the bundled Python packages.
+cp "$ANDAIME_REPO/THIRD_PARTY_LICENSES" "$STAGE/python/THIRD_PARTY_LICENSES"
+ok "THIRD_PARTY_LICENSES copied to python/"
+
+# GPLv3 LICENSE is copied alongside each shipped component after staging
+# (apps/<app>/, site-packages/andaime) — see steps 6a/6b below.
+
 # ============================================
 # 4. Copy Python tree
 # ============================================
@@ -169,19 +251,12 @@ ok "Python copied ($PY_SIZE)"
 # ============================================
 step "5" "Copying andaime chassis..."
 cp -r "$ANDAIME_REPO/andaime" "$STAGE/python/Lib/site-packages/andaime"
-ok "Chassis → site-packages/andaime/"
+cp "$ANDAIME_REPO/LICENSE" "$STAGE/python/Lib/site-packages/andaime/LICENSE"
+ok "Chassis → site-packages/andaime/ (+ LICENSE)"
 
 # ============================================
 # 6. Stage app(s)
 # ============================================
-
-# --- Helper: rename src. imports in all .py files ---
-rename_imports() {
-    local pkg="$1" dir="$2"
-    find "$dir" -name "*.py" -print0 | xargs -0 sed -i \
-        -e "s/from src\\./from ${pkg}./g" \
-        -e "s/import src\\b/import ${pkg}/g"
-}
 
 # Compile launcher.c into <name>.exe, optionally embedding an .ico icon.
 compile_launcher() {
@@ -206,23 +281,7 @@ compile_launcher() {
 if [ $BUILD_BAP -eq 1 ]; then
     step "6a" "Staging BAP..."
     mkdir -p "$STAGE/apps/bap"
-    cp -r "$BAP_REPO/src/"* "$STAGE/apps/bap/"
-    cp "$BAP_REPO/main.py" "$STAGE/apps/bap/__main__.py"
-    cp "$ANDAIME_REPO/launchers/icons/bap.ico" "$STAGE/apps/bap/icon.ico"
-
-    # Rename all src. → bap. (including __main__.py)
-    rename_imports "bap" "$STAGE/apps/bap"
-
-    # Patch __main__.py:
-    #   - Remove the sys.path bootstrap (not needed with python -m)
-    #   - Add `from pathlib import Path`
-    #   - Add root= to the App() call
-    sed -i '/sys\.path\.insert(0, os\.path\.dirname/d' \
-        "$STAGE/apps/bap/__main__.py"
-    sed -i '1a from pathlib import Path' \
-        "$STAGE/apps/bap/__main__.py"
-    sed -i 's/db_cls=SS54Database)/db_cls=SS54Database, root=Path(__file__).resolve().parent)/' \
-        "$STAGE/apps/bap/__main__.py"
+    cp -r "$BAP_REPO/"* "$STAGE/apps/bap/"
 
     # Verify no stale src. imports remain
     if grep -r "from src\.\|import src\b" "$STAGE/apps/bap/" --include="*.py" -q; then
@@ -231,6 +290,9 @@ if [ $BUILD_BAP -eq 1 ]; then
         exit 1
     fi
     ok "BAP staged (imports renamed, root= patched)"
+
+    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/bap/LICENSE"
+    ok "LICENSE copied to apps/bap/"
 
     # Compile launcher (.exe) with icon if available
     compile_launcher "$STAGE/launchers/bap.exe" "$ANDAIME_REPO/launchers/icons/bap.ico"
@@ -241,16 +303,7 @@ fi
 if [ $BUILD_EMISSOR -eq 1 ]; then
     step "6b" "Staging Emissor..."
     mkdir -p "$STAGE/apps/emissor"
-    cp -r "$EMISSOR_REPO/src/"* "$STAGE/apps/emissor/"
-    cp "$EMISSOR_REPO/main.py" "$STAGE/apps/emissor/__main__.py"
-    cp "$ANDAIME_REPO/launchers/icons/emissor.ico" "$STAGE/apps/emissor/icon.ico"
-
-    # Rename all src. → emissor.
-    rename_imports "emissor" "$STAGE/apps/emissor"
-
-    # Patch __main__.py: change root=get_shared_root() to root=Path(__file__).resolve().parent
-    sed -i 's/root=get_shared_root()/root=Path(__file__).resolve().parent/' \
-        "$STAGE/apps/emissor/__main__.py"
+    cp -r "$EMISSOR_REPO/"* "$STAGE/apps/emissor/"
 
     # Verify no stale src. imports remain
     if grep -r "from src\.\|import src\b" "$STAGE/apps/emissor/" --include="*.py" -q; then
@@ -260,9 +313,34 @@ if [ $BUILD_EMISSOR -eq 1 ]; then
     fi
     ok "Emissor staged (imports renamed, root= patched)"
 
+    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/emissor/LICENSE"
+    ok "LICENSE copied to apps/emissor/"
+
     # Compile launcher (.exe) with icon
     compile_launcher "$STAGE/launchers/emissor.exe" "$ANDAIME_REPO/launchers/icons/emissor.ico"
     ok "emissor.exe compiled"
+fi
+
+# --- RAC ---
+if [ $BUILD_RAC -eq 1 ]; then
+    step "6c" "Staging RAC..."
+    mkdir -p "$STAGE/apps/rac"
+    cp -r "$RAC_REPO/"* "$STAGE/apps/rac/"
+
+    # Verify no stale src. imports remain
+    if grep -r "from src\.\|import src\b" "$STAGE/apps/rac/" --include="*.py" -q; then
+        err "Stale 'src.' imports found in RAC:"
+        grep -rn "from src\.\|import src\b" "$STAGE/apps/rac/" --include="*.py"
+        exit 1
+    fi
+    ok "RAC staged (imports renamed, root= patched)"
+
+    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/rac/LICENSE"
+    ok "LICENSE copied to apps/rac/"
+
+    # Compile launcher (.exe) with icon
+    compile_launcher "$STAGE/launchers/rac.exe" "$ANDAIME_REPO/launchers/icons/rac.ico"
+    ok "rac.exe compiled"
 fi
 
 # ============================================
@@ -364,13 +442,14 @@ PYEOF
 
     # --- Remove build-tool packages (not needed at runtime) ---
     for pkg in pip setuptools wheel _distutils_hack \
+               pyinstaller pyinstaller-hooks-contrib \
                pikepdf pikepdf.libs pikepdf-*.dist-info \
                pythonwin pywin32_system32 \
                customtkinter darkdetect; do
         rm -rf "$SP/$pkg"
     done
     rm -f "$SP/distutils-precedence.pth"
-    ok "Build tools removed (pip, setuptools, pikepdf, pythonwin, customtkinter)"
+    ok "Build tools removed (pip, setuptools, pyinstaller, pikepdf, pythonwin, customtkinter)"
 
     # --- Remove Tcl/Tk (not used by either app) ---
     rm -rf "$STAGE/python/tcl" "$STAGE/python/Lib/tkinter" "$SP/_tkinter"
@@ -403,6 +482,7 @@ find "$STAGE" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 COMPILE_TARGETS=""
 [ $BUILD_BAP -eq 1 ]     && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/bap" 2>/dev/null | tr -d '\r')"
 [ $BUILD_EMISSOR -eq 1 ] && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/emissor" 2>/dev/null | tr -d '\r')"
+[ $BUILD_RAC -eq 1 ]     && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/rac" 2>/dev/null | tr -d '\r')"
 COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/python/Lib/site-packages/andaime" 2>/dev/null | tr -d '\r')"
 
 if [ -n "$COMPILE_TARGETS" ]; then
@@ -435,9 +515,14 @@ if [ $BUILD_EMISSOR -eq 1 ]; then
     EMISSOR_SIZE=$(du -sh "$STAGE/apps/emissor" | cut -f1)
     echo -e "  emissor/: $EMISSOR_SIZE"
 fi
+if [ $BUILD_RAC -eq 1 ]; then
+    RAC_SIZE=$(du -sh "$STAGE/apps/rac" | cut -f1)
+    echo -e "  rac/:    $RAC_SIZE"
+fi
 echo ""
 echo "Launchers:"
 [ $BUILD_BAP -eq 1 ]     && echo "  $STAGE/launchers/bap.exe"
 [ $BUILD_EMISSOR -eq 1 ] && echo "  $STAGE/launchers/emissor.exe"
+[ $BUILD_RAC -eq 1 ]     && echo "  $STAGE/launchers/rac.exe"
 echo ""
 echo -e "${GREEN}Done.${NC} Copy SISTEMAS/ to a Windows machine and double-click the .exe."
