@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import os
+
 from andaime.qt import ShortcutManager
 from andaime.db_worker import DatabaseWorker
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
@@ -852,14 +854,21 @@ class QtApp(QMainWindow):
             if getattr(sys, "frozen", False):
                 subprocess.Popen([sys.executable], start_new_session=True)
             else:
-                base_dir = Path(__file__).resolve().parent
-                # Entry point: __main__.py junto ao main_window (build
-                # "emissor"), ou main.py na raiz do projeto (dev "src").
-                entry = base_dir / "__main__.py"
-                if not entry.exists():
-                    entry = base_dir.parent / "main.py"
+                pkg_dir = Path(__file__).resolve().parent
+                # O launcher roda "<python> -m emissor" a partir do diretório
+                # que contém o pacote. Replicamos exatamente para manter o
+                # mesmo PYTHONPATH/cwd da inicialização.
+                if (pkg_dir / "__init__.py").exists():
+                    module = pkg_dir.name
+                    work_dir = pkg_dir.parent
+                else:
+                    module = "main"
+                    work_dir = pkg_dir
                 subprocess.Popen(
-                    [sys.executable, str(entry)], start_new_session=True
+                    [sys.executable, "-m", module],
+                    cwd=str(work_dir),
+                    env={**os.environ, "PYTHONPATH": str(work_dir)},
+                    start_new_session=True,
                 )
             self.close()
         except Exception as e:

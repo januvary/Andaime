@@ -87,6 +87,7 @@ rename_imports() {
     local pkg="$1" dir="$2"
     find "$dir" -name "*.py" -print0 | xargs -0 sed -i \
         -e "s/from src\\./from ${pkg}./g" \
+        -e "s/from src import/from ${pkg} import/g" \
         -e "s/import src\\b/import ${pkg}/g"
 }
 

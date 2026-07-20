@@ -40,7 +40,7 @@ def _apply_pending_update():
 def _start_update_check(window):
     from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel
     from andaime.updater import UpdateCheckWorker, restart_app
-    from src import __version__
+    from rac import __version__
     from rac.gui.widgets.buttons import make_button
     from rac.gui.widgets.labels import HeadingLabel
     from rac.gui.styles import colors
