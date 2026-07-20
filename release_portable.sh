@@ -119,7 +119,17 @@ if [ ! -f "$SISTEMAS/launchers/bap.exe" ] || [ ! -f "$SISTEMAS/launchers/emissor
     exit 1
 fi
 
-echo "[4/7] Packaging..."
+echo "[4/7] Committing synced app sources..."
+if ! git diff --quiet apps/ 2>/dev/null; then
+    git add apps/
+    git commit -m "Sync app sources for ${TAG}" >/dev/null
+    echo -e "  ${GREEN}apps/${NC} synced and committed"
+else
+    echo -e "  ${GREEN}apps/${NC} already in sync"
+fi
+echo ""
+
+echo "[5/7] Packaging..."
 rm -f "$ZIP_PATH"
 cd "$DIST_DIR"
 zip -r "$ZIP_PATH" SISTEMAS/ -q
@@ -127,19 +137,19 @@ ZIP_SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
 echo -e "  ${GREEN}${ZIP_NAME}${NC}: $ZIP_SIZE"
 echo ""
 
-echo "[5/7] Creating tag ${TAG}..."
+echo "[6/7] Creating tag ${TAG}..."
 git tag "$TAG"
 git push origin "$TAG" 2>/dev/null || echo -e "  ${YELLOW}Warning: could not push tag (no remote?)${NC}"
 echo ""
 
-echo "[6/7] Creating GitHub release..."
+echo "[7/7] Creating GitHub release..."
 gh release create "$TAG" "$ZIP_PATH" \
     --repo "$REPO" \
     --title "$TAG" \
     --notes "$NOTES"
 echo ""
 
-echo "[7/7] Squashing dist history (main)..."
+echo "[8/7] Squashing dist history (main)..."
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 SQUASH_BRANCH="__release_sync"
 git branch -D "$SQUASH_BRANCH" 2>/dev/null || true

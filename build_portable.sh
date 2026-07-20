@@ -176,9 +176,10 @@ fi
 if [ $SKIP_DEPS -eq 0 ]; then
     step "2" "Preparing Wine Python dependencies..."
 
-    # Remove packages not needed in the portable dist
-    wine "$WINE_PYTHON" -m pip uninstall -y \
-        pyinstaller pyinstaller-hooks-contrib pikepdf PyPDF2 2>/dev/null | grep -i "successfully\|Skipping" || true
+    # NOTE: do NOT uninstall pyinstaller from the source Wine Python here —
+    # the RAC PyInstaller build (build_windows.sh) shares this interpreter and
+    # self-installs its own deps. The portable dist strips build tools from the
+    # staged copy in the prune step (7) instead.
 
     # Install the correct dependency set.
     # Packages already present are skipped by pip; missing ones are fetched.
@@ -424,13 +425,14 @@ PYEOF
 
     # --- Remove build-tool packages (not needed at runtime) ---
     for pkg in pip setuptools wheel _distutils_hack \
+               pyinstaller pyinstaller-hooks-contrib \
                pikepdf pikepdf.libs pikepdf-*.dist-info \
                pythonwin pywin32_system32 \
                customtkinter darkdetect; do
         rm -rf "$SP/$pkg"
     done
     rm -f "$SP/distutils-precedence.pth"
-    ok "Build tools removed (pip, setuptools, pikepdf, pythonwin, customtkinter)"
+    ok "Build tools removed (pip, setuptools, pyinstaller, pikepdf, pythonwin, customtkinter)"
 
     # --- Remove Tcl/Tk (not used by either app) ---
     rm -rf "$STAGE/python/tcl" "$STAGE/python/Lib/tkinter" "$SP/_tkinter"
