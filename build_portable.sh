@@ -216,8 +216,7 @@ mkdir -p "$STAGE/python" "$STAGE/apps" "$STAGE/launchers"
 ok "Stage: $STAGE"
 
 cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/launchers/"
-cp "$ANDAIME_REPO/launchers/"*.cmd "$STAGE/launchers/"
-ok "shortcuts.bat + .cmd launchers copied"
+ok "shortcuts.bat copied"
 
 # VERSION file (read by the smart launcher to detect updates)
 PYPROJECT_VER=$(grep '^version = ' "$ANDAIME_REPO/pyproject.toml" | sed 's/version = "//;s/"//')
@@ -531,4 +530,16 @@ echo "Launchers:"
 [ $BUILD_EMISSOR -eq 1 ] && echo "  $STAGE/launchers/emissor.exe"
 [ $BUILD_RAC -eq 1 ]     && echo "  $STAGE/launchers/rac.exe"
 echo ""
-echo -e "${GREEN}Done.${NC} Copy SISTEMAS/ to a Windows machine and double-click the .exe."
+
+# --- Create dist.zip (for network-share deployment via smart launcher) ---
+ZIP_PATH="$DIST/dist.zip"
+rm -f "$ZIP_PATH"
+cd "$DIST"
+zip -r "$ZIP_PATH" SISTEMAS/ -q
+ZIP_SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
+echo -e "  ${GREEN}dist.zip:${NC} $ZIP_SIZE"
+echo ""
+
+echo -e "${GREEN}Done.${NC}"
+echo "  Network share: copy dist.zip + VERSION + launchers/*.exe + shortcuts.bat"
+echo "  Standalone:    copy SISTEMAS/ folder"
