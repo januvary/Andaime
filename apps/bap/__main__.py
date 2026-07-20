@@ -19,7 +19,7 @@ def _start_update_check(window):
 
     from andaime.updater import UpdateCheckWorker, restart_app
     from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
-    from src import __version__
+    from bap import __version__
     from bap.ui_qt.widgets.dialogs import confirm_dialog
 
     worker = UpdateCheckWorker(UPDATE_REPO, __version__, parent=window)
