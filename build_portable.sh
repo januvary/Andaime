@@ -198,10 +198,10 @@ if [ $SKIP_DEPS -eq 0 ]; then
     # img2pdf is installed with --no-deps to avoid pulling pikepdf (8.8 MB)
     # which img2pdf only uses for optional PDF/A optimizations.
     wine "$WINE_PYTHON" -m pip install --upgrade \
-        PySide6 pypdfium2 pypdf Pillow holidays typing_extensions \
-        openpyxl \
+        PySide6==6.7.3 pypdfium2 pypdf Pillow holidays typing_extensions \
+        openpyxl pywin32 \
         google-api-python-client google-auth-oauthlib google-auth rapidfuzz \
-        reportlab svglib beautifulsoup4 python-dotenv requests \
+        reportlab svglib python-dotenv requests \
         2>&1 | grep -v fixme | grep -i "successfully\|already\|Downloading\|Installing" | tail -10
     wine "$WINE_PYTHON" -m pip install --no-deps img2pdf \
         2>&1 | grep -v fixme | grep -i "successfully\|already\|Downloading" | tail -3
@@ -220,7 +220,13 @@ mkdir -p "$STAGE/python" "$STAGE/apps" "$STAGE/launchers"
 ok "Stage: $STAGE"
 
 cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/launchers/"
-ok "shortcuts.bat copied"
+cp "$ANDAIME_REPO/launchers/"*.cmd "$STAGE/launchers/"
+ok "shortcuts.bat + .cmd launchers copied"
+
+# VERSION file (read by the smart launcher to detect updates)
+PYPROJECT_VER=$(grep '^version = ' "$ANDAIME_REPO/pyproject.toml" | sed 's/version = "//;s/"//')
+echo "${PYPROJECT_VER:-unknown}" > "$STAGE/VERSION"
+ok "VERSION written (${PYPROJECT_VER:-unknown})"
 
 # Third-party license pointer (GPL corresponding-source requirement) — lives
 # inside python/ since it documents the bundled Python packages.
@@ -245,6 +251,10 @@ rm -rf "$STAGE/python/Lib/site-packages/andaime-0.1.0.dist-info"
 
 PY_SIZE=$(du -sh "$STAGE/python" | cut -f1)
 ok "Python copied ($PY_SIZE)"
+
+# sitecustomize.py: disables bytecode caching (network-share .pyc staleness fix)
+cp "$ANDAIME_REPO/launchers/sitecustomize.py" "$STAGE/python/Lib/site-packages/sitecustomize.py"
+ok "sitecustomize.py copied (disables .pyc on network shares)"
 
 # ============================================
 # 5. Copy chassis into site-packages

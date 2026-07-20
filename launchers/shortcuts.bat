@@ -13,14 +13,16 @@ echo   ========================
 echo.
 echo   1. BAP
 echo   2. Emissor
-echo   3. Sair
+echo   3. RAC
+echo   4. Sair
 echo.
-set /p "app=Escolha (1-3): "
+set /p "app=Escolha (1-4): "
 
-if "%app%"=="3" exit /b 0
-if "%app%"=="1" ( set "EXE=bap.exe"     & set "NAME=BAP"     )
-if "%app%"=="2" ( set "EXE=emissor.exe" & set "NAME=Emissor" )
-if not defined EXE (
+if "%app%"=="4" exit /b 0
+if "%app%"=="1" ( set "CMD=bap.cmd"       & set "NAME=BAP"     )
+if "%app%"=="2" ( set "CMD=emissor.cmd"   & set "NAME=Emissor" )
+if "%app%"=="3" ( set "CMD=rac.cmd"       & set "NAME=RAC"     )
+if not defined CMD (
     echo   Escolha invalida.
     timeout /t 2 >nul
     goto menu
@@ -63,7 +65,7 @@ if not exist "%OUTDIR%" (
 set "OUTPATH=%OUTDIR%\%NAME%.lnk"
 
 :: Pass paths via env vars to avoid quoting issues in PowerShell
-set "PS_TARGET=%DIR%\%EXE%"
+set "PS_TARGET=%DIR%\%CMD%"
 set "PS_OUTPATH=%OUTPATH%"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^

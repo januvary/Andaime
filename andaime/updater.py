@@ -264,11 +264,17 @@ def ensure_local_install() -> None:
 
 
 def get_shared_root() -> Path | None:
-    """Returns the shared data root recorded at migration time, else None.
+    """Returns the shared data root.
 
-    Pass the result as ``root=`` to ``andaime.App`` so the local copy keeps
-    using the network-shared database instead of a per-user one.
+    Priority:
+    1. ``SISTEMAS_DATA_ROOT`` env var (set by the smart launcher)
+    2. ``.local_install_source`` marker file (legacy auto-updater)
+    3. ``None``
     """
+    env_root = os.environ.get("SISTEMAS_DATA_ROOT")
+    if env_root:
+        return Path(env_root)
+
     marker = Path(sys.executable).parent / MIGRATION_MARKER
     if not marker.exists():
         return None
