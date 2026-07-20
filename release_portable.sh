@@ -102,7 +102,7 @@ fi
 bash "$BUILD_PORTABLE" --app all
 echo ""
 
-if [ ! -f "$SISTEMAS/launchers/bap.exe" ] || [ ! -f "$SISTEMAS/launchers/emissor.exe" ]; then
+if [ ! -f "$SISTEMAS/bap.exe" ] || [ ! -f "$SISTEMAS/emissor.exe" ]; then
     echo -e "${RED}[ERROR]${NC} Build failed - launchers missing in $SISTEMAS."
     exit 1
 fi

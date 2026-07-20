@@ -18,7 +18,11 @@
 #   │   ├── bap/          (src/ copied, imports renamed src.→bap.)
 #   │   └── emissor/      (src/ copied, imports renamed src.→emissor.)
 #   │   └── rac/          (src/ copied, imports renamed src.→rac.)
-#   └── launchers/        (bap.exe, emissor.exe, rac.exe)
+#   ├── bap.exe           (thin launchers — find dist.zip + VERSION in own dir)
+#   ├── emissor.exe
+#   ├── rac.exe
+#   ├── dist.zip          (payload for %LOCALAPPDATA% extraction)
+#   └── VERSION           (version string for update detection)
 #
 # Usage:
 #   ./build_portable.sh              # build both apps
@@ -212,10 +216,10 @@ fi
 # ============================================
 step "3" "Cleaning previous build..."
 rm -rf "$DIST"
-mkdir -p "$STAGE/python" "$STAGE/apps" "$STAGE/launchers"
+mkdir -p "$STAGE/python" "$STAGE/apps"
 ok "Stage: $STAGE"
 
-cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/launchers/"
+cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/"
 ok "shortcuts.bat copied"
 
 # VERSION file (read by the smart launcher to detect updates)
@@ -300,7 +304,7 @@ if [ $BUILD_BAP -eq 1 ]; then
     ok "LICENSE copied to apps/bap/"
 
     # Compile launcher (.exe) with icon if available
-    compile_launcher "$STAGE/launchers/bap.exe" "$ANDAIME_REPO/launchers/icons/bap.ico"
+    compile_launcher "$STAGE/bap.exe" "$ANDAIME_REPO/launchers/icons/bap.ico"
     ok "bap.exe compiled"
 fi
 
@@ -322,7 +326,7 @@ if [ $BUILD_EMISSOR -eq 1 ]; then
     ok "LICENSE copied to apps/emissor/"
 
     # Compile launcher (.exe) with icon
-    compile_launcher "$STAGE/launchers/emissor.exe" "$ANDAIME_REPO/launchers/icons/emissor.ico"
+    compile_launcher "$STAGE/emissor.exe" "$ANDAIME_REPO/launchers/icons/emissor.ico"
     ok "emissor.exe compiled"
 fi
 
@@ -344,7 +348,7 @@ if [ $BUILD_RAC -eq 1 ]; then
     ok "LICENSE copied to apps/rac/"
 
     # Compile launcher (.exe) with icon
-    compile_launcher "$STAGE/launchers/rac.exe" "$ANDAIME_REPO/launchers/icons/rac.ico"
+    compile_launcher "$STAGE/rac.exe" "$ANDAIME_REPO/launchers/icons/rac.ico"
     ok "rac.exe compiled"
 fi
 
@@ -526,20 +530,21 @@ if [ $BUILD_RAC -eq 1 ]; then
 fi
 echo ""
 echo "Launchers:"
-[ $BUILD_BAP -eq 1 ]     && echo "  $STAGE/launchers/bap.exe"
-[ $BUILD_EMISSOR -eq 1 ] && echo "  $STAGE/launchers/emissor.exe"
-[ $BUILD_RAC -eq 1 ]     && echo "  $STAGE/launchers/rac.exe"
+[ $BUILD_BAP -eq 1 ]     && echo "  $STAGE/bap.exe"
+[ $BUILD_EMISSOR -eq 1 ] && echo "  $STAGE/emissor.exe"
+[ $BUILD_RAC -eq 1 ]     && echo "  $STAGE/rac.exe"
 echo ""
 
-# --- Create dist.zip (for network-share deployment via smart launcher) ---
-ZIP_PATH="$DIST/dist.zip"
+# --- Create dist.zip inside SISTEMAS/ (for network-share deployment) ---
+# Must be created AFTER zipping so it doesn't include itself.
+ZIP_PATH="$STAGE/dist.zip"
 rm -f "$ZIP_PATH"
 cd "$DIST"
-zip -r "$ZIP_PATH" SISTEMAS/ -q
+zip -r "$ZIP_PATH" SISTEMAS/ -q -x "SISTEMAS/dist.zip"
 ZIP_SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
 echo -e "  ${GREEN}dist.zip:${NC} $ZIP_SIZE"
 echo ""
 
 echo -e "${GREEN}Done.${NC}"
-echo "  Network share: copy dist.zip + VERSION + launchers/*.exe + shortcuts.bat"
-echo "  Standalone:    copy SISTEMAS/ folder"
+echo "  Network share: copy SISTEMAS/ contents to the share root"
+echo "  Standalone:    copy SISTEMAS/ folder and double-click the .exe"
