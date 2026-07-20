@@ -7,6 +7,7 @@
 #
 #   ~/Projects/SS 54 - Vindication/   (BAP source + main.py)
 #   ~/Projects/Emissor/                (Emissor source + main.py)
+#   ~/Projects/RAC - Registros Alto Custo/   (RAC source + main.py)
 #   ~/Projects/Andaime/andaime/        (shared chassis)
 #   ~/.wine/drive_c/Python310/         (Windows Python 3.10)
 #
@@ -16,12 +17,14 @@
 #   ├── apps/
 #   │   ├── bap/          (src/ copied, imports renamed src.→bap.)
 #   │   └── emissor/      (src/ copied, imports renamed src.→emissor.)
-#   └── launchers/        (bap.exe, emissor.exe)
+#   │   └── rac/          (src/ copied, imports renamed src.→rac.)
+#   └── launchers/        (bap.exe, emissor.exe, rac.exe)
 #
 # Usage:
 #   ./build_portable.sh              # build both apps
 #   ./build_portable.sh --app bap     # build only BAP
 #   ./build_portable.sh --app emissor # build only Emissor
+#   ./build_portable.sh --app rac     # build only RAC
 #   ./build_portable.sh --skip-deps   # skip Wine pip (use as-is)
 #   ./build_portable.sh --no-prune    # skip size optimisation
 # ============================================
@@ -33,9 +36,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Original local repos (source of truth for app code)
 SRC_BAP="$HOME/Projects/SS 54 - Vindication"
 SRC_EMISSOR="$HOME/Projects/Emissor"
+SRC_RAC="$HOME/Projects/RAC - Registros Alto Custo"
 # Vendored copies committed into this repo (synced from the above)
 BAP_REPO="$SCRIPT_DIR/apps/bap"
 EMISSOR_REPO="$SCRIPT_DIR/apps/emissor"
+RAC_REPO="$SCRIPT_DIR/apps/rac"
 ANDAIME_REPO="$SCRIPT_DIR"
 WINE_PY_DIR="$HOME/.wine/drive_c/Python310"
 WINE_PYTHON='C:\Python310\python.exe'
@@ -59,11 +64,13 @@ done
 
 BUILD_BAP=0
 BUILD_EMISSOR=0
+BUILD_RAC=0
 case "$APP_TARGET" in
     bap)     BUILD_BAP=1 ;;
     emissor) BUILD_EMISSOR=1 ;;
-    all)     BUILD_BAP=1; BUILD_EMISSOR=1 ;;
-    *)       echo "Invalid --app: $APP_TARGET (use bap|emissor|all)"; exit 1 ;;
+    rac)     BUILD_RAC=1 ;;
+    all)     BUILD_BAP=1; BUILD_EMISSOR=1; BUILD_RAC=1 ;;
+    *)       echo "Invalid --app: $APP_TARGET (use bap|emissor|rac|all)"; exit 1 ;;
 esac
 
 # --- Colors ---
@@ -129,13 +136,7 @@ ok "Wine Py:   $WINE_PY_DIR"
 # committed to this repo (self-contained, no need to download dist). Mirrors
 # the staging transforms (src.->pkg. rename, main.py->__main__.py, root= patch).
 sync_app() {
-    local pkg="$1" src="$2" dst="$3" icon="$4"
-    local patch_root
-    patch_root='s/root=get_shared_root()/root=Path(__file__).resolve().parent/'
-    if [ "$pkg" = "bap" ]; then
-        patch_root='s/db_cls=SS54Database)/db_cls=SS54Database, root=Path(__file__).resolve().parent)/'
-    fi
-
+    local pkg="$1" src="$2" dst="$3" icon="$4" patch="$5"
     rm -rf "$dst"
     mkdir -p "$dst"
     cp -r "$src/src/"* "$dst/"
@@ -146,18 +147,26 @@ sync_app() {
         sed -i '/sys\.path\.insert(0, os\.path\.dirname/d' "$dst/__main__.py"
         sed -i '1a from pathlib import Path' "$dst/__main__.py"
     fi
-    sed -i "$patch_root" "$dst/__main__.py"
+    sed -i "$patch" "$dst/__main__.py"
 }
 
 if [ $BUILD_BAP -eq 1 ]; then
     step "1b" "Syncing BAP source -> apps/bap/"
-    sync_app "bap" "$SRC_BAP" "$BAP_REPO" "$ANDAIME_REPO/launchers/icons/bap.ico"
+    sync_app "bap" "$SRC_BAP" "$BAP_REPO" "$ANDAIME_REPO/launchers/icons/bap.ico" \
+        's/db_cls=SS54Database)/db_cls=SS54Database, root=Path(__file__).resolve().parent)/'
     ok "apps/bap/ updated"
 fi
 if [ $BUILD_EMISSOR -eq 1 ]; then
     step "1b" "Syncing Emissor source -> apps/emissor/"
-    sync_app "emissor" "$SRC_EMISSOR" "$EMISSOR_REPO" "$ANDAIME_REPO/launchers/icons/emissor.ico"
+    sync_app "emissor" "$SRC_EMISSOR" "$EMISSOR_REPO" "$ANDAIME_REPO/launchers/icons/emissor.ico" \
+        's/root=get_shared_root()/root=Path(__file__).resolve().parent/'
     ok "apps/emissor/ updated"
+fi
+if [ $BUILD_RAC -eq 1 ]; then
+    step "1b" "Syncing RAC source -> apps/rac/"
+    sync_app "rac" "$SRC_RAC" "$RAC_REPO" "$SRC_RAC/RAC.ico" \
+        's/config_cls=RACConfig/config_cls=RACConfig, root=Path(__file__).resolve().parent/'
+    ok "apps/rac/ updated"
 fi
 
 # ============================================
@@ -291,6 +300,28 @@ if [ $BUILD_EMISSOR -eq 1 ]; then
     # Compile launcher (.exe) with icon
     compile_launcher "$STAGE/launchers/emissor.exe" "$ANDAIME_REPO/launchers/icons/emissor.ico"
     ok "emissor.exe compiled"
+fi
+
+# --- RAC ---
+if [ $BUILD_RAC -eq 1 ]; then
+    step "6c" "Staging RAC..."
+    mkdir -p "$STAGE/apps/rac"
+    cp -r "$RAC_REPO/"* "$STAGE/apps/rac/"
+
+    # Verify no stale src. imports remain
+    if grep -r "from src\.\|import src\b" "$STAGE/apps/rac/" --include="*.py" -q; then
+        err "Stale 'src.' imports found in RAC:"
+        grep -rn "from src\.\|import src\b" "$STAGE/apps/rac/" --include="*.py"
+        exit 1
+    fi
+    ok "RAC staged (imports renamed, root= patched)"
+
+    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/rac/LICENSE"
+    ok "LICENSE copied to apps/rac/"
+
+    # Compile launcher (.exe) with icon
+    compile_launcher "$STAGE/launchers/rac.exe" "$ANDAIME_REPO/launchers/icons/rac.ico"
+    ok "rac.exe compiled"
 fi
 
 # ============================================
@@ -431,6 +462,7 @@ find "$STAGE" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 COMPILE_TARGETS=""
 [ $BUILD_BAP -eq 1 ]     && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/bap" 2>/dev/null | tr -d '\r')"
 [ $BUILD_EMISSOR -eq 1 ] && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/emissor" 2>/dev/null | tr -d '\r')"
+[ $BUILD_RAC -eq 1 ]     && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/rac" 2>/dev/null | tr -d '\r')"
 COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/python/Lib/site-packages/andaime" 2>/dev/null | tr -d '\r')"
 
 if [ -n "$COMPILE_TARGETS" ]; then
@@ -463,9 +495,14 @@ if [ $BUILD_EMISSOR -eq 1 ]; then
     EMISSOR_SIZE=$(du -sh "$STAGE/apps/emissor" | cut -f1)
     echo -e "  emissor/: $EMISSOR_SIZE"
 fi
+if [ $BUILD_RAC -eq 1 ]; then
+    RAC_SIZE=$(du -sh "$STAGE/apps/rac" | cut -f1)
+    echo -e "  rac/:    $RAC_SIZE"
+fi
 echo ""
 echo "Launchers:"
 [ $BUILD_BAP -eq 1 ]     && echo "  $STAGE/launchers/bap.exe"
 [ $BUILD_EMISSOR -eq 1 ] && echo "  $STAGE/launchers/emissor.exe"
+[ $BUILD_RAC -eq 1 ]     && echo "  $STAGE/launchers/rac.exe"
 echo ""
 echo -e "${GREEN}Done.${NC} Copy SISTEMAS/ to a Windows machine and double-click the .exe."
