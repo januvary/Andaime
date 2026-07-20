@@ -90,7 +90,9 @@ def _start_update_check(window):
 def main():
     _apply_pending_update()
 
-    app = andaime.App("RAC", "RACRegistros", config_cls=RACConfig, root=Path(__file__).resolve().parent, db_cls=RACDatabase)
+    from andaime.updater import get_shared_root
+
+    app = andaime.App("RAC", "RAC", config_cls=RACConfig, db_cls=RACDatabase, root=get_shared_root())
 
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QFont, QIcon

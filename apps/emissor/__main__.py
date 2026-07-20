@@ -29,10 +29,10 @@ def main() -> None:
     """Ponto de entrada da UI Qt."""
     andaime_instance = andaime.App(
         "Emissor",
-        "EmissorDeRecibos",
+        "Emissor",
         config_cls=AppConfig,
         db_cls=EmissorDatabase,
-        root=Path(__file__).resolve().parent,
+        root=get_shared_root(),
     )
     setup_shutdown_handlers()
 
@@ -40,7 +40,7 @@ def main() -> None:
     # mas só atua enquanto existir a pasta antiga 0-INSULINAS.
     from emissor.utils.insulina_folder_migration import migrate_insulina_folders
 
-    _migration_root = get_shared_root() or andaime_instance.config.save_location
+    _migration_root = andaime_instance.root
     migrate_insulina_folders(_migration_root)
 
     app = QApplication(sys.argv)

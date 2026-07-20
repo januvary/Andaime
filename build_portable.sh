@@ -194,7 +194,7 @@ if [ $SKIP_DEPS -eq 0 ]; then
     # img2pdf is installed with --no-deps to avoid pulling pikepdf (8.8 MB)
     # which img2pdf only uses for optional PDF/A optimizations.
     wine "$WINE_PYTHON" -m pip install --upgrade \
-        PySide6==6.7.3 pypdfium2 pypdf Pillow holidays typing_extensions \
+        pyside6_essentials==6.7.3 pypdfium2 pypdf Pillow holidays typing_extensions \
         openpyxl pywin32 \
         google-api-python-client google-auth-oauthlib google-auth rapidfuzz \
         reportlab svglib python-dotenv requests \
@@ -295,7 +295,7 @@ if [ $BUILD_BAP -eq 1 ]; then
         grep -rn "from src\.\|import src\b" "$STAGE/apps/bap/" --include="*.py"
         exit 1
     fi
-    ok "BAP staged (imports renamed, root= patched)"
+    ok "BAP staged (imports renamed)"
 
     cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/bap/LICENSE"
     ok "LICENSE copied to apps/bap/"
@@ -317,7 +317,7 @@ if [ $BUILD_EMISSOR -eq 1 ]; then
         grep -rn "from src\.\|import src\b" "$STAGE/apps/emissor/" --include="*.py"
         exit 1
     fi
-    ok "Emissor staged (imports renamed, root= patched)"
+    ok "Emissor staged (imports renamed)"
 
     cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/emissor/LICENSE"
     ok "LICENSE copied to apps/emissor/"
@@ -339,7 +339,7 @@ if [ $BUILD_RAC -eq 1 ]; then
         grep -rn "from src\.\|import src\b" "$STAGE/apps/rac/" --include="*.py"
         exit 1
     fi
-    ok "RAC staged (imports renamed, root= patched)"
+    ok "RAC staged (imports renamed)"
 
     cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/rac/LICENSE"
     ok "LICENSE copied to apps/rac/"

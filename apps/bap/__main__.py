@@ -68,7 +68,9 @@ def main():
 
     _andaime_config.get_config_path = lambda: bap_data_dir() / "config.json"
 
-    app = andaime.App("BAP", "BAP", config_cls=SS54Config, db_cls=SS54Database, root=Path(__file__).resolve().parent)
+    from andaime.updater import get_shared_root
+
+    app = andaime.App("BAP", "BAP", config_cls=SS54Config, db_cls=SS54Database, root=get_shared_root())
 
     # Fecha o banco (backup síncrono) no atexit, fora da thread de UI.
     from andaime.shutdown import register_cleanup, setup_shutdown_handlers
