@@ -22,7 +22,10 @@ class App(Generic[_D]):
     ) -> None:
         self._app_name = app_name
         self._app_folder = app_folder
-        self._root = root if root is not None else self._detect_root()
+        if root is not None:
+            self._root = Path(root) / app_folder
+        else:
+            self._root = self._detect_root()
 
         andaime.init(app_name, app_folder, root=self._root)
 

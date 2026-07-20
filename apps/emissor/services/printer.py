@@ -302,12 +302,9 @@ class Win32SpoolerBackend:
     ) -> None:
         """Spoola páginas via GDI bruto (ctypes + gdi32), trabalho collated.
 
-        Desenha a página inteira (A4) na folha física inteira
-        (PHYSICALWIDTH×PHYSICALHEIGHT a partir de (0,0)), mapeando 1:1 sem
-        reescalar nem deslocar — o mesmo que um visualizador de PDF externo
-        imprimindo em "Tamanho real / 100%". As margens do PDF (0,7 cm) já são
-        maiores que a margem de hardware da impressora, então nada de conteúdo é
-        cortado; apenas o espaço em branco da borda cai na área não-imprimível.
+        Desenha cada página na *área imprimível* (HORZRES×VERTRES no offset de
+        hardware), preservando a proporção e centralizando. Isso garante que
+        nada caia na margem física não-imprimível da impressora.
         """
         from ctypes import byref, sizeof
         from contextlib import suppress
@@ -320,22 +317,22 @@ class Win32SpoolerBackend:
         if not hdc:
             raise RuntimeError(f"CreateDCW retornou HDC nulo para '{printer_name}'")
         try:
-            # Best-effort: HALFTONE melhora a qualidade do redimensionamento.
             with suppress(Exception):
                 gdi.SetStretchBltMode(hdc, _HALFTONE_STRETCH)
 
-            phys_width = gdi.GetDeviceCaps(hdc, _PHYSICAL_WIDTH)
-            phys_height = gdi.GetDeviceCaps(hdc, _PHYSICAL_HEIGHT)
-            # Alguns drivers não reportam a área física (retornam 0). Nesse caso,
-            # caímos de volta para a área imprimível para evitar um box vazio.
-            if phys_width > 0 and phys_height > 0:
-                box = (0, 0, phys_width, phys_height)
-            else:
-                offset_x = gdi.GetDeviceCaps(hdc, _PHYSICAL_OFFSET_X)
-                offset_y = gdi.GetDeviceCaps(hdc, _PHYSICAL_OFFSET_Y)
-                width = gdi.GetDeviceCaps(hdc, _HORZRES)
-                height = gdi.GetDeviceCaps(hdc, _VERTRES)
-                box = (offset_x, offset_y, offset_x + width, offset_y + height)
+            offset_x = gdi.GetDeviceCaps(hdc, _PHYSICAL_OFFSET_X)
+            offset_y = gdi.GetDeviceCaps(hdc, _PHYSICAL_OFFSET_Y)
+            printable_w = gdi.GetDeviceCaps(hdc, _HORZRES)
+            printable_h = gdi.GetDeviceCaps(hdc, _VERTRES)
+
+            # Preserva proporção da imagem e centraliza na área imprimível.
+            img_w, img_h = pages[0].size
+            scale = min(printable_w / img_w, printable_h / img_h)
+            draw_w = int(img_w * scale)
+            draw_h = int(img_h * scale)
+            draw_x = offset_x + (printable_w - draw_w) // 2
+            draw_y = offset_y + (printable_h - draw_h) // 2
+            box = (draw_x, draw_y, draw_x + draw_w, draw_y + draw_h)
 
             docinfo = _DOCINFO(sizeof(_DOCINFO), job_title, None, None, 0)
             if gdi.StartDocW(hdc, byref(docinfo)) <= 0:
@@ -352,7 +349,6 @@ class Win32SpoolerBackend:
                             raise RuntimeError("EndPage falhou")
                 gdi.EndDoc(hdc)
             except Exception:
-                # Cancela o documento em vez de deixar um trabalho órfão.
                 with suppress(Exception):
                     gdi.AbortDoc(hdc)
                 raise

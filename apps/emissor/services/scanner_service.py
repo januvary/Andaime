@@ -27,15 +27,37 @@ _COLOR_MODE_TO_MODE = {
 }
 
 
+def _trim_white(img: "Image.Image") -> "Image.Image":
+    """Crops fully-blank borders (rows/cols where every pixel is near-white).
+
+    Only trims borders where *every* pixel is within the near-white threshold,
+    so content is never touched. Safe to run unconditionally on every page.
+    """
+    from PIL import ImageChops
+
+    bg = Image.new(img.mode, img.size, 1 if img.mode == "1" else 255)
+    diff = ImageChops.difference(img, bg).convert("L")
+    bbox = diff.point(lambda x: 255 if x > 10 else 0).getbbox()
+    if bbox:
+        return img.crop(bbox)
+    return img
+
+
 def _normalize_pil_page(
-    img: Image.Image,
+    img: "Image.Image",
     dpi: int,
     flip_top_bottom: bool = False,
-) -> Image.Image:
+    flip_left_right: bool = False,
+) -> "Image.Image":
     """Finaliza imagem PIL: força decode, carimba DPI e (opc.) desvira WIA."""
+    from PIL import Image
+
     img.load()
     if flip_top_bottom:
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
+    if flip_left_right:
+        img = img.transpose(Image.FLIP_LEFT_RIGHT)
+    img = _trim_white(img)
     img.info["dpi"] = (dpi, dpi)
     return img
 
@@ -410,17 +432,27 @@ class WiaBackend:
     def _wia_img_to_pil(self, wia_img: Any, dpi: int = 200) -> Image.Image:
         from PIL import Image
 
+        flip_tb = os.environ.get(
+            "EMISSOR_SCAN_FLIP_TOP_BOTTOM", "1"
+        ).strip() in ("1", "true", "True")
+        flip_lr = os.environ.get(
+            "EMISSOR_SCAN_FLIP_LEFT_RIGHT", "1"
+        ).strip() in ("1", "true", "True")
+
         suffix = ".png"
         tmp = Path(tempfile.mktemp(suffix=suffix))
         try:
             wia_img.SaveFile(str(tmp))
-            img = Image.open(tmp)
+            with Image.open(tmp) as src:
+                img = src.copy()
         finally:
             tmp.unlink(missing_ok=True)
 
-        # WIA entrega o DIB frequentemente invertido (topo/baixo) para
-        # vários drivers/ADF; corrige a orientação e carimba o DPI.
-        return _normalize_pil_page(img, dpi, flip_top_bottom=True)
+        # WIA entrega o DIB frequentemente invertido (topo/baixo e/ou esquerda/
+        # direita) para vários drivers/ADF; corrige a orientação e carimba o DPI.
+        return _normalize_pil_page(
+            img, dpi, flip_top_bottom=flip_tb, flip_left_right=flip_lr
+        )
 
     def _transfer_all(self, dev: Any, item: Any, dpi: int) -> list[Image.Image]:
         """Transfere páginas: 1 (flatbed) ou até esvaziar (ADF, com teto)."""

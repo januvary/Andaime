@@ -137,7 +137,7 @@ ok "Wine Py:   $WINE_PY_DIR"
 # committed to this repo (self-contained, no need to download dist). Mirrors
 # the staging transforms (src.->pkg. rename, main.py->__main__.py, root= patch).
 sync_app() {
-    local pkg="$1" src="$2" dst="$3" icon="$4" patch="$5"
+    local pkg="$1" src="$2" dst="$3" icon="$4"
     rm -rf "$dst"
     mkdir -p "$dst"
     cp -r "$src/src/"* "$dst/"
@@ -148,14 +148,12 @@ sync_app() {
         sed -i '/sys\.path\.insert(0, os\.path\.dirname/d' "$dst/__main__.py"
         sed -i '1a from pathlib import Path' "$dst/__main__.py"
     fi
-    sed -i "$patch" "$dst/__main__.py"
 }
 
 if [ $BUILD_BAP -eq 1 ]; then
     step "1b" "Syncing BAP source -> apps/bap/"
     if [ -d "$SRC_BAP" ]; then
-        sync_app "bap" "$SRC_BAP" "$BAP_REPO" "$ANDAIME_REPO/launchers/icons/bap.ico" \
-            's/db_cls=SS54Database)/db_cls=SS54Database, root=Path(__file__).resolve().parent)/'
+        sync_app "bap" "$SRC_BAP" "$BAP_REPO" "$ANDAIME_REPO/launchers/icons/bap.ico"
         ok "apps/bap/ updated from $SRC_BAP"
     else
         echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_BAP — building from committed apps/bap/"
@@ -164,8 +162,7 @@ fi
 if [ $BUILD_EMISSOR -eq 1 ]; then
     step "1b" "Syncing Emissor source -> apps/emissor/"
     if [ -d "$SRC_EMISSOR" ]; then
-        sync_app "emissor" "$SRC_EMISSOR" "$EMISSOR_REPO" "$ANDAIME_REPO/launchers/icons/emissor.ico" \
-            's/root=get_shared_root()/root=Path(__file__).resolve().parent/'
+        sync_app "emissor" "$SRC_EMISSOR" "$EMISSOR_REPO" "$ANDAIME_REPO/launchers/icons/emissor.ico"
         ok "apps/emissor/ updated from $SRC_EMISSOR"
     else
         echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_EMISSOR — building from committed apps/emissor/"
@@ -174,8 +171,7 @@ fi
 if [ $BUILD_RAC -eq 1 ]; then
     step "1b" "Syncing RAC source -> apps/rac/"
     if [ -d "$SRC_RAC" ]; then
-        sync_app "rac" "$SRC_RAC" "$RAC_REPO" "$SRC_RAC/RAC.ico" \
-            's/config_cls=RACConfig/config_cls=RACConfig, root=Path(__file__).resolve().parent/'
+        sync_app "rac" "$SRC_RAC" "$RAC_REPO" "$SRC_RAC/RAC.ico"
         ok "apps/rac/ updated from $SRC_RAC"
     else
         echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_RAC — building from committed apps/rac/"
