@@ -119,10 +119,12 @@ git commit -m "Bump version to ${TAG}"
 echo -e "  ${GREEN}pyproject.toml + apps/${NC} -> ${TAG}"
 echo ""
 
-echo "[4/7] Packaging..."
+echo "[4/7] Packaging (thin payload)..."
 rm -f "$ZIP_PATH"
 cd "$DIST_DIR"
-zip -r "$ZIP_PATH" SISTEMAS/ -q
+zip -r "$ZIP_PATH" SISTEMAS/ -q \
+    -x "SISTEMAS/python/*" \
+       "SISTEMAS/apps/*"
 ZIP_SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
 echo -e "  ${GREEN}${ZIP_NAME}${NC}: $ZIP_SIZE"
 echo ""

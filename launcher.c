@@ -2,7 +2,8 @@
  * launcher.c — Smart Windows launcher for SISTEMAS apps.
  *
  * On first launch (or when the share's VERSION differs from the local copy):
- *   extracts dist.zip from the launcher's directory to %LOCALAPPDATA%\SISTEMAS\
+ *   shows a progress dialog, then extracts dist.zip from the launcher's
+ *   directory to %LOCALAPPDATA%\SISTEMAS\
  * On every launch:
  *   sets SISTEMAS_DATA_ROOT env var to the launcher's own directory,
  *   then runs %LOCALAPPDATA%\SISTEMAS\python\pythonw.exe -m <app>.
@@ -10,10 +11,11 @@
  * The module name is derived from the .exe filename (bap.exe -> "bap").
  *
  * Compile (cross-compile on Linux):
- *   x86_64-w64-mingw32-gcc -O2 -s -o launcher.exe launcher.c -mwindows -static -lshlwapi
+ *   x86_64-w64-mingw32-gcc -O2 -s -o launcher.exe launcher.c -mwindows -static -lshlwapi -lcomctl32
  */
 
 #include <windows.h>
+#include <commctrl.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,13 +36,55 @@ read_version_file(const char *path, char *buf, size_t bufsize)
     return 0;
 }
 
-static int
-run_hidden_and_wait(const char *cmd, DWORD *exitCode)
-{
-    char cmdBuf[MAX_PATH * 8];
-    strncpy(cmdBuf, cmd, sizeof(cmdBuf) - 1);
-    cmdBuf[sizeof(cmdBuf) - 1] = '\0';
+/* --- Progress dialog (shown during first install / update extraction) --- */
+#define IDD_PROGRESS 100
+#define IDC_PROGRESS 101
 
+static INT_PTR CALLBACK progress_dlgproc(HWND, UINT, WPARAM, LPARAM);
+
+static HWND
+show_progress(void)
+{
+    INITCOMMONCONTROLSEX icc;
+    icc.dwSize = sizeof(icc);
+    icc.dwICC = ICC_PROGRESS_CLASS;
+    InitCommonControlsEx(&icc);
+
+    HINSTANCE hInst = GetModuleHandleA(NULL);
+    HWND hdlg = CreateDialogA(hInst, MAKEINTRESOURCE(IDD_PROGRESS), NULL,
+                              progress_dlgproc);
+    if (hdlg) {
+        HWND bar = GetDlgItem(hdlg, IDC_PROGRESS);
+        if (bar) SendMessageA(bar, PBM_SETMARQUEE, TRUE, 0);
+        ShowWindow(hdlg, SW_SHOW);
+        UpdateWindow(hdlg);
+    }
+    return hdlg;
+}
+
+static INT_PTR CALLBACK
+progress_dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    (void)wParam; (void)lParam;
+    switch (msg) {
+        case WM_INITDIALOG: {
+            RECT r, dr;
+            GetWindowRect(GetDesktopWindow(), &dr);
+            GetWindowRect(hwnd, &r);
+            int x = (dr.right - r.right) / 2;
+            int y = (dr.bottom - r.bottom) / 2;
+            SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+            return TRUE;
+        }
+        default:
+            return FALSE;
+    }
+}
+
+/* Run a command, pumping messages so the progress dialog keeps animating. */
+static DWORD
+run_and_pump(HWND hdlg, const char *cmd)
+{
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
     ZeroMemory(&si, sizeof(si));
@@ -49,15 +93,29 @@ run_hidden_and_wait(const char *cmd, DWORD *exitCode)
     si.wShowWindow = SW_HIDE;
     ZeroMemory(&pi, sizeof(pi));
 
-    if (!CreateProcessA(NULL, cmdBuf, NULL, NULL, FALSE,
+    if (!CreateProcessA(NULL, (char *)cmd, NULL, NULL, FALSE,
                         CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
-        return -1;
+        return (DWORD)-1;
 
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    GetExitCodeProcess(pi.hProcess, exitCode);
+    for (;;) {
+        DWORD rc = MsgWaitForMultipleObjects(1, &pi.hProcess, FALSE,
+                                              INFINITE, QS_ALLINPUT);
+        if (rc == WAIT_OBJECT_0)
+            break;
+        MSG msg;
+        while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (!IsDialogMessageA(hdlg, &msg)) {
+                TranslateMessage(&msg);
+                DispatchMessageA(&msg);
+            }
+        }
+    }
+
+    DWORD exitCode = 1;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
-    return 0;
+    return exitCode;
 }
 
 /* --- Main --- */
@@ -149,7 +207,10 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
                  distZip, lad);
 
         DWORD tarExit = 1;
-        if (run_hidden_and_wait(tarCmd, &tarExit) != 0 || tarExit != 0) {
+        HWND hdlg = show_progress();
+        tarExit = run_and_pump(hdlg, tarCmd);
+        if (hdlg) DestroyWindow(hdlg);
+        if (tarExit != 0) {
             char msg[512];
             snprintf(msg, sizeof(msg),
                      "Installation failed (tar exit code %lu).\n"

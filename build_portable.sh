@@ -273,16 +273,46 @@ compile_launcher() {
     local rc_dir
     rc_dir=$(mktemp -d)
 
+    # comctl6 manifest (enables themed controls + PBS_MARQUEE animation)
+    cat > "$rc_dir/manifest.xml" <<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity version="1.0.0.0" name="SISTEMAS.Launcher"/>
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls"
+                        version="6.0.0.0" processorArchitecture="*"
+                        publicKeyToken="6595b64144ccf1df" language="*"/>
+    </dependentAssembly>
+  </dependency>
+</assembly>
+XML
+
     if [ -n "$icon" ] && [ -f "$icon" ]; then
         cp "$icon" "$rc_dir/app.ico"
-        printf '1 ICON "app.ico"\n' > "$rc_dir/app.rc"
-        x86_64-w64-mingw32-windres "$rc_dir/app.rc" "$rc_dir/app_res.o" 2>/dev/null
-        x86_64-w64-mingw32-gcc -O2 -s -o "$output" \
-            "$ANDAIME_REPO/launcher.c" "$rc_dir/app_res.o" -mwindows -static
-    else
-        x86_64-w64-mingw32-gcc -O2 -s -o "$output" \
-            "$ANDAIME_REPO/launcher.c" -mwindows -static
     fi
+
+    {
+        if [ -f "$rc_dir/app.ico" ]; then
+            echo '1 ICON "app.ico"'
+        fi
+        echo '1 RT_MANIFEST "manifest.xml"'
+        echo '#define IDD_PROGRESS 100'
+        echo '#define IDC_PROGRESS 101'
+        echo 'IDD_PROGRESS DIALOG 10, 10, 340, 110'
+        echo 'CAPTION "SISTEMAS"'
+        echo 'FONT 9, "Segoe UI"'
+        echo 'BEGIN'
+        echo '    LTEXT "Instalando o SISTEMAS...", -1, 20, 24, 300, 20'
+        echo '    LTEXT "Por favor, aguarde enquanto os arquivos sao copiados.", -1, 20, 46, 300, 20'
+        echo '    CONTROL "", IDC_PROGRESS, "msctls_progress32", 0x00800008, 20, 78, 300, 16'
+        echo 'END'
+    } > "$rc_dir/app.rc"
+
+    x86_64-w64-mingw32-windres "$rc_dir/app.rc" "$rc_dir/app_res.o" 2>/dev/null
+    x86_64-w64-mingw32-gcc -O2 -s -o "$output" \
+        "$ANDAIME_REPO/launcher.c" "$rc_dir/app_res.o" -mwindows -static -lcomctl32
+
     rm -rf "$rc_dir"
 }
 
