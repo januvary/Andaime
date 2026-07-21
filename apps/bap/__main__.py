@@ -112,6 +112,8 @@ def main():
     from PySide6.QtCore import QTimer
 
     window = MainWindow()
+    if icon_path.exists():
+        window.setWindowIcon(QIcon(str(icon_path)))
     window.show()
     QTimer.singleShot(0, window.init_backend)
 
