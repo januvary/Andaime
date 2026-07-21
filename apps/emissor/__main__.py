@@ -27,14 +27,14 @@ from emissor.ui_qt.theme import get_palette, qpalette, stylesheet  # noqa: E402
 
 def main() -> None:
     """Ponto de entrada da UI Qt."""
-    # Set AppUserModelID BEFORE any window/QApplication is created so the
-    # taskbar groups the pythonw.exe child process under the app identity.
-    if sys.platform == "win32":
-        import ctypes
+    from pathlib import Path
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "SISTEMAS.Emissor"
-        )
+    # Set AppUserModelID + register icon in registry BEFORE QApplication.
+    from andaime.win32 import register_taskbar_identity
+
+    register_taskbar_identity(
+        "SISTEMAS.Emissor", "Emissor", Path(__file__).resolve().parent / "icon.ico"
+    )
 
     andaime_instance = andaime.App(
         "Emissor",

@@ -88,14 +88,14 @@ def _start_update_check(window):
 
 
 def main():
-    # Set AppUserModelID BEFORE any window/QApplication is created so the
-    # taskbar groups the pythonw.exe child process under the app identity.
-    if sys.platform == "win32":
-        import ctypes
+    # Set AppUserModelID + register icon in registry BEFORE QApplication.
+    from pathlib import Path
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "SISTEMAS.RAC"
-        )
+    from andaime.win32 import register_taskbar_identity
+
+    register_taskbar_identity(
+        "SISTEMAS.RAC", "RAC", Path(__file__).resolve().parent / "icon.ico"
+    )
 
     _apply_pending_update()
 
