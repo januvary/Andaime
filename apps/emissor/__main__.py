@@ -72,6 +72,8 @@ def main() -> None:
     app.setStyleSheet(stylesheet(palette))
 
     window = QtApp(andaime_instance)
+    if icon_path.exists():
+        window.setWindowIcon(QIcon(str(icon_path)))
     window.show()
 
     sys.exit(app.exec())

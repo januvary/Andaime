@@ -132,6 +132,8 @@ def main():
     from rac.gui.main_window import MainWindow
 
     window = MainWindow()
+    if icon_path.exists():
+        window.setWindowIcon(QIcon(str(icon_path)))
     window.init_backend()
     window.navigate_to("start")
     window.show()
