@@ -38,7 +38,7 @@ def resolve_app_exe(app_name: str) -> Path | None:
 
 
 RECIBOS_PARENT_FOLDER = "MANDADOS JUDICIAIS"
-INSULINA_PREFIX = "INSULINA - "
+INSULINA_SUFFIX = " - INSULINA"
 
 
 def resolve_archive_dir(
@@ -51,7 +51,7 @@ def resolve_archive_dir(
 
     parent = save_root / RECIBOS_PARENT_FOLDER
     if patient_tipo == "insulina":
-        archive_dir = parent / f"{INSULINA_PREFIX}{safe_patient_name}"
+        archive_dir = parent / f"{safe_patient_name}{INSULINA_SUFFIX}"
     else:
         archive_dir = parent / safe_patient_name
 

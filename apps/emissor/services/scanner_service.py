@@ -33,7 +33,7 @@ def _trim_white(img: "Image.Image") -> "Image.Image":
     Only trims borders where *every* pixel is within the near-white threshold,
     so content is never touched. Safe to run unconditionally on every page.
     """
-    from PIL import ImageChops
+    from PIL import Image, ImageChops
 
     bg = Image.new(img.mode, img.size, 1 if img.mode == "1" else 255)
     diff = ImageChops.difference(img, bg).convert("L")
@@ -190,7 +190,7 @@ class TwainBackend:
                 # Try low-level acquire pattern (request_acquire +
                 # xfer_image_natively) which gives more control over driver
                 # UI than the convenience acquire() wrapper.
-                images = self._do_acquire(src, twain)
+                images = self._do_acquire(src, twain, dpi)
                 return [img for img in images if img is not None]
             finally:
                 try:
@@ -207,14 +207,14 @@ class TwainBackend:
             raise ScannerError(f"Falha ao digitalizar: {e}") from e
 
     @staticmethod
-    def _do_acquire(src: Any, twain: Any) -> list[Image.Image]:
+    def _do_acquire(src: Any, twain: Any, dpi: int) -> list[Image.Image]:
         """Estratégia de aquisição com fallback (low-level → acquire)."""
         if hasattr(src, "request_acquire") and hasattr(src, "xfer_image_natively"):
-            return TwainBackend._acquire_low_level(src, twain)
+            return TwainBackend._acquire_low_level(src, twain, dpi)
         return src.acquire(show_ui=False, close_after=True)
 
     @staticmethod
-    def _acquire_low_level(src: Any, twain: Any) -> list[Image.Image]:
+    def _acquire_low_level(src: Any, twain: Any, dpi: int) -> list[Image.Image]:
         """Aquisição via triplet TWAIN (request_acquire → xfer_image_natively)."""
         from io import BytesIO
 
