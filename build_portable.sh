@@ -447,8 +447,8 @@ if [ $NO_PRUNE -eq 0 ]; then
             -exec rm -rf {} +
         # Within those two, keep only the files we need.
         find "$QT_PLUGINS/platforms" -type f ! -name "qwindows.dll" -delete 2>/dev/null || true
-        find "$QT_PLUGINS/imageformats" -type f ! -name "qjpeg.dll" ! -name "qpng.dll" -delete 2>/dev/null || true
-        ok "Qt plugins whitelisted (qwindows + qjpeg + qpng only)"
+        find "$QT_PLUGINS/imageformats" -type f ! -name "qjpeg.dll" ! -name "qpng.dll" ! -name "qico.dll" -delete 2>/dev/null || true
+        ok "Qt plugins whitelisted (qwindows + qjpeg + qpng + qico)"
     fi
 
     # --- Qt translations: keep only PT ---
