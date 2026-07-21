@@ -38,5 +38,13 @@ def register_taskbar_identity(
                     winreg.SetValueEx(
                         key, "IconUri", 0, winreg.REG_SZ, str(p.resolve())
                     )
+
+        # Notify the shell that icon associations may have changed so the
+        # taskbar drops any cached icon for this AppUserModelId.
+        SHCNE_ASSOCCHANGED = 0x08000000
+        SHCNF_IDLIST = 0x0000
+        ctypes.windll.shell32.SHChangeNotify(
+            SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None
+        )
     except Exception:
         pass
