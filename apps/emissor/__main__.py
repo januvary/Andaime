@@ -27,6 +27,15 @@ from emissor.ui_qt.theme import get_palette, qpalette, stylesheet  # noqa: E402
 
 def main() -> None:
     """Ponto de entrada da UI Qt."""
+    # Set AppUserModelID BEFORE any window/QApplication is created so the
+    # taskbar groups the pythonw.exe child process under the app identity.
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "SISTEMAS.Emissor"
+        )
+
     andaime_instance = andaime.App(
         "Emissor",
         "Emissor",
@@ -45,11 +54,9 @@ def main() -> None:
 
     app = QApplication(sys.argv)
 
-    # Window icon (taskbar + alt-tab) + Windows taskbar identity
+    # Window icon (taskbar + alt-tab)
     from PySide6.QtGui import QIcon
-    if sys.platform == "win32":
-        import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SISTEMAS.Emissor")
+
     icon_path = Path(__file__).resolve().parent / "icon.ico"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))

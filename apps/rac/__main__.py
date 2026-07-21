@@ -88,6 +88,15 @@ def _start_update_check(window):
 
 
 def main():
+    # Set AppUserModelID BEFORE any window/QApplication is created so the
+    # taskbar groups the pythonw.exe child process under the app identity.
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "SISTEMAS.RAC"
+        )
+
     _apply_pending_update()
 
     from andaime.updater import get_shared_root

@@ -55,10 +55,19 @@ def _start_update_check(window):
 
 
 def main():
+    # Set AppUserModelID BEFORE any window/QApplication is created so the
+    # taskbar groups the pythonw.exe child process under the app identity.
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "SISTEMAS.BAP"
+        )
+
     from pathlib import Path
     import andaime
     from PySide6.QtWidgets import QApplication
-    from PySide6.QtGui import QFont
+    from PySide6.QtGui import QFont, QIcon
     from bap.utils.config import SS54Config
     from bap.database.ss54_database import SS54Database
 
@@ -82,11 +91,7 @@ def main():
 
     qt_app = QApplication(sys.argv)
 
-    # Window icon (taskbar + alt-tab) + Windows taskbar identity
-    from PySide6.QtGui import QIcon
-    if sys.platform == "win32":
-        import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SISTEMAS.BAP")
+    # Window icon (taskbar + alt-tab)
     icon_path = Path(__file__).resolve().parent / "icon.ico"
     if icon_path.exists():
         qt_app.setWindowIcon(QIcon(str(icon_path)))
