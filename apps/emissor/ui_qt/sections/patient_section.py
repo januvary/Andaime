@@ -109,18 +109,14 @@ class PatientSection(QtSection):
         self._nome_edit = QLineEdit()
         self._nome_edit.setReadOnly(True)
         self._nome_edit.textChanged.connect(
-            lambda t="": self.app.dirty_tracker.mark_dirty(
-                ("patient", "nome"), new_value=t
-            )
+            lambda _t="": self.app.refresh_dirty_state()
         )
         form.addRow("Nome:", self._nome_edit)
 
         # Matrícula
         self._matricula_edit = QLineEdit()
         self._matricula_edit.textChanged.connect(
-            lambda t="": self.app.dirty_tracker.mark_dirty(
-                ("patient", "matricula"), new_value=t
-            )
+            lambda _t="": self.app.refresh_dirty_state()
         )
         form.addRow("Matrícula:", self._matricula_edit)
 
@@ -146,8 +142,9 @@ class PatientSection(QtSection):
             placeholder="Nome do profissional...",
             parent=self,
         )
-        self._profissional_combo.selection_changed.connect(
-            self._on_profissional_key
+        self._profissional_combo.selection_changed.connect(self._on_profissional_key)
+        self._profissional_combo.text_edited.connect(
+            lambda _t="": self.app.refresh_dirty_state()
         )
         form.addRow("Profissional:", self._profissional_combo)
 
@@ -158,6 +155,9 @@ class PatientSection(QtSection):
             parent=self,
         )
         self._crm_combo.selection_changed.connect(self._on_profissional_key)
+        self._crm_combo.text_edited.connect(
+            lambda _t="": self.app.refresh_dirty_state()
+        )
         form.addRow("CRM:", self._crm_combo)
 
         inner_layout.addLayout(form)
@@ -195,9 +195,7 @@ class PatientSection(QtSection):
             self._crm_options[pid] = crm
 
         if self._profissional_combo is not None:
-            self._profissional_combo.set_search_fn(
-                static_search_fn(self._prof_options)
-            )
+            self._profissional_combo.set_search_fn(static_search_fn(self._prof_options))
         if self._crm_combo is not None:
             self._crm_combo.set_search_fn(static_search_fn(self._crm_options))
 
@@ -247,6 +245,7 @@ class PatientSection(QtSection):
         """Handler do botão Adicionar processo."""
         self._add_processo_row()
         self._notify_processo_count()
+        self.app.refresh_dirty_state()
 
     def _on_remove_processo(self, row_widget: QWidget) -> None:
         """Remove uma linha de processo."""
@@ -259,24 +258,18 @@ class PatientSection(QtSection):
         self._processo_layout.removeWidget(row_widget)
         row_widget.deleteLater()
         self._notify_processo_count()
+        self.app.refresh_dirty_state()
 
     def _on_processo_changed(self, edit: QLineEdit) -> None:
-        """Auto-formata e marca dirty o campo processo correspondente."""
+        """Auto-formata o campo processo e recomputa o estado dirty."""
         self._format_field(edit, self._format_processo)
-        try:
-            idx = self._processo_edits.index(edit)
-        except ValueError:
-            return
-        key = "processo_n" if idx == 0 else f"processo_{idx + 1}_n"
-        self.app.dirty_tracker.mark_dirty(("patient", key), new_value=edit.text())
+        self.app.refresh_dirty_state()
 
     def _on_telefone_changed(self) -> None:
-        """Auto-formata e marca dirty o telefone."""
+        """Auto-formata o telefone e recomputa o estado dirty."""
         if self._telefone_edit is not None:
             self._format_field(self._telefone_edit, self._format_telefone)
-        self.app.dirty_tracker.mark_dirty(
-            ("patient", "telefone"), new_value=self._telefone_edit.text()
-        )
+        self.app.refresh_dirty_state()
 
     def _format_field(self, edit: QLineEdit | None, formatter: Any) -> None:
         """
@@ -362,9 +355,7 @@ class PatientSection(QtSection):
                 self._clear_processo_rows()
                 for i, val in enumerate(values):
                     edit = (
-                        self._processo_edits[0]
-                        if i == 0
-                        else self._add_processo_row()
+                        self._processo_edits[0] if i == 0 else self._add_processo_row()
                     )
                     if val:
                         edit.setText(val)
@@ -372,16 +363,19 @@ class PatientSection(QtSection):
         else:
             # Guarda os valores atuais antes de ocultar e esvazia as linhas
             # (o widget fica limpo enquanto invisível).
-            self._stashed_processos = [
-                edit.text() for edit in self._processo_edits
-            ]
+            self._stashed_processos = [edit.text() for edit in self._processo_edits]
             self._clear_processo_rows()
 
     # ========== Profissional autocomplete ==========
 
     def _on_profissional_key(self, key: object) -> None:
         """Trata seleção nos combos de profissional/CRM (ambos apontam para a
-        mesma linha mestre): carrega a linha e sincroniza os campos."""
+        mesma linha mestre): carrega a linha e sincroniza os campos. ``None``
+        indica texto digitado divergente da seleção — invalida o id."""
+        if key is None:
+            self._selected_profissional_id = None
+            self.app.refresh_dirty_state()
+            return
         if not isinstance(key, str):
             return
         try:
@@ -409,15 +403,7 @@ class PatientSection(QtSection):
                 self._crm_combo.set_text(row.get("crm", "") or "")
         finally:
             self._syncing_combos = False
-        self.app.dirty_tracker.mark_dirty(
-            ("patient", "profissional_id"), new_value=str(prof_id)
-        )
-        self.app.dirty_tracker.mark_dirty(
-            ("patient", "profissional"), new_value=row.get("nome", "")
-        )
-        self.app.dirty_tracker.mark_dirty(
-            ("patient", "crm"), new_value=row.get("crm", "") or ""
-        )
+        self.app.refresh_dirty_state()
 
     # ========== Setters públicos ==========
 
@@ -453,41 +439,7 @@ class PatientSection(QtSection):
             patient_data, "profissional_id"
         )
         self._load_processos(patient_data)
-        self._set_processo_visible(
-            get_field_str(patient_data, "tipo") != "insulina"
-        )
-
-        # Registra valores originais para detectar mudança real
-        tracker = self.app.dirty_tracker
-        tracker.set_original(("patient", "nome"), get_field_str(patient_data, "nome"))
-        tracker.set_original(
-            ("patient", "matricula"), get_field_str(patient_data, "matricula")
-        )
-        tracker.set_original(
-            ("patient", "telefone"),
-            get_field_str(patient_data, "telefone"),
-            masked=True,
-        )
-        tracker.set_original(
-            ("patient", "crm"),
-            get_field_str(patient_data, "profissional_crm"),
-            masked=True,
-        )
-        tracker.set_original(
-            ("patient", "profissional"),
-            get_field_str(patient_data, "profissional_nome"),
-        )
-        tracker.set_original(
-            ("patient", "profissional_id"),
-            str(self._selected_profissional_id or ""),
-        )
-        for i in range(len(self._processo_edits)):
-            key = "processo_n" if i == 0 else f"processo_{i + 1}_n"
-            tracker.set_original(
-                ("patient", key),
-                get_field_str(patient_data, key),
-                masked=True,
-            )
+        self._set_processo_visible(get_field_str(patient_data, "tipo") != "insulina")
 
     def clear_patient_fields(self) -> None:
         """Limpa todos os campos e habilita edição do Nome."""
@@ -516,14 +468,14 @@ class PatientSection(QtSection):
         self._clear_processo_rows()
         p1 = get_field_str(patient_data, "processo_n")
         if p1 and self._processo_edits:
-            self._processo_edits[0].setText(p1)
+            self._set_text(self._processo_edits[0], p1)
 
         count = self._patient_processo_count(patient_data)
         for i in range(2, count + 1):
             edit = self._add_processo_row()
             val = self._patient_get_processo(patient_data, i)
             if val:
-                edit.setText(val)
+                self._set_text(edit, val)
         self._notify_processo_count()
 
     # ========== Getters ==========
@@ -548,7 +500,10 @@ class PatientSection(QtSection):
                 data[key] = value
 
         for i, edit in enumerate(self._processo_edits):
-            if self._processo_container is not None and self._processo_container.isHidden():
+            if (
+                self._processo_container is not None
+                and self._processo_container.isHidden()
+            ):
                 break
             value = self._clean(edit)
             if value:

@@ -12,7 +12,6 @@ from andaime.qt import ShortcutManager
 from andaime.db_worker import DatabaseWorker
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from emissor.database.emissor_db import EmissorDatabase
-from emissor.database.models import Patient
 from emissor.services.patient_service import PatientService
 from emissor.services.retirada_service import RetiradaService
 from emissor.services.retirada_workflow_service import (
@@ -598,13 +597,33 @@ class QtApp(QMainWindow):
                 text=f"Dados salvos! - {save_result.patient_name}",
                 color="status_success",
             )
-            self.dirty_tracker.mark_clean()
+            self.dirty_tracker.set_baseline(self._build_dirty_payload())
         else:
             ErrorHandler.log(
                 "Nenhum dado para salvar",
                 level=ErrorLevel.WARNING,
                 context=ErrorContext.VALIDATION,
             )
+
+    def _build_dirty_payload(self) -> dict[str, Any]:
+        """Monta o payload de salvamento usado no diff de dirty state.
+
+        Espelha save_patient_data; atendido_por é excluído por ser campo
+        transitório (PDF apenas — patient_service o descarta ao salvar).
+        """
+        payload: dict[str, Any] = self.patient_section.get_patient_data()
+        payload.update(self.options_section.get_options_data())
+        payload.pop("atendido_por", None)
+        payload["itens"] = self.items_section.get_items_data()
+        return payload
+
+    def refresh_dirty_state(self) -> None:
+        """Recomputa o estado dirty a partir dos valores atuais da UI."""
+        self.dirty_tracker.update(self._build_dirty_payload())
+
+    def set_dirty_baseline(self) -> None:
+        """Registra o estado atual da UI como limpo (pós-carga/salvamento)."""
+        self.dirty_tracker.set_baseline(self._build_dirty_payload())
 
     def handle_print(self) -> None:
         """Gera PDF e envia para impressora."""
@@ -627,9 +646,7 @@ class QtApp(QMainWindow):
         # Preferir o último PDF gerado nesta sessão (reflete o estado atual do
         # formulário). Só confia no cache se for do paciente selecionado; caso
         # contrário cai para o caminho derivado do banco.
-        last_pdf = self.state_manager.get_last_generated_pdf_for_patient(
-            patient.id
-        )
+        last_pdf = self.state_manager.get_last_generated_pdf_for_patient(patient.id)
         if last_pdf:
             pdf_path = Path(last_pdf)
             if pdf_path.exists():
@@ -808,9 +825,7 @@ class QtApp(QMainWindow):
             self.actions_section.enable_scan_button()
         from andaime.qt import relative_path
 
-        status_path = relative_path(
-            self.state_manager.get_save_root_path(), pdf_path
-        )
+        status_path = relative_path(self.state_manager.get_save_root_path(), pdf_path)
         self.search_section.set_status(
             text=f"Digitalizado: {status_path}",
             color="status_success",
@@ -855,17 +870,15 @@ class QtApp(QMainWindow):
                 subprocess.Popen([sys.executable], start_new_session=True)
             else:
                 pkg_dir = Path(__file__).resolve().parent
-                # O launcher roda "<python> -m emissor" a partir do diretório
-                # que contém o pacote. Replicamos exatamente para manter o
-                # mesmo PYTHONPATH/cwd da inicialização.
-                if (pkg_dir / "__init__.py").exists():
-                    module = pkg_dir.name
-                    work_dir = pkg_dir.parent
+                repo_root = pkg_dir.parent
+                main_py = repo_root / "main.py"
+                if main_py.exists():
+                    work_dir = repo_root
                 else:
-                    module = "main"
+                    main_py = pkg_dir / "main.py"
                     work_dir = pkg_dir
                 subprocess.Popen(
-                    [sys.executable, "-m", module],
+                    [sys.executable, str(main_py)],
                     cwd=str(work_dir),
                     env={**os.environ, "PYTHONPATH": str(work_dir)},
                     start_new_session=True,

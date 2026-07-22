@@ -175,9 +175,7 @@ class OptionsSection(QtSection):
         else:
             self._uncheck_all_except(self._tipo_radios, value)
             self._last_tipo = value
-        self.app.dirty_tracker.mark_dirty(
-            ("options", "tipo"), new_value=self._last_tipo
-        )
+        self.app.refresh_dirty_state()
         self.app.state_manager.notify_tipo_changed(self._last_tipo)
 
     def _on_tipo_receita_clicked(self, value: str) -> None:
@@ -193,9 +191,7 @@ class OptionsSection(QtSection):
         self.app.state_manager.update_date_field(
             "tipo_receita", new_value, calculation_mode="validade_only"
         )
-        self.app.dirty_tracker.mark_dirty(
-            ("options", "tipo_receita"), new_value=new_value
-        )
+        self.app.refresh_dirty_state()
 
     # ========== Handlers de campos ==========
 
@@ -208,10 +204,7 @@ class OptionsSection(QtSection):
             self._periodicidade_edit.text().strip(),
             calculation_mode="proxima_vez_only",
         )
-        self.app.dirty_tracker.mark_dirty(
-            ("options", "periodicidade"),
-            new_value=self._periodicidade_edit.text().strip(),
-        )
+        self.app.refresh_dirty_state()
 
     def _on_ultima_receita_changed(self) -> None:
         """Última receita mudou → recalcula validade."""
@@ -222,19 +215,13 @@ class OptionsSection(QtSection):
             self._ultima_receita_edit.text().strip(),
             calculation_mode="validade_only",
         )
-        self.app.dirty_tracker.mark_dirty(
-            ("options", "ultima_receita"),
-            new_value=self._ultima_receita_edit.text().strip(),
-        )
+        self.app.refresh_dirty_state()
 
     def _on_observacoes_changed(self) -> None:
         """Observações mudou."""
         if self._observacoes_edit is None:
             return
-        self.app.dirty_tracker.mark_dirty(
-            ("options", "observacoes"),
-            new_value=self._observacoes_edit.toPlainText(),
-        )
+        self.app.refresh_dirty_state()
 
     # ========== Setters públicos ==========
 
@@ -391,27 +378,6 @@ class OptionsSection(QtSection):
             )
             self._observacoes_edit.blockSignals(False)
 
-        # Registra valores originais para detectar mudança real
-        tracker = self.app.dirty_tracker
-        tracker.set_original(("options", "tipo"), tipo)
-        tracker.set_original(("options", "tipo_receita"), tipo_receita)
-        tracker.set_original(
-            ("options", "periodicidade"),
-            get_field_str(patient_data, "periodicidade"),
-        )
-        tracker.set_original(
-            ("options", "ultima_receita"),
-            get_field_str(patient_data, "ultima_receita"),
-        )
-        tracker.set_original(
-            ("options", "atendido_por"),
-            get_field_str(patient_data, "atendido_por"),
-        )
-        tracker.set_original(
-            ("options", "observacoes"),
-            get_field_str(patient_data, "observacoes"),
-        )
-
     @staticmethod
     def _set_edit_text(edit: QLineEdit | None, text: str) -> None:
         """Define texto de um QLineEdit sem disparar handlers (blockSignals)."""
@@ -438,5 +404,3 @@ class OptionsSection(QtSection):
         """Marca só o radio do valor dado; desliga os demais."""
         for v, rb in radios.items():
             rb.setChecked(v == value)
-
-

@@ -228,7 +228,7 @@ class SearchSection(QtSection):
         """
         patient_to_set = full_patient or patient
         self.app.state_manager.set_selected_patient(patient_to_set)
-        self.app.dirty_tracker.mark_clean()
+        self.app.set_dirty_baseline()
 
         nome = patient_to_set.get("nome") or patient.get("nome", "")
         self.set_status(f"Paciente selecionado: {nome}")

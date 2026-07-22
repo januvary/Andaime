@@ -289,6 +289,8 @@ class ItemsSection(QtSection):
         # Dirty tracking
         for w in (unid_edit, qtde_edit, dias_edit):
             w.textChanged.connect(lambda _t="": self._mark_items_dirty())
+        for combo in (desc_combo, cod_combo):
+            combo.text_edited.connect(lambda _t="": self._mark_items_dirty())
 
         # Atualiza coluna de suficiência sempre que dias mudam
         dias_edit.textChanged.connect(self._update_suficiencia_labels)
@@ -611,36 +613,9 @@ class ItemsSection(QtSection):
         if not self._item_rows:
             self.add_item()
 
-        # Registra estado original dos itens para detecção de mudança
-        self.app.dirty_tracker.set_original(("items", "row"), self._serialize_items())
-
-    def _serialize_items(self) -> str:
-        """
-        Serializa todas as linhas de item em uma string para comparação.
-
-        Returns:
-            String representando o estado atual de todos os itens
-        """
-        parts: list[str] = []
-        for entry in self._item_rows:
-            parts.append(
-                "|".join(
-                    (
-                        entry["desc"].current_text().strip(),
-                        entry["cod"].current_text().strip(),
-                        entry["unid"].text().strip(),
-                        entry["qtde"].text().strip(),
-                        entry["dias"].text().strip(),
-                    )
-                )
-            )
-        return "\n".join(parts)
-
     def _mark_items_dirty(self) -> None:
-        """Marca o estado dos itens como potencialmente alterado."""
-        self.app.dirty_tracker.mark_dirty(
-            ("items", "row"), new_value=self._serialize_items()
-        )
+        """Recomputa o estado dirty a partir dos valores atuais da UI."""
+        self.app.refresh_dirty_state()
 
     def get_items_data(self) -> list[dict[str, str]]:
         """
@@ -756,4 +731,3 @@ class ItemsSection(QtSection):
     def _set_combo_text(combo: SearchableComboBox, text: str) -> None:
         """Define texto de um SearchableComboBox sem disparar busca."""
         combo.set_text(text)
-

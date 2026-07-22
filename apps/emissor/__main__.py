@@ -49,8 +49,8 @@ def main() -> None:
     # mas só atua enquanto existir a pasta antiga 0-INSULINAS.
     from emissor.utils.insulina_folder_migration import migrate_insulina_folders
 
-    _migration_root = andaime_instance.root
-    migrate_insulina_folders(_migration_root)
+    _migration_root = andaime_instance.config.get("save_location")
+    migrate_insulina_folders(Path(_migration_root) if _migration_root else None)
 
     app = QApplication(sys.argv)
 
