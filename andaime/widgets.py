@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
 from andaime.dates import parse_date
 from andaime.text import scored_search_dict
 
-
 SearchFn = Callable[[str], dict[str, str]]
 
 
@@ -29,6 +28,7 @@ def static_search_fn(options: dict[str, str]) -> SearchFn:
     Returns:
         Função que recebe uma query e retorna as opções filtradas.
     """
+
     def _search(query: str) -> dict[str, str]:
         if not query:
             return options.copy()
@@ -47,6 +47,7 @@ class SearchableComboBox(QWidget):
     """
 
     selection_changed = Signal(object)
+    text_edited = Signal(str)
 
     def __init__(
         self,
@@ -144,6 +145,7 @@ class SearchableComboBox(QWidget):
         self._line_edit.clear()
 
     def _on_text_edited(self, text: str) -> None:
+        self.text_edited.emit(text)
         self._update_model(text.strip(), show_popup=True)
 
     def _update_model(self, query: str, show_popup: bool = False) -> None:
@@ -212,9 +214,7 @@ class DateLineEdit(QLineEdit):
         formatted = self._format(text)
         if formatted == text:
             return
-        digits_before = sum(
-            1 for c in text[: self.cursorPosition()] if c.isdigit()
-        )
+        digits_before = sum(1 for c in text[: self.cursorPosition()] if c.isdigit())
         cursor = 0
         seen = 0
         for ch in formatted:
@@ -275,7 +275,9 @@ class CycleButton(QPushButton):
         self.setProperty("btnrole", role)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedWidth(width)
-        self.setStyleSheet(f"padding: 9px 0; font-size: {font_size}px; font-weight: 600;")
+        self.setStyleSheet(
+            f"padding: 9px 0; font-size: {font_size}px; font-weight: 600;"
+        )
         self._modulus = modulus
         self._base = base
         self._value = initial
@@ -295,7 +297,9 @@ class CycleButton(QPushButton):
         super().mousePressEvent(event)
 
     def _apply_label(self):
-        self.setText(self._format_fn(self._value) if self._format_fn else str(self._value))
+        self.setText(
+            self._format_fn(self._value) if self._format_fn else str(self._value)
+        )
 
     @property
     def value(self) -> int:
