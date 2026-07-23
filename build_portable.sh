@@ -437,18 +437,20 @@ if [ $NO_PRUNE -eq 0 ]; then
 
     ok "PySide6 stripped to Core/Gui/Widgets (DLLs + PYDs + 2 plugin dirs)"
 
-    # --- Qt plugins: whitelist — keep only platforms/qwindows + imageformats/qjpeg+qpng ---
+    # --- Qt plugins: whitelist — keep only platforms/qwindows + imageformats/qjpeg+qpng+qico + iconengines/qsvgicon ---
     QT_PLUGINS="$PYSIDE/plugins"
     if [ -d "$QT_PLUGINS" ]; then
-        # Remove ALL plugin subdirs except platforms and imageformats.
+        # Remove ALL plugin subdirs except platforms, imageformats and iconengines.
         find "$QT_PLUGINS" -maxdepth 1 -mindepth 1 -type d \
             ! -name "platforms" \
             ! -name "imageformats" \
+            ! -name "iconengines" \
             -exec rm -rf {} +
-        # Within those two, keep only the files we need.
+        # Within those three, keep only the files we need.
         find "$QT_PLUGINS/platforms" -type f ! -name "qwindows.dll" -delete 2>/dev/null || true
         find "$QT_PLUGINS/imageformats" -type f ! -name "qjpeg.dll" ! -name "qpng.dll" ! -name "qico.dll" -delete 2>/dev/null || true
-        ok "Qt plugins whitelisted (qwindows + qjpeg + qpng + qico)"
+        find "$QT_PLUGINS/iconengines" -type f ! -name "qsvgicon.dll" -delete 2>/dev/null || true
+        ok "Qt plugins whitelisted (qwindows + qjpeg + qpng + qico + qsvgicon)"
     fi
 
     # --- Qt translations: keep only PT ---
@@ -483,8 +485,7 @@ PYEOF
     for pkg in pip setuptools wheel _distutils_hack \
                pyinstaller pyinstaller-hooks-contrib \
                pikepdf pikepdf.libs pikepdf-*.dist-info \
-               pythonwin pywin32_system32 \
-               customtkinter darkdetect; do
+               pythonwin customtkinter darkdetect; do
         rm -rf "$SP/$pkg"
     done
     rm -f "$SP/distutils-precedence.pth"

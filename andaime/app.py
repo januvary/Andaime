@@ -71,6 +71,9 @@ class App(Generic[_D]):
     def app_folder(self) -> str:
         return self._app_folder
 
+    def get_data_root(self) -> Path:
+        return self._root
+
     def shutdown(self) -> None:
         close = getattr(self._db, "close", None)
         if close is not None:
