@@ -1,0 +1,37 @@
+# Third-Party Software
+
+The SISTEMAS portable distribution bundles a number of third-party Python
+packages (copied from the build environment's Python installation). Their
+complete source code is available from the Python Package Index (PyPI):
+
+    https://pypi.org/project/<package-name>/
+
+Each package is distributed under its own license; the full license text
+ships inside each package's source/wheel on PyPI.
+
+## Major bundled packages and their licenses
+
+| Package            | License      | PyPI                                      |
+|--------------------|--------------|-------------------------------------------|
+| PySide6 / shiboken6 | LGPL-3.0  | https://pypi.org/project/PySide6/          |
+| openpyxl           | MIT          | https://pypi.org/project/openpyxl/         |
+| holidays           | MIT          | https://pypi.org/project/holidays/         |
+| pypdf              | BSD-3-Clause | https://pypi.org/project/pypdf/            |
+| pypdfium2          | Apache-2.0   | https://pypi.org/project/pypdfium2/        |
+| reportlab          | BSD-3-Clause | https://pypi.org/project/reportlab/        |
+| svglib             | BSD-3-Clause | https://pypi.org/project/svglib/           |
+| RapidFuzz          | MIT          | https://pypi.org/project/rapidfuzz/        |
+| cryptography       | Apache-2.0   | https://pypi.org/project/cryptography/     |
+| requests           | Apache-2.0   | https://pypi.org/project/requests/         |
+| python-dotenv      | BSD-3-Clause | https://pypi.org/project/python-dotenv/    |
+| typing_extensions  | PSF          | https://pypi.org/project/typing_extensions/|
+
+The SISTEMAS applications themselves (apps/bap, apps/emissor, apps/rac) and
+the andaime chassis are licensed under the GNU General Public License v3.0
+(see the LICENSE file in each component directory).
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. The application source code (including these third-party packages'
+upstream source) is available on request as required by the GPL.

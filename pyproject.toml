@@ -4,10 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "andaime"
-version = "0.1.0"
+version = "1.1.1"
 description = "Shared toolkit for PySide6 desktop apps"
 requires-python = ">=3.10"
-dependencies = []
+license = "GPL-3.0-or-later"
+authors = [{ name = "João Nery" }]
+dependencies = ["holidays>=0.40", "PySide6>=6.5"]
 
 [tool.setuptools.packages.find]
 include = ["andaime*"]
+
+[tool.setuptools.package-data]
+andaime = ["data/*.json"]
