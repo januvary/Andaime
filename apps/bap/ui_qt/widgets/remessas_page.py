@@ -206,7 +206,6 @@ class RemessasPage(QWidget):
         self._last_signature = None
         # Token monotônico para descartar resultados de fetches obsoletos.
         self._refresh_token = 0
-        self._skip_search_clear = False
 
         self._content = QWidget(self)
         self._content_layout = QVBoxLayout(self._content)
@@ -369,8 +368,7 @@ class RemessasPage(QWidget):
         self._runner = runner
 
     def _on_remessa_changed(self) -> None:
-        if not self._skip_search_clear:
-            self._search.clear()
+        self._search.clear()
         self.refresh()
 
     def set_remessa_active(self, lote, emit: bool = True) -> None:
@@ -499,9 +497,7 @@ class RemessasPage(QWidget):
         ):
             lote = self._db.get_lote_by_id(processo.lote_id)
             if lote is not None:
-                self._skip_search_clear = True
                 self.set_remessa_active(lote, emit=True)
-                self._skip_search_clear = False
                 remessa_changed = True
 
         # Troca para a aba correspondente (solicitação/renovação).
@@ -510,8 +506,8 @@ class RemessasPage(QWidget):
 
         self._highlight_processo(processo.solicitacao, processo_id)
 
-        # Só limpa a busca se mudou de remessa (não se está na mesma)
-        if remessa_changed:
+        # Só limpa a busca se NÃO mudou de remessa (se mudou, _on_remessa_changed já limpou)
+        if not remessa_changed:
             self._search.clear()
 
     def _highlight_processo(self, tab_key: str, processo_id: int) -> None:
