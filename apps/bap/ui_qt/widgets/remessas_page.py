@@ -692,14 +692,14 @@ class RemessasPage(QWidget):
         if processo is None:
             return
         pdf_path, has_docs = ensure_processo_pdf(
-            self._db, resolve_arquivos_root(self._config), processo
+            self._db, resolve_arquivos_root(self._config.get_all()), processo
         )
         if not has_docs or pdf_path is None:
             self.set_status("Processo sem documentos para gerar PDF.")
             return
         from andaime.qt import relative_path
 
-        status_path = relative_path(resolve_arquivos_root(self._config), pdf_path)
+        status_path = relative_path(resolve_arquivos_root(self._config.get_all()), pdf_path)
         self.set_status(
             f"PDF gerado: {status_path}", "status_success", path=pdf_path
         )

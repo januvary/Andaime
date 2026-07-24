@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QDialog,
-    QLineEdit,
     QMenu,
     QTreeWidget,
     QTreeWidgetItem,

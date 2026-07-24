@@ -247,10 +247,10 @@ class MainWindow(QMainWindow):
         """Remove os arquivos migrados de remessas anteriores a 15/07/2026.
 
         Equivale a "reverter" a migração do arquivo histórico: apaga os
-        arquivos (metadados + BLOBs) de todos os processos em lotes com data
+        arquivos (metadados + BLOBs do banco) de todos os processos em lotes com data
         anterior a 2026-07-15. Operação idempotente.
         """
-        if self.db is None:
+        if self.db is None or self._db_runner is None:
             return
 
         cutoff = "2026-07-15"
@@ -265,22 +265,36 @@ class MainWindow(QMainWindow):
         if ans != QMessageBox.StandardButton.Yes:
             return
 
-        try:
-            report = delete_arquivos_before(self.db, cutoff)
-        except Exception as e:  # noqa: BLE001
-            QMessageBox.warning(parent, "BAP", f"Falha ao reverter migração:\n{e}")
-            return
-
-        msg = (
-            f"Revertido.\n\n"
-            f"Processos afetados: {report.get('processos_afetados', 0)}\n"
-            f"Arquivos removidos: {report.get('arquivos_removidos', 0)}\n"
-            f"Erros: {report.get('erros', 0)}"
+        progress = QProgressDialog(
+            "Revertendo migração...", "Cancelar", 0, 0, parent
         )
-        if report.get("error_detail"):
-            msg += "\n\nDetalhes:\n" + "\n".join(report["error_detail"][:20])
-        QMessageBox.information(parent, "BAP", msg)
-        self.set_status("Migração do arquivo histórico revertida.", "status_success")
+        progress.setWindowTitle("Revertendo Migração")
+        progress.setWindowModality(
+            Qt.WindowModality.WindowModal
+        )
+        progress.show()
+
+        def _do_revert():
+            return delete_arquivos_before(self.db, cutoff)
+
+        def _on_done(report):
+            progress.close()
+            msg = (
+                f"Revertido.\n\n"
+                f"Processos afetados: {report.get('processos_afetados', 0)}\n"
+                f"Arquivos removidos: {report.get('arquivos_removidos', 0)}\n"
+                f"Erros: {report.get('erros', 0)}"
+            )
+            if report.get("error_detail"):
+                msg += "\n\nDetalhes:\n" + "\n".join(report["error_detail"][:20])
+            QMessageBox.information(parent, "BAP", msg)
+            self.set_status("Migração do arquivo histórico revertida.", "status_success")
+
+        def _on_error(exc):
+            progress.close()
+            QMessageBox.warning(parent, "BAP", f"Falha ao reverter migração:\n{exc}")
+
+        self._db_runner.run(_do_revert, on_done=_on_done, on_error=_on_error)
 
     def _on_theme_toggled(self, dark_mode: bool):
         theme = "dark" if dark_mode else "light"

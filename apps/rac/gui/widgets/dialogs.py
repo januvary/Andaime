@@ -20,7 +20,6 @@ from rac.services.registro_service import RegistroService
 from rac.models import Malote
 from rac.utils.text_utils import format_malote_date
 from andaime.error_handler import ErrorContext, ErrorHandler
-import weakref
 
 
 def scaffold_dialog(parent, title, spacing=12, min_width=340):
@@ -148,36 +147,9 @@ def delete_registro_with_undo(page, db, reg_id: int, on_refresh, on_error=None):
 
     try:
         service = RegistroService(db)
-        snapshot = service.delete_with_snapshot(reg_id)
+        service.delete(reg_id)
         on_refresh()
-
-        if snapshot:
-            weak_page = weakref.ref(page)
-
-            def undo():
-                try:
-                    service.restore_from_snapshot(snapshot)
-                    p = weak_page()
-                    if p is None:
-                        return
-                    on_refresh()
-                    show_toast("Registro restaurado", "positive", p)
-                except Exception as e:
-                    ErrorHandler.handle_error(e, context=ErrorContext.REGISTRY, show_dialog=False)
-                    p = weak_page()
-                    if p:
-                        show_toast(f"Erro ao restaurar: {e}", "negative", p)
-
-            show_toast(
-                "Registro excluido",
-                "info",
-                page,
-                action_label="Desfazer",
-                action_callback=undo,
-                timeout_ms=5000,
-            )
-        else:
-            show_toast("Registro excluido", "info", page)
+        show_toast("Registro excluido", "info", page)
     except Exception as e:
         ErrorHandler.handle_error(e, context=ErrorContext.REGISTRY, show_dialog=False)
         if on_error:

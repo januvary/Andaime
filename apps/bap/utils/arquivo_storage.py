@@ -7,12 +7,13 @@ from typing import Iterable
 from andaime.paths import get_root_directory
 from andaime.dates import parse_date
 
-from bap.utils.config import SS54Config
 
-
-def resolve_arquivos_root(config: SS54Config | None = None) -> Path:
-    if config is not None and getattr(config, "arquivos_root", ""):
-        return Path(config.arquivos_root)
+def resolve_arquivos_root(config: Path | dict | None = None) -> Path:
+    if config is not None:
+        if isinstance(config, Path):
+            return config
+        if isinstance(config, dict) and config.get("arquivos_root"):
+            return Path(config["arquivos_root"])
     return get_root_directory() / "REMESSAS"
 
 

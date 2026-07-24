@@ -25,12 +25,32 @@ def delete_arquivos_before(db, cutoff: str) -> dict:
         report["error_detail"] = [str(e)]
         return report
 
+    if not rows:
+        return report
+
     pids = {r["processo_id"] for r in rows}
     report["processos_afetados"] = len(pids)
     report["arquivos_removidos"] = len(rows)
-    for r in rows:
-        try:
-            db.delete_arquivo(r["id"])
-        except Exception:  # noqa: BLE001
-            report["erros"] += 1
+
+    arquivo_ids = [r["id"] for r in rows]
+    
+    try:
+        with db.transaction():
+            db._execute_write(
+                f"DELETE FROM {db.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
+                "WHERE arquivo_id IN ({})".format(
+                    ",".join("?" * len(arquivo_ids))
+                ),
+                arquivo_ids,
+            )
+            db._execute_write(
+                "DELETE FROM arquivos WHERE id IN ({})".format(
+                    ",".join("?" * len(arquivo_ids))
+                ),
+                arquivo_ids,
+            )
+    except Exception as e:  # noqa: BLE001
+        report["erros"] += 1
+        report["error_detail"] = [str(e)]
+    
     return report

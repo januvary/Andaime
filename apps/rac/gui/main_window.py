@@ -4,13 +4,13 @@
 Main Window — QStackedWidget page navigation
 """
 
-from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget, QVBoxLayout, QSizePolicy
+
 from PySide6.QtCore import Qt, Signal
 
 from rac.database.rac_database import RACDatabase
 from rac.state.rac_state_manager import RACStateManager
 from andaime.config import ConfigManager
-from andaime.qt import ShortcutManager
 
 from rac.gui.constants import TIPO_LABELS
 from rac.gui.pages.start_page import StartPage
@@ -20,6 +20,8 @@ from rac.gui.pages.medicamentos_page import MedicamentosPage
 from rac.gui.pages.pacientes_page import PacientesPage
 from rac.gui.pages.stats_page import StatsPage
 from rac.gui.pages.patient_page import PatientPage
+from andaime.qt.status_line import StatusLine
+from andaime.qt import ShortcutManager
 
 
 class MainWindow(QMainWindow):
@@ -41,6 +43,10 @@ class MainWindow(QMainWindow):
 
         self._stack = QStackedWidget()
         layout.addWidget(self._stack)
+
+        self._status_line = StatusLine(self)
+        self._status_line.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self._status_line, 1)
 
         self._pages: dict[str, QWidget] = {}
 
@@ -279,6 +285,15 @@ class MainWindow(QMainWindow):
             if p._tabs and idx < p._tabs.count():
                 p._tabs.setCurrentIndex(idx)
         self._on_page(PreviewPage, _set_tab)
+
+    def show_status(self, text: str, kind: str = "info", path: str | None = None) -> None:
+        kind_to_color = {
+            "positive": "status_success",
+            "negative": "status_error",
+            "warning": "status_warning",
+        }
+        color = kind_to_color.get(kind)
+        self._status_line.set_status(text, color, path)
 
     def closeEvent(self, event):
         self.shutdown_backend()

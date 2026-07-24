@@ -204,8 +204,7 @@ def export_with_fallback(page, export_fn, no_data_msg="Nenhum dado para exportar
     def _export_toast(path):
         show_toast(
             f"Exportado: {path}", "positive", page,
-            action_label="Abrir",
-            action_callback=lambda: _open_file_location(path),
+            path=path,
         )
 
     try:

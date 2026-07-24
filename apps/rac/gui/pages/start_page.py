@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from andaime.widgets import SearchableComboBox, static_search_fn
+from andaime.widgets import SearchableComboBox
 from rac.gui.widgets import (
     TipoButton,
     make_button,

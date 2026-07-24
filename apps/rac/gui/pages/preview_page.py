@@ -376,40 +376,10 @@ class PreviewPage(BasePage):
                 self.refresh()
 
                 if snapshots:
-                    import weakref
-                    weak_self = weakref.ref(self)
-
-                    def undo():
-                        try:
-                            for snap in snapshots:
-                                service.restore_from_snapshot(snap)
-                            p = weak_self()
-                            if p is None:
-                                return
-                            p.refresh()
-                            show_toast(
-                                f"{len(snapshots)} registro(s) restaurado(s)",
-                                "positive",
-                                p,
-                            )
-                        except Exception as e:
-                            ErrorHandler.handle_error(
-                                e, context=ErrorContext.REGISTRY, show_dialog=False
-                            )
-
-                    from rac.gui.widgets.toast import show_toast
-
                     msg = f"{len(snapshots)} registros excluidos"
                     if errors:
                         msg += f" ({errors} erro(s))"
-                    show_toast(
-                        msg,
-                        "info",
-                        self,
-                        action_label="Desfazer",
-                        action_callback=undo,
-                        timeout_ms=5000,
-                    )
+                    self._toast(msg)
                 else:
                     self._toast(f"{errors} erro(s) ao excluir", "negative")
             except Exception as e:
