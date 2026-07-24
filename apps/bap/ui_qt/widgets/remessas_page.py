@@ -234,7 +234,7 @@ class RemessasPage(QWidget):
 
         self.remessa_label = RemessaLabel(self)
         self.remessa_label.remessa_changed.connect(self.remessa_changed.emit)
-        self.remessa_label.remessa_changed.connect(self.refresh)
+        self.remessa_label.remessa_changed.connect(self._on_remessa_changed)
 
         from andaime.qt.theme import make_button
 
@@ -366,6 +366,10 @@ class RemessasPage(QWidget):
         """Injeta o ``DbAsyncRunner`` para que ``refresh`` busque os processos
         fora da thread principal. Sem ele, ``refresh`` roda síncrono."""
         self._runner = runner
+
+    def _on_remessa_changed(self) -> None:
+        self._search.clear()
+        self.refresh()
 
     def set_remessa_active(self, lote, emit: bool = True) -> None:
         self.remessa_label.set_active(lote, emit=emit)
