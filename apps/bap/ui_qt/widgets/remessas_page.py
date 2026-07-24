@@ -493,6 +493,7 @@ class RemessasPage(QWidget):
 
         # Troca a remessa ativa se o processo pertence a outra remessa.
         active = self.remessa_active()
+        remessa_changed = False
         if processo.lote_id is not None and (
             active is None or active.id != processo.lote_id
         ):
@@ -501,13 +502,17 @@ class RemessasPage(QWidget):
                 self._skip_search_clear = True
                 self.set_remessa_active(lote, emit=True)
                 self._skip_search_clear = False
+                remessa_changed = True
 
         # Troca para a aba correspondente (solicitação/renovação).
         if processo.solicitacao in _TAB_KEYS:
             self._tabs.setCurrentIndex(_TAB_KEYS.index(processo.solicitacao))
 
         self._highlight_processo(processo.solicitacao, processo_id)
-        self._search.clear()
+
+        # Só limpa a busca se mudou de remessa (não se está na mesma)
+        if remessa_changed:
+            self._search.clear()
 
     def _highlight_processo(self, tab_key: str, processo_id: int) -> None:
         table = self._tables.get(tab_key)
