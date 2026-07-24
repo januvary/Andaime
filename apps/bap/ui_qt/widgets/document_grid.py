@@ -782,8 +782,7 @@ class DocumentGrid(QWidget):
             if src is None or len(src.pages) <= page_no:
                 return False
             page = src.pages[page_no]
-            cur = int(page.get("/Rotate", 0))
-            page.rotate((cur + 90) % 360)
+            page.rotate(90)
             out = PdfWriter()
             out.add_page(page)
             buf = io.BytesIO()
