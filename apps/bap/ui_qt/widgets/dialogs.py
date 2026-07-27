@@ -94,16 +94,26 @@ def confirm_dialog(
     cancel_role: str = "flat-fill",
     modal: bool = False,
     min_width: int = 380,
+    no_close_button: bool = False,
 ) -> bool:
     """Diálogo de confirmação de dois botões. Retorna ``True`` se aceito.
 
     ``danger`` usa o papel vermelho no botão de confirmação; ``cancel_role``
     define o papel do cancelar; ``modal=True`` bloqueia a aplicação.
+    ``no_close_button=True`` desabilita o botão X e a tecla Esc.
     """
+    from PySide6.QtCore import Qt as _Qt
+
     dlg, layout = scaffold_dialog(parent, title, min_width=min_width)
     dlg.setMinimumHeight(160)
     if modal:
-        dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
+        dlg.setWindowModality(_Qt.WindowModality.ApplicationModal)
+    if no_close_button:
+        dlg.setWindowFlags(
+            _Qt.Dialog
+            | _Qt.CustomizeWindowHint
+            | _Qt.WindowTitleHint
+        )
 
     label = QLabel(message)
     label.setWordWrap(True)

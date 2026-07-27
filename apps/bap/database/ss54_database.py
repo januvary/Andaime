@@ -84,6 +84,7 @@ class SS54Database(BaseDatabase):
                             CHECK(status IS NULL OR status IN ('preparando', 'em_analise', 'incompleto', 'completo', 'enviado', 'correcao', 'autorizado', 'expirado', 'negado', 'encerrado')),
                         observacoes TEXT DEFAULT '',
                         pdf_sig TEXT,
+                        is_archived INTEGER NOT NULL DEFAULT 0,
                         created_at TEXT NOT NULL,
                         sent_at TEXT,
                         result_at TEXT
@@ -185,6 +186,8 @@ class SS54Database(BaseDatabase):
                 cols = {r["name"] for r in cur.execute("PRAGMA table_info(processos)")}
                 if "pdf_sig" not in cols:
                     cur.execute("ALTER TABLE processos ADD COLUMN pdf_sig TEXT")
+                if "is_archived" not in cols:
+                    cur.execute("ALTER TABLE processos ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0")
 
                 arq_cols = {r["name"] for r in cur.execute("PRAGMA table_info(arquivos)")}
                 if "content_sha256" not in arq_cols:
@@ -448,12 +451,11 @@ class SS54Database(BaseDatabase):
     def get_processos_by_context(
         self, paciente_id: int, lote_id: int, tipo: str, solicitacao: str
     ) -> list[Processo]:
-        rows = self._fetch_all(
-            "SELECT * FROM processos "
-            "WHERE paciente_id = ? AND lote_id = ? "
-            "AND tipo = ? AND solicitacao = ? "
-            "ORDER BY id ASC",
+        rows = self._fetch_processos_joined(
+            "p.paciente_id = ? AND p.lote_id = ? "
+            "AND p.tipo = ? AND p.solicitacao = ?",
             (paciente_id, lote_id, tipo, solicitacao),
+            "p.id ASC"
         )
         return [Processo.from_row(r) for r in rows]
 
@@ -538,6 +540,24 @@ class SS54Database(BaseDatabase):
     def set_processo_pdf_sig(self, processo_id: int, pdf_sig: str) -> bool:
         """Registra a assinatura do PDF combinado atualmente gerado."""
         return self._update_row("processos", processo_id, pdf_sig=pdf_sig)
+
+    @db_op("write")
+    def set_processo_archived(self, processo_id: int, archived: bool = True) -> bool:
+        """Marca um processo como arquivado (PDF no disco, BLOBs removidos)."""
+        return self._update_row(
+            "processos", processo_id, is_archived=1 if archived else 0
+        )
+
+    @db_op("write")
+    def delete_conteudos_for_processo(self, processo_id: int) -> int:
+        """Remove os BLOBs de todos os arquivos de um processo (idempotente)."""
+        with self._cursor() as cur:
+            cur.execute(
+                f"DELETE FROM {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
+                "WHERE arquivo_id IN (SELECT id FROM arquivos WHERE processo_id = ?)",
+                (processo_id,),
+            )
+            return cur.rowcount
 
     @db_op("write")
     def reassign_processo_lote(

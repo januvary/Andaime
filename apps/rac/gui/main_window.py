@@ -6,7 +6,7 @@ Main Window — QStackedWidget page navigation
 
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget, QVBoxLayout, QSizePolicy
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 
 from rac.database.rac_database import RACDatabase
 from rac.state.rac_state_manager import RACStateManager
@@ -47,6 +47,10 @@ class MainWindow(QMainWindow):
         self._status_line = StatusLine(self)
         self._status_line.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         layout.addWidget(self._status_line, 1)
+
+        self._status_timer = QTimer(self)
+        self._status_timer.setSingleShot(True)
+        self._status_timer.timeout.connect(self._clear_status)
 
         self._pages: dict[str, QWidget] = {}
 
@@ -294,6 +298,11 @@ class MainWindow(QMainWindow):
         }
         color = kind_to_color.get(kind)
         self._status_line.set_status(text, color, path)
+        self._status_timer.stop()
+        self._status_timer.start(5000)
+
+    def _clear_status(self):
+        self._status_line.set_status("", None)
 
     def closeEvent(self, event):
         self.shutdown_backend()

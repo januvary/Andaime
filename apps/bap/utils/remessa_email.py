@@ -62,6 +62,19 @@ def _attachment_name(paciente_nome: str, tipo_label: str) -> str:
     return _safe_filename(f"{paciente_nome} - {tipo_label.upper()}") + ".pdf"
 
 
+def processo_pdf_path(root: Path, processo: Processo) -> Path:
+    """Caminho determinístico do PDF combinado de um processo."""
+    tipo_label = TIPO_LABELS.get(processo.tipo, processo.tipo or "")
+    folder = build_processo_dir(
+        root,
+        processo.lote_date or "",
+        processo.solicitacao,
+        processo.paciente_nome or "",
+        processo.tipo,
+    )
+    return folder / _attachment_name(processo.paciente_nome or "", tipo_label)
+
+
 def ensure_processo_pdf(
     db: SS54Database,
     root: Path,
@@ -75,22 +88,22 @@ def ensure_processo_pdf(
     A assinatura deriva só de metadados (``compute_processo_sig``): decidir se
     o PDF combinado está atualizado **não lê nenhum BLOB**. Só ao regenerar os
     BLOBs são lidos, uma vez, um por vez (pico de memória de um BLOB).
+
+    Para processos arquivados, o PDF é a fonte de verdade; a verificação é
+    apenas de existência do arquivo, já que os BLOBs foram removidos.
     """
     arqs = db.get_arquivos_by_processo(processo.id)
     if not arqs:
         return None, False
 
-    sig = compute_processo_sig(arqs)
+    dest = processo_pdf_path(root, processo)
+    if processo.is_archived:
+        if dest.exists():
+            return str(dest), True
+        # BLOBs removidos: não é possível regenerar.
+        return None, False
 
-    folder = build_processo_dir(
-        root,
-        processo.lote_date or "",
-        processo.solicitacao,
-        processo.paciente_nome or "",
-        processo.tipo,
-    )
-    tipo_label = TIPO_LABELS.get(processo.tipo, processo.tipo or "")
-    dest = folder / _attachment_name(processo.paciente_nome or "", tipo_label)
+    sig = compute_processo_sig(arqs)
     if dest.exists() and processo.pdf_sig == sig:
         return str(dest), True
 

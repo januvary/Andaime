@@ -268,7 +268,10 @@ class RemessaSender(QObject):
             values.append((key, email))
 
         for key, email in values:
-            self._config.set(key, email)
+            saved = self._config.set(key, email)
+            if not saved:
+                self._warn(f"Falha ao salvar e-mail para {key}.")
+                return False
         return True
 
     def enviar(self, lote) -> None:
@@ -388,11 +391,64 @@ class RemessaSender(QObject):
         self._info(
             "Rascunho(s) criado(s) no Gmail:\n\n"
             + "\n".join(lines)
-            + "\n\nRevise e clique em Enviar no Gmail. A remessa será marcada "
-            "como enviada automaticamente quando o envio for detectado."
+            + "\n\nOs rascunhos foram abertos no navegador. Envie os e-mails no Gmail."
         )
         self.set_status("Rascunho(s) criado(s) no Gmail.", "status_success")
         self.remessas_changed.emit()
+
+        # Pergunta se a remessa já foi enviada; duplicatas de rascunho são permitidas.
+        self._prompt_mark_lote_sent(lote.id)
+
+    def _prompt_mark_lote_sent(self, lote_id: int) -> None:
+        """Pergunta ao usuário se a remessa já foi enviada no Gmail.
+
+        Ao confirmar, marca os processos incluídos como enviados, a remessa como
+        enviada e cria a próxima remessa (arquivando a anterior).
+        """
+        if self._db is None or self._config is None:
+            return
+
+        if not confirm_dialog(
+            self._parent,
+            "BAP — Confirmar envio",
+            "Os rascunhos da remessa foram criados no Gmail.\n\n"
+            "Clique 'Marcar como enviada' após enviar os e-mails no Gmail.\n\n"
+            "Clicar 'Cancelar' mantém a remessa pendente; você pode criar mais "
+            "rascunhos depois.",
+            confirm_label="Marcar como enviada",
+            cancel_label="Cancelar",
+            modal=True,
+            no_close_button=True,
+            min_width=420,
+        ):
+            return
+
+        def _work():
+            self._mark_lote_sent_and_finalize(lote_id)
+
+        def _done(_result):
+            self.set_status("Remessa marcada como enviada.", "status_success")
+            self.remessas_changed.emit()
+
+        self._run_async(_work, on_done=_done)
+
+    def _mark_lote_sent_and_finalize(self, lote_id: int) -> None:
+        """Marca a remessa como enviada e cria a próxima/arquiva a anterior."""
+        pendings = self._db.get_pending_sends("pending")
+        for ps in pendings:
+            if ps["lote_id"] != lote_id:
+                continue
+            for pid in ps["processo_ids"]:
+                self._db.update_processo_status(pid, Status.ENVIADO)
+            self._db.resolve_pending_send(ps["id"], "sent")
+
+        self._db.mark_lote_sent(lote_id)
+
+        from bap.utils.arquivo_storage import resolve_arquivos_root
+        from bap.utils.remessa_service import ensure_next_open_lote
+
+        root = resolve_arquivos_root(self._config.get_all())
+        ensure_next_open_lote(self._db, root)
 
     def _on_enviar_failed(self, msg: str) -> None:
         self._close_auth_dialog()
@@ -467,65 +523,13 @@ class RemessaSender(QObject):
     # ========== Verificação de rascunhos pendentes ==========
 
     def check_pending_sends(self) -> None:
-        """Verifica rascunhos pendentes e finaliza os que já foram enviados.
+        """Verificação automática de rascunhos foi desativada.
 
-        Silencioso: se não houver token do Gmail ou nada pendente, não faz nada.
-        A parte DB/rede roda no async runner; a UI é atualizada no callback
-        ``_on_pending_sends_done`` (thread principal do Qt).
+        O envio é confirmado manualmente pelo usuário via
+        ``_prompt_mark_lote_sent``. Este método permanece como stub para
+        compatibilidade com chamadores antigos.
         """
-        if self._db is None or self._config is None:
-            return
-
-        def _work():
-            pendings = self._db.get_pending_sends("pending")
-            if not pendings:
-                return 0
-
-            cfg = self._config.get_all()
-            from bap.utils import gmail_client
-            from bap.utils.gmail_client import GmailError
-
-            try:
-                service = _gmail_service(cfg)
-            except GmailError:
-                return 0
-
-            finalized = 0
-            affected_lotes: set[int] = set()
-            for ps in pendings:
-                draft_id = ps.get("draft_id")
-                if not draft_id:
-                    continue
-                try:
-                    labels = gmail_client.get_draft_message_labels(
-                        service, draft_id
-                    )
-                except gmail_client.GmailError:
-                    continue
-                if labels is None:
-                    self._db.resolve_pending_send(ps["id"], "discarded")
-                    continue
-                if "SENT" in labels:
-                    for pid in ps["processo_ids"]:
-                        self._db.update_processo_status(pid, Status.ENVIADO)
-                    self._db.resolve_pending_send(ps["id"], "sent")
-                    finalized += 1
-                    affected_lotes.add(ps["lote_id"])
-
-            for lote_id in affected_lotes:
-                self._finalize_lote_if_complete(lote_id)
-
-            return finalized
-
-        def _done(finalized):
-            if finalized:
-                self.set_status(
-                    f"{finalized} envio(s) confirmado(s): processos marcados como enviados.",
-                    "status_success",
-                )
-                self.remessas_changed.emit()
-
-        self._run_async(_work, on_done=_done)
+        return
 
     def scan_drs_messages(self) -> None:
         """Escaneia e-mails do Gmail em busca de menções a pacientes.
@@ -554,17 +558,3 @@ class RemessaSender(QObject):
 
         self._run_async(_work, on_done=_done)
 
-    def _finalize_lote_if_complete(self, lote_id: int) -> None:
-        """Marca a remessa como enviada e abre a próxima quando não há mais
-        rascunhos pendentes para ela."""
-        remaining = [
-            ps
-            for ps in self._db.get_pending_sends("pending")
-            if ps["lote_id"] == lote_id
-        ]
-        if remaining:
-            return
-        self._db.mark_lote_sent(lote_id)
-        from bap.utils.remessa_service import ensure_next_open_lote
-
-        ensure_next_open_lote(self._db)

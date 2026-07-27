@@ -62,6 +62,7 @@ class Processo(RowModel):
     protocolo_drs: str = ""
     observacoes: str = ""
     pdf_sig: str | None = None
+    is_archived: bool = False
     created_at: str = ""
     sent_at: str | None = None
     result_at: str | None = None

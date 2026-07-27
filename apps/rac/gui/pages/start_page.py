@@ -11,10 +11,14 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QSizePolicy,
     QFrame,
+    QLabel,
+    QWidget,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QPainter
 
 from andaime.widgets import SearchableComboBox
+from rac.gui.brasao import get_brasao_pixmap
 from rac.gui.widgets import (
     TipoButton,
     make_button,
@@ -36,6 +40,7 @@ from rac.gui.constants import (
 from rac.export.excel_exporter import ExcelExporter
 from rac.models import Malote
 from rac.utils.text_utils import format_malote_date, is_malote_past
+from rac.gui.styles import colors
 
 
 class StartPage(BasePage):
@@ -43,10 +48,12 @@ class StartPage(BasePage):
         super().__init__(main_window)
         self._pre_search_malote = None
         self._sep_line: QFrame | None = None
+        self._brasao_label: QLabel | None = None
         self._build_ui()
 
     def _build_ui(self):
         layout = self._scaffold()
+        
         self._build_malote_header(layout)
         layout.addSpacing(20)
 
@@ -54,6 +61,17 @@ class StartPage(BasePage):
         layout.addSpacing(20)
 
         self._build_columns(layout)
+        
+        # Bottom container for brasao centering
+        bottom_container = QWidget()
+        bottom_layout = QVBoxLayout(bottom_container)
+        bottom_layout.setContentsMargins(0, 40, 0, 0)
+        bottom_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self._build_brasao(bottom_layout)
+        
+        layout.addWidget(bottom_container)
+        layout.addStretch(1)
 
     def _build_malote_header(self, layout: QVBoxLayout):
         h = make_hbox()
@@ -78,6 +96,38 @@ class StartPage(BasePage):
         self._shortcut_searches = [
             ("Nome do paciente...", self._search_combo._line_edit),
         ]
+
+    def _apply_opacity_to_label(self):
+        """Apply opacity to the brasao pixmap"""
+        if not self._brasao_label:
+            return
+        
+        pixmap = self._brasao_label.pixmap()
+        if pixmap is None:
+            return
+        
+        # Create opacity pixmap
+        opacity_pixmap = QPixmap(pixmap.size())
+        opacity_pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(opacity_pixmap)
+        painter.setOpacity(0.4)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+        
+        self._brasao_label.setPixmap(opacity_pixmap)
+    
+    def _build_brasao(self, layout: QVBoxLayout):
+        # Similar ao Emissor: usar get_brasao_pixmap com altura de 54px
+        from andaime.qt.theme import LIGHT as _SHARED_LIGHT, DARK as _SHARED_DARK
+        
+        self._brasao_label = QLabel()
+        self._brasao_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._brasao_label.setStyleSheet("border: none; background: transparent;")
+        layout.addWidget(self._brasao_label)
+        
+        # Force theme update after UI is built
+        QTimer.singleShot(0, self._update_brasao)
 
     def _build_columns(self, layout: QVBoxLayout):
         from rac.gui.styles import colors as _colors, faded_tipo_color
@@ -245,6 +295,32 @@ class StartPage(BasePage):
             self._sep_line.setStyleSheet(
                 f"color: {c['border']}; border: none; background: {c['border']}; max-width: 1px;"
             )
+        
+        self._update_brasao()
+
+    def _build_brasao(self, layout: QVBoxLayout):
+        # Similar ao Emissor: usar get_brasao_pixmap com altura de 54px
+        from andaime.qt.theme import LIGHT as _SHARED_LIGHT, DARK as _SHARED_DARK
+        
+        self._brasao_label = QLabel()
+        self._brasao_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._brasao_label.setStyleSheet("border: none; background: transparent;")
+        layout.addWidget(self._brasao_label)
+        
+        self._update_brasao()
+
+    def _update_brasao(self):
+        if not self._brasao_label:
+            return
+        
+        theme = self._mw.config.get("theme", "light")
+        dark_mode = (theme == "dark")
+        pixmap = get_brasao_pixmap(height=54, dark_mode=dark_mode)
+        
+        if pixmap is not None:
+            self._brasao_label.setPixmap(pixmap)
+            # Apply opacity
+            self._apply_opacity_to_label()
 
     def set_shortcuts_visible(self, show: bool):
         super().set_shortcuts_visible(show)

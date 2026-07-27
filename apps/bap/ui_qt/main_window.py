@@ -29,6 +29,7 @@ from bap.constants import (
 from bap.utils.config import bap_data_dir
 from bap.utils.archive_migrate import delete_arquivos_before
 from bap.utils.date_utils import format_date_display
+from bap.utils.arquivo_storage import resolve_arquivos_root
 
 
 class MainWindow(QMainWindow):
@@ -153,7 +154,6 @@ class MainWindow(QMainWindow):
     def _goto_remessas(self) -> None:
         self.navigate_to("remessas")
         self._remessa_page.refresh(force=False)
-        self._sender.check_pending_sends()
         self._sender.scan_drs_messages()
 
     def _goto_novo_processo(self) -> None:
@@ -327,8 +327,11 @@ class MainWindow(QMainWindow):
         self._db_runner = DbAsyncRunner(self._db_worker)
 
         def _load():
+            from bap.utils.arquivo_storage import resolve_arquivos_root
             from bap.utils.remessa_service import ensure_remessas
-            ensure_remessas(self.db)
+
+            root = resolve_arquivos_root(self.config.get_all())
+            ensure_remessas(self.db, root)
             pacientes = self.db.get_all_pacientes()
             active = self._resolve_active_lote()
             return pacientes, active
@@ -341,7 +344,7 @@ class MainWindow(QMainWindow):
         self._header.set_patients(pacientes)
         self._header.set_descricoes(self.db.get_distinct_descricoes())
         self._remessa_page.refresh(force=False)
-        self._sender.check_pending_sends()
+        self._sender.scan_drs_messages()
         self._remessa_page.update_atulizacoes_count()
         self.set_status("")
 
@@ -364,53 +367,11 @@ class MainWindow(QMainWindow):
         self._remessa_page.set_remessa_active(lote, emit=emit)
 
     def _resolve_active_lote(self):
-        last = self.config.get("last_lote_id") if self.config else None
-        if last is not None:
-            lote = self.db.get_lote_by_id(int(last))
-            if lote is not None:
-                return lote
-        lotes = self.db.get_all_lotes()
-        return lotes[0] if lotes else None
-
-    def _latest_lote(self):
-        """A remessa mais recente aberta para novos processos.
-
-        Prefere a remessa de data mais recente que ainda não foi enviada;
-        se todas foram enviadas, retorna a mais recente. ``get_all_lotes`` já
-        vem ordenada por data (DESC).
-        """
-        if self.db is None:
-            return None
         lotes = self.db.get_all_lotes()
         if not lotes:
             return None
-        for lote in lotes:
-            if getattr(lote, "sent_at", None) is None:
-                return lote
+        # A remessa ativa é a mais recente por data.
         return lotes[0]
-
-    def _switch_to_latest_if_needed(self) -> bool:
-        """Muda a remessa ativa para a mais recente (usada no drop de arquivos:
-        o novo processo deve ir para a remessa mais recente).
-
-        Troca de forma leve (sem limpar a grade nem resetar o ciclo) e retorna
-        ``True`` se houve troca. Não faz nada se a remessa ativa já é a mais
-        recente.
-        """
-        latest = self._latest_lote()
-        if latest is None:
-            return False
-        active = self._remessa_label.active()
-        if active is not None and active.id == latest.id:
-            return False
-        if self.config:
-            self.config.set("last_lote_id", latest.id)
-        self._sync_pages_remessa(latest, emit=False)
-        self._remessa_page.refresh()
-        self.set_status(
-            f"Remessa alterada para a mais recente: {format_date_display(latest.date)}"
-        )
-        return True
 
     def _grid_item_bytes(self, item: GridItem) -> bytes | None:
         """Lazy BLOB resolver for saved grid items (G3-B).
@@ -520,14 +481,33 @@ class MainWindow(QMainWindow):
             return
 
         items = []
-        for a in self.db.get_arquivos_by_processo(processo.id):
-            items.append(GridItem(
-                page=0,
-                arquivo_id=a.id,
-                arquivo_original=a.arquivo_original,
-                tipo_documento=a.tipo_documento or "outro",
-                data=self.db.get_arquivo_conteudo(a.id),
-            ))
+        if processo.is_archived:
+            from bap.utils.arquivo_storage import resolve_arquivos_root
+            from bap.utils.remessa_email import processo_pdf_path
+            from andaime.pdf import page_count
+
+            root = resolve_arquivos_root(self.config.get_all())
+            pdf_path = processo_pdf_path(root, processo)
+            arqs = self.db.get_arquivos_by_processo(processo.id)
+            n_pages = page_count(pdf_path) if pdf_path.exists() else len(arqs)
+            for i in range(n_pages):
+                arq = arqs[i] if i < len(arqs) else None
+                items.append(GridItem(
+                    path=str(pdf_path),
+                    page=i,
+                    arquivo_id=arq.id if arq else None,
+                    arquivo_original=arq.arquivo_original if arq else pdf_path.name,
+                    tipo_documento=arq.tipo_documento if arq else "outro",
+                ))
+        else:
+            for a in self.db.get_arquivos_by_processo(processo.id):
+                items.append(GridItem(
+                    page=0,
+                    arquivo_id=a.id,
+                    arquivo_original=a.arquivo_original,
+                    tipo_documento=a.tipo_documento or "outro",
+                    data=self.db.get_arquivo_conteudo(a.id),
+                ))
         n = len(items)
         arquivos = "1 arquivo" if n == 1 else f"{n} arquivos"
         self._grid.set_items(
@@ -676,8 +656,81 @@ class MainWindow(QMainWindow):
         elif pending_obs:
             self.db.add_status_observation(processo_id, pending_obs)
 
-        # Persistência dos arquivos: conteúdo vive no banco (BLOB), tudo é
-        # atrelado ao processo_id. Sem pastas durante a edição.
+        if fresh is not None and fresh.is_archived:
+            self._salvar_work_archived(processo_id, fresh, items)
+        else:
+            self._salvar_work_active(processo_id, items)
+
+        return {
+            "processo_id": processo_id,
+            "saved": len(items),
+            "is_update": is_update,
+            "paciente_info": paciente_info,
+            "items": items,
+        }
+
+    def _salvar_work_archived(
+        self, processo_id: int, fresh: Processo, items: list[GridItem]
+    ) -> None:
+        """Persiste um processo arquivado: metadados no DB, conteúdo no PDF."""
+        from pathlib import Path
+
+        import hashlib
+
+        from andaime.pdf import merge_pdfs
+        from bap.utils.arquivo_storage import resolve_arquivos_root
+        from bap.utils.remessa_email import processo_pdf_path
+
+        arqs = self.db.get_arquivos_by_processo(processo_id)
+        existing = {a.id: a for a in arqs}
+        seen: set[int] = set()
+
+        for ordem, item in enumerate(items, start=1):
+            aid = item.arquivo_id
+            if aid is not None and aid in existing:
+                seen.add(aid)
+                existing_doc = existing[aid]
+                item_tipo = item.tipo_documento
+                if existing_doc.ordem != ordem or existing_doc.tipo_documento != item_tipo:
+                    self.db.update_arquivo(
+                        aid, ordem=ordem, tipo_documento=item_tipo,
+                    )
+                continue
+            original = item.display_name
+            arq = self.db.create_arquivo(
+                processo_id=processo_id,
+                tipo_documento=item.tipo_documento,
+                conteudo=None,
+                arquivo_original=original,
+                ordem=ordem,
+            )
+            item.arquivo_id = arq.id
+
+        for aid in existing:
+            if aid not in seen:
+                self.db.delete_arquivo(aid)
+
+        root = resolve_arquivos_root(self.config.get_all())
+        pdf_path = processo_pdf_path(root, fresh)
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        conteudos = []
+        for item in items:
+            pdf_bytes = item.to_pdf_bytes()
+            if pdf_bytes is not None:
+                conteudos.append(pdf_bytes)
+        if conteudos:
+            merge_pdfs(conteudos, str(pdf_path))
+            pdf_sig = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+            self.db.set_processo_pdf_sig(processo_id, pdf_sig)
+            for i, item in enumerate(items):
+                item.path = str(pdf_path)
+                item.page = i
+                item.data = None
+
+    def _salvar_work_active(
+        self, processo_id: int, items: list[GridItem]
+    ) -> None:
+        """Persiste um processo ativo: BLOBs no banco."""
         arqs = self.db.get_arquivos_by_processo(processo_id)
         existing = {a.id: a for a in arqs}
         seen: set[int] = set()
@@ -716,14 +769,6 @@ class MainWindow(QMainWindow):
         for aid in existing:
             if aid not in seen:
                 self.db.delete_arquivo(aid)
-
-        return {
-            "processo_id": processo_id,
-            "saved": len(items),
-            "is_update": is_update,
-            "paciente_info": paciente_info,
-            "items": items,
-        }
 
     def _on_salvar_done(self, res: dict | None, is_update: bool) -> None:
         # Destrava a grade travada no início do Save (ver ``_on_salvar``).
@@ -771,9 +816,10 @@ class MainWindow(QMainWindow):
             return
 
         # Processos "incompleto" ou "em_analise" avançam para a remessa mais
-        # recente ao serem carregados na página de documentos.
-        if processo.status in (Status.INCOMPLETO, Status.EM_ANALISE):
-            latest = self._latest_lote()
+        # recente ao serem carregados na página de documentos — exceto processos
+        # arquivados, que permanecem no lote histórico.
+        if not processo.is_archived and processo.status in (Status.INCOMPLETO, Status.EM_ANALISE):
+            latest = self._resolve_active_lote()
             if latest is not None and latest.id != processo.lote_id:
                 reassigned = self.db.reassign_processo_lote(
                     processo.id, latest.id

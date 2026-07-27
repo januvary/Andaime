@@ -71,10 +71,10 @@ def main():
     from bap.database.ss54_database import SS54Database
 
     # Config + error handler usam <root>/data por padrão (andaime).
-    import andaime.config as _andaime_config
+    import andaime.paths as _andaime_paths
     from bap.utils.config import bap_data_dir
 
-    _andaime_config.get_config_path = lambda: bap_data_dir() / "config.json"
+    _andaime_paths.get_config_path = lambda: bap_data_dir() / "config.json"
 
     from andaime.updater import get_shared_root
 
