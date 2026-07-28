@@ -333,6 +333,12 @@ if [ $BUILD_BAP -eq 1 ]; then
     cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/bap/LICENSE"
     ok "LICENSE copied to apps/bap/"
 
+    # Regenerate PNG icons from SVGs so runtime never depends on Qt SVG plugins.
+    if [ -f "$STAGE/apps/bap/tools/generate_tile_icons.py" ]; then
+        (cd "$STAGE/apps/bap" && PYTHONPATH="$STAGE/apps/bap" python -m tools.generate_tile_icons)
+        ok "BAP tile icons regenerated as PNG"
+    fi
+
     # Compile launcher (.exe) with icon if available
     compile_launcher "$STAGE/bap.exe" "$ANDAIME_REPO/launchers/icons/bap.ico"
     ok "bap.exe compiled"
