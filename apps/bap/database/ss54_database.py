@@ -7,16 +7,16 @@ from datetime import datetime
 
 from andaime.database import BaseDatabase, db_op
 from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
-from bap.utils.config import bap_data_dir
+from src.utils.config import bap_data_dir
 from andaime.text import to_upper_normalized
-from bap.utils.text_utils import (
+from src.utils.text_utils import (
     generate_initials,
     generate_protocolo,
     normalize_phone,
     _digits,
 )
-from bap.models import Paciente, Lote, Processo, Arquivo
-from bap.constants import Status
+from src.models import Paciente, Lote, Processo, Arquivo
+from src.constants import Status
 
 _MISSING = object()
 
@@ -201,22 +201,66 @@ class SS54Database(BaseDatabase):
     def _backfill_content_sha256(self) -> None:
         """Calcula o ``content_sha256`` de arquivos pré-migração (uma única vez).
 
-        Lê cada BLOB individualmente (pico de memória de um BLOB, não todos)
-        para popular a coluna. Depois disso a assinatura do processo deriva
-        só de metadados — sem ler BLOBs na decisão de regenerar o PDF.
-        Idempotente: só processa linhas com ``content_sha256 IS NULL``.
+        Lê os BLOBs em lotes e aplica as atualizações dentro de uma única
+        transação por lote, evitando um commit por arquivo. Em shares de rede
+        (journal_mode=DELETE) cada commit é caro; o processamento em lote reduz
+        drasticamente o tempo total. Idempotente: só processa linhas com
+        ``content_sha256 IS NULL``.
         """
+        BATCH_SIZE = 100
+
         with self._cursor() as cur:
-            unhashed = [
-                r["id"]
-                for r in cur.execute(
-                    "SELECT id FROM arquivos WHERE content_sha256 IS NULL"
+            total = cur.execute(
+                "SELECT COUNT(*) FROM arquivos WHERE content_sha256 IS NULL"
+            ).fetchone()[0]
+        if total == 0:
+            return
+
+        ErrorHandler.log(
+            f"Iniciando backfill de content_sha256 para {total} arquivo(s)...",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )
+
+        processed = 0
+        while True:
+            with self._cursor() as cur:
+                cur.execute(
+                    f"SELECT a.id, ac.conteudo FROM arquivos a "
+                    f"JOIN {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos ac "
+                    f"ON a.id = ac.arquivo_id "
+                    f"WHERE a.content_sha256 IS NULL "
+                    f"LIMIT {BATCH_SIZE}"
                 )
-            ]
-        for aid in unhashed:
-            blob = self.get_arquivo_conteudo(aid)
-            digest = hashlib.sha256(blob).hexdigest() if blob is not None else ""
-            self._update_row("arquivos", aid, content_sha256=digest)
+                rows = cur.fetchall()
+            if not rows:
+                break
+
+            updates = []
+            for row in rows:
+                blob = row["conteudo"]
+                digest = hashlib.sha256(blob).hexdigest() if blob is not None else ""
+                updates.append((digest, row["id"]))
+
+            with self.transaction():
+                with self._cursor() as cur:
+                    cur.executemany(
+                        "UPDATE arquivos SET content_sha256 = ? WHERE id = ?",
+                        updates,
+                    )
+
+            processed += len(updates)
+            ErrorHandler.log(
+                f"Backfill content_sha256: {processed}/{total} arquivo(s) processado(s)",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.DATABASE,
+            )
+
+        ErrorHandler.log(
+            f"Backfill content_sha256 concluído: {processed} arquivo(s).",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )
 
     def _log_initialization_success(self) -> None:
         try:
