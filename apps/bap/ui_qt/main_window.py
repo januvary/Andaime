@@ -438,7 +438,9 @@ class MainWindow(QMainWindow):
         muda para a remessa mais recente (o novo processo vai para ela) e marca
         o status como "em análise" (processo em formação)."""
         if self._current_processo() is None:
-            self._switch_to_latest_if_needed()
+            lote = self._resolve_active_lote()
+            if lote is not None:
+                self._sync_pages_remessa(lote, emit=True)
             # Não sobrescreve uma escolha explícita do operador: só aplica
             # "em análise" quando o seletor ainda está no valor padrão.
             if self._status_selector.status() in (NULL_STATUS, Status.EM_ANALISE):
