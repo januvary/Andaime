@@ -29,7 +29,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("RAC - Registros Alto Custo")
+        self.setWindowTitle("RAC - Registros de Apoio ao CEAF")
         self.setMinimumSize(750, 600)
         self.resize(900, 700)
 

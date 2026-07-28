@@ -15,10 +15,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QPainter
 
 from andaime.widgets import SearchableComboBox
-from rac.gui.brasao import get_brasao_pixmap
+from rac.gui.brasao import get_brasao_pixmap, get_rac_pixmap
 from rac.gui.widgets import (
     TipoButton,
     make_button,
@@ -44,11 +43,23 @@ from rac.gui.styles import colors
 
 
 class StartPage(BasePage):
+    # Constants for easier customization
+    BRASAO_HEIGHT = 42
+    RAC_HEIGHT = 42
+    SUBTITLE_FONT_SIZE = "10pt"
+    USAFA_FONT_SIZE = "9pt"
+    RAC_SPACING = 8
+    SUBTITLE_SPACING = 8
+    BRASAO_SPACING = 8
+    
     def __init__(self, main_window):
         super().__init__(main_window)
         self._pre_search_malote = None
         self._sep_line: QFrame | None = None
         self._brasao_label: QLabel | None = None
+        self._rac_label: QLabel | None = None
+        self._subtitle_label: QLabel | None = None
+        self._usafa_label: QLabel | None = None
         self._build_ui()
 
     def _build_ui(self):
@@ -89,45 +100,62 @@ class StartPage(BasePage):
 
     def _build_search(self, layout: QVBoxLayout):
         self._search_combo = SearchableComboBox(
-            self._search_registros, "Nome do paciente..."
+            self._search_registros, "Buscar registro..."
         )
         self._search_combo.selection_changed.connect(self._on_search_select)
         layout.addWidget(self._search_combo)
         self._shortcut_searches = [
-            ("Nome do paciente...", self._search_combo._line_edit),
+            ("Buscar registro...", self._search_combo._line_edit),
         ]
 
-    def _apply_opacity_to_label(self):
-        """Apply opacity to the brasao pixmap"""
-        if not self._brasao_label:
-            return
-        
-        pixmap = self._brasao_label.pixmap()
-        if pixmap is None:
-            return
-        
-        # Create opacity pixmap
-        opacity_pixmap = QPixmap(pixmap.size())
-        opacity_pixmap.fill(Qt.GlobalColor.transparent)
-        
-        painter = QPainter(opacity_pixmap)
-        painter.setOpacity(0.4)
-        painter.drawPixmap(0, 0, pixmap)
-        painter.end()
-        
-        self._brasao_label.setPixmap(opacity_pixmap)
-    
     def _build_brasao(self, layout: QVBoxLayout):
-        # Similar ao Emissor: usar get_brasao_pixmap com altura de 54px
-        from andaime.qt.theme import LIGHT as _SHARED_LIGHT, DARK as _SHARED_DARK
+        """Build brasao section with subtitles and brasão."""
+        from rac.gui.styles import colors as _colors
         
+        # R.A.C logo text (temporary replacement for RAC SVG)
+        layout.addSpacing(self.RAC_SPACING)
+        c = _colors()
+        title_color = c.get('text_primary', c.get('text', '#000000'))
+        self._rac_label = QLabel("R.A.C")
+        self._rac_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._rac_label.setStyleSheet(f"border: none; background: transparent; color: {title_color}; font-size: 16pt; font-weight: bold;")
+        layout.addWidget(self._rac_label)
+        
+        # Subtitles
+        layout.addSpacing(self.SUBTITLE_SPACING)
+        self._build_subtitles(layout)
+        
+        # Brasão (bottom)
+        layout.addSpacing(self.BRASAO_SPACING)
         self._brasao_label = QLabel()
         self._brasao_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._brasao_label.setStyleSheet("border: none; background: transparent;")
         layout.addWidget(self._brasao_label)
         
-        # Force theme update after UI is built
-        QTimer.singleShot(0, self._update_brasao)
+        self._update_brasao()
+    
+    def _build_subtitles(self, layout: QVBoxLayout):
+        """Build subtitle labels with theme colors."""
+        from rac.gui.styles import colors as _colors
+        
+        c = _colors()
+        subtitle_color = c.get('text_primary', c.get('text', '#000000'))
+        style_base = f"border: none; background: transparent; color: {subtitle_color};"
+        
+        # Division subtitle
+        self._subtitle_label = QLabel("Divisão de Assistência Farmacêutica - Praia Grande")
+        self._subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._subtitle_label.setStyleSheet(f"{style_base} font-size: {self.SUBTITLE_FONT_SIZE};")
+        layout.addWidget(self._subtitle_label)
+        
+        # USAFA name
+        usafa_name = self._mw.config.get("usafa_name") or "Sua unidade de saúde"
+        self._usafa_label = QLabel(usafa_name)
+        self._usafa_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._usafa_label.setStyleSheet(f"{style_base} font-size: {self.USAFA_FONT_SIZE};")
+        self._usafa_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._usafa_label.mousePressEvent = self._on_usafa_click
+        layout.addWidget(self._usafa_label)
 
     def _build_columns(self, layout: QVBoxLayout):
         from rac.gui.styles import colors as _colors, faded_tipo_color
@@ -298,29 +326,41 @@ class StartPage(BasePage):
         
         self._update_brasao()
 
-    def _build_brasao(self, layout: QVBoxLayout):
-        # Similar ao Emissor: usar get_brasao_pixmap com altura de 54px
-        from andaime.qt.theme import LIGHT as _SHARED_LIGHT, DARK as _SHARED_DARK
-        
-        self._brasao_label = QLabel()
-        self._brasao_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._brasao_label.setStyleSheet("border: none; background: transparent;")
-        layout.addWidget(self._brasao_label)
-        
-        self._update_brasao()
-
     def _update_brasao(self):
-        if not self._brasao_label:
+        """Update all logos and subtitle colors on theme change."""
+        if not all([self._brasao_label, self._rac_label, self._subtitle_label, self._usafa_label]):
             return
         
         theme = self._mw.config.get("theme", "light")
         dark_mode = (theme == "dark")
-        pixmap = get_brasao_pixmap(height=54, dark_mode=dark_mode)
         
-        if pixmap is not None:
-            self._brasao_label.setPixmap(pixmap)
-            # Apply opacity
-            self._apply_opacity_to_label()
+        # Update brasão logo
+        brasao_pixmap = get_brasao_pixmap(height=self.BRASAO_HEIGHT, dark_mode=dark_mode)
+        if brasao_pixmap:
+            self._brasao_label.setPixmap(brasao_pixmap)
+        
+        # Update R.A.C text color
+        self._update_subtitle_colors()
+    
+    def _update_subtitle_colors(self):
+        """Update subtitle label colors on theme change."""
+        from rac.gui.styles import colors as _colors
+        
+        c = _colors()
+        subtitle_color = c.get('text_primary', c.get('text', '#000000'))
+        style_base = f"border: none; background: transparent; color: {subtitle_color};"
+        
+        self._rac_label.setStyleSheet(f"{style_base} font-size: 16pt; font-weight: bold;")
+        self._subtitle_label.setStyleSheet(f"{style_base} font-size: {self.SUBTITLE_FONT_SIZE};")
+        self._usafa_label.setStyleSheet(f"{style_base} font-size: {self.USAFA_FONT_SIZE};")
+    
+    def _on_usafa_click(self, event):
+        """Handle click on USAFA name to edit it."""
+        from main import _show_usafa_dialog
+        
+        new_name = _show_usafa_dialog(self._mw.config, parent=self.window())
+        if new_name:
+            self._usafa_label.setText(new_name)
 
     def set_shortcuts_visible(self, show: bool):
         super().set_shortcuts_visible(show)

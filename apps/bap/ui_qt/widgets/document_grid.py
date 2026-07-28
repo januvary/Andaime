@@ -50,6 +50,9 @@ _ICON_DIR = Path(__file__).resolve().parent.parent / "img"
 
 def _icon_path(base: str) -> str:
     suffix = "-white" if get_theme() == "dark" else ""
+    png_path = _ICON_DIR / f"{base}{suffix}.png"
+    if png_path.exists():
+        return str(png_path)
     return str(_ICON_DIR / f"{base}{suffix}.svg")
 
 

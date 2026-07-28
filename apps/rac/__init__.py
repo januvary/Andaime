@@ -1,5 +1,5 @@
 """
-RAC - Registros Alto Custo
+RAC - Registros de Apoio ao CEAF
 Sistema de gerenciamento de registros do Alto Custo
 """
 

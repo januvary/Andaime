@@ -68,6 +68,7 @@ class EntryPage(BasePage):
         self._patient_return_to = patient_return_to
         self._pre_paciente_id: int | None = paciente_id
         self._rows: list[_RowData] = []
+        self._focusable_combos: list[SearchableComboBox] = []
         self._group_cids: dict[int, str] = {}
         self._syncing: bool = False
         self._shortcut_widgets: dict[str, QPushButton | QLabel | QCheckBox] = {}
@@ -143,6 +144,9 @@ class EntryPage(BasePage):
 
         self._paciente_combo.selection_changed.connect(self._on_paciente_selected)
         h.addWidget(self._paciente_combo)
+
+        self._focusable_combos = [self._paciente_combo]
+        self._rebuild_focusable_combos()
 
         self._shortcut_searches = [
             ("Nome do Paciente", self._paciente_combo._line_edit),
@@ -299,6 +303,7 @@ class EntryPage(BasePage):
         row_h.addWidget(remove_btn)
 
         self._items_container.addWidget(row)
+        self._rebuild_focusable_combos()
         return combo
 
     def _on_item_selected_in_row(self, rd: _RowData, data: str | None):
@@ -380,6 +385,14 @@ class EntryPage(BasePage):
         self._rows = [rd for rd in self._rows if rd.row_widget is not widget]
         widget.setParent(None)
         widget.deleteLater()
+        self._rebuild_focusable_combos()
+
+    def _rebuild_focusable_combos(self):
+        self._focusable_combos = [self._paciente_combo] + [
+            rd.combo for rd in self._rows if rd.combo
+        ]
+        if self._focus_index >= len(self._focusable_combos):
+            self._focus_index = -1
 
     def _on_paciente_selected(self, data):
         if not data:
@@ -431,6 +444,7 @@ class EntryPage(BasePage):
             if w:
                 w.setParent(None)
                 w.deleteLater()
+        self._rebuild_focusable_combos()
 
     def _collect_items(self) -> list[tuple[int, int, str]]:
         items = []
@@ -475,25 +489,19 @@ class EntryPage(BasePage):
                 self._add_item_row()
 
     def focus_next_field(self):
-        total_fields = 1 + self._items_container.count()
-        for _ in range(total_fields):
-            self._focus_index = (self._focus_index + 1) % total_fields
-            combo = self._combo_at(self._focus_index)
-            if combo and combo._line_edit.hasFocus():
+        if not self._focusable_combos:
+            return
+        for _ in range(len(self._focusable_combos)):
+            self._focus_index = (self._focus_index + 1) % len(self._focusable_combos)
+            combo = self._focusable_combos[self._focus_index]
+            if combo._line_edit.hasFocus():
                 continue
-            if combo:
-                combo.focus_search()
+            combo.focus_search()
             return
 
-    def _combo_at(self, index: int):
-        if index == 0:
-            return self._paciente_combo
-        row_idx = index - 1
-        if row_idx < self._items_container.count():
-            item = self._items_container.itemAt(row_idx)
-            frame = item.widget() if item else None
-            if frame:
-                return frame.findChild(SearchableComboBox)
+    def _combo_at(self, index: int) -> SearchableComboBox | None:
+        if 0 <= index < len(self._focusable_combos):
+            return self._focusable_combos[index]
         return None
 
     def _on_save(self):

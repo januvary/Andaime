@@ -7,16 +7,16 @@ from datetime import datetime
 
 from andaime.database import BaseDatabase, db_op
 from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
-from src.utils.config import bap_data_dir
+from bap.utils.config import bap_data_dir
 from andaime.text import to_upper_normalized
-from src.utils.text_utils import (
+from bap.utils.text_utils import (
     generate_initials,
     generate_protocolo,
     normalize_phone,
     _digits,
 )
-from src.models import Paciente, Lote, Processo, Arquivo
-from src.constants import Status
+from bap.models import Paciente, Lote, Processo, Arquivo
+from bap.constants import Status
 
 _MISSING = object()
 

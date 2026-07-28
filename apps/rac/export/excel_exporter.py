@@ -96,6 +96,12 @@ def _style_data_rows(ws, start_row, styles):
 class ExcelExporter:
     def __init__(self, db: RACDatabase) -> None:
         self._db = db
+        from andaime.config import ConfigManager
+        self._config = ConfigManager()
+
+    def _get_usafa_name(self) -> str:
+        usafa_name = self._config.get("usafa_name")
+        return usafa_name if usafa_name else "Sua unidade de saúde"
 
     def _save_workbook(
         self, wb, base_filename, date_label="", log_label="Planilha exportada"
@@ -166,7 +172,7 @@ class ExcelExporter:
         for tipo, tab_name in TIPO_LABELS.items():
             ws = wb.create_sheet(title=tab_name)
 
-            ws["A1"] = f"USAFA OCIAN - {date_display}"
+            ws["A1"] = f"{self._get_usafa_name()} - {date_display}"
             ws.merge_cells("A1:B1")
             ws["A2"] = TIPO_TITLES[tipo]
             ws.merge_cells("A2:B2")
@@ -234,7 +240,7 @@ class ExcelExporter:
                     parts.append(d)
         date_range = " - ".join(parts) if parts else ""
 
-        ws["A1"] = "USAFA OCIAN - Estatísticas"
+        ws["A1"] = f"{self._get_usafa_name()} - Estatísticas"
         ws.merge_cells("A1:C1")
 
         ws["A2"] = date_range
@@ -306,7 +312,7 @@ class ExcelExporter:
 
         styles = _make_excel_styles()
 
-        ws["A1"] = "USAFA OCIAN - Pacientes"
+        ws["A1"] = f"{self._get_usafa_name()} - Pacientes"
         ws.merge_cells("A1:B1")
         ws["A2"] = f"Total: {len(pacientes)}"
         ws.merge_cells("A2:B2")

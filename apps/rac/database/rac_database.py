@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 RAC Database
-SQLite database layer for Registros Alto Custo
+SQLite database layer for Registros de Apoio ao CEAF
 """
 
 import sqlite3

@@ -37,6 +37,81 @@ def _apply_pending_update():
     apply_pending_update()
 
 
+def _show_usafa_dialog(config, parent=None):
+    """Show dialog to configure USAFA name."""
+    from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QHBoxLayout
+    from rac.gui.widgets.buttons import make_button
+    from rac.gui.widgets.labels import HeadingLabel
+    from rac.gui.styles import colors
+    
+    current_name = config.get("usafa_name", "")
+    display_name = current_name.replace("USAFA ", "") if current_name else ""
+    
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Configuração da USAFA")
+    dlg.setMinimumWidth(400)
+    dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
+
+    layout = QVBoxLayout(dlg)
+    layout.setSpacing(12)
+
+    c = colors()
+    title = HeadingLabel("Nome da USAFA")
+    layout.addWidget(title)
+
+    msg = QLabel("Digite o nome da sua unidade de saúde:")
+    msg.setWordWrap(True)
+    msg.setStyleSheet(f"color: {c['text_secondary']}; font-size: 13px;")
+    layout.addWidget(msg)
+
+    input_layout = QHBoxLayout()
+    prefix_label = QLabel("USAFA ")
+    prefix_label.setStyleSheet(f"color: {c['text_primary']}; font-size: 14px;")
+    input_layout.addWidget(prefix_label)
+
+    input_field = QLineEdit(display_name)
+    input_field.setPlaceholderText("Nome da unidade")
+    input_field.setStyleSheet(f"color: {c['text_primary']}; font-size: 14px; padding: 6px;")
+    input_field.setMinimumWidth(250)
+    input_layout.addWidget(input_field)
+
+    layout.addLayout(input_layout)
+    layout.addSpacing(8)
+
+    btn_row = QHBoxLayout()
+    btn_row.addStretch()
+
+    cancel = make_button("Cancelar", "flat")
+    cancel.clicked.connect(dlg.reject)
+    btn_row.addWidget(cancel)
+
+    confirm = make_button("Confirmar", "primary")
+    confirm.clicked.connect(dlg.accept)
+    btn_row.addWidget(confirm)
+
+    input_field.returnPressed.connect(confirm.click)
+
+    layout.addLayout(btn_row)
+
+    if dlg.exec() == QDialog.DialogCode.Accepted:
+        usafa_input = input_field.text().strip().upper()
+        if usafa_input:
+            config.set("usafa_name", f"USAFA {usafa_input}")
+            return f"USAFA {usafa_input}"
+    return None
+
+
+def _prompt_usafa_name(config):
+    """Prompt user to input USAFA name if not set."""
+    usafa_name = config.get("usafa_name")
+    if usafa_name and usafa_name.strip():
+        return
+
+    result = _show_usafa_dialog(config)
+    if not result:
+        sys.exit(0)
+
+
 def _start_update_check(window):
     from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel
     from andaime.updater import UpdateCheckWorker, restart_app
@@ -125,6 +200,7 @@ def main():
     qapp.setFont(font)
 
     config = app.config
+    _prompt_usafa_name(config)
     theme = config.get("theme", "dark")
     set_theme(theme)
     qapp.setStyleSheet(get_stylesheet())
