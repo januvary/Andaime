@@ -104,18 +104,10 @@ class _Tile(QWidget):
         open_btn = QPushButton(self)
         rotate_btn = QPushButton(self)
         remove_btn = QPushButton(self)
-        icon_path_copy = _icon_path("copy-icon")
-        icon_path_preview = _icon_path("preview-icon")
-        icon_path_rotate = _icon_path("rotate-icon")
-        icon_path_x = _icon_path("X-icon")
-        print(f"DEBUG: copy-icon path: {icon_path_copy}, exists: {Path(icon_path_copy).exists()}")
-        print(f"DEBUG: preview-icon path: {icon_path_preview}, exists: {Path(icon_path_preview).exists()}")
-        print(f"DEBUG: rotate-icon path: {icon_path_rotate}, exists: {Path(icon_path_rotate).exists()}")
-        print(f"DEBUG: X-icon path: {icon_path_x}, exists: {Path(icon_path_x).exists()}")
-        copy_btn.setIcon(QIcon(icon_path_copy))
-        open_btn.setIcon(QIcon(icon_path_preview))
-        rotate_btn.setIcon(QIcon(icon_path_rotate))
-        remove_btn.setIcon(QIcon(icon_path_x))
+        copy_btn.setIcon(QIcon(_icon_path("copy-icon")))
+        open_btn.setIcon(QIcon(_icon_path("preview-icon")))
+        rotate_btn.setIcon(QIcon(_icon_path("rotate-icon")))
+        remove_btn.setIcon(QIcon(_icon_path("X-icon")))
 
         # Botões de ícone da tile: transparentes, com borda e padding zero
         # (para caber o glifo 16x16 em 26x22). Reaproveita as cores do tema.

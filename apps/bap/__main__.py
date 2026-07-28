@@ -65,10 +65,20 @@ def main():
     )
 
     import andaime
+    import PySide6
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QFont, QIcon
+    from PySide6.QtCore import QCoreApplication
     from bap.utils.config import SS54Config
     from bap.database.ss54_database import SS54Database
+
+    # Garante que o Qt encontre os plugins (iconengines, imageformats) mesmo
+    # quando o executável é lançado fora do ambiente de desenvolvimento.
+    pyside_dir = Path(PySide6.__file__).resolve().parent
+    for plugin_subdir in ("plugins", "Qt/plugins"):
+        plugin_path = pyside_dir / plugin_subdir
+        if plugin_path.is_dir():
+            QCoreApplication.addLibraryPath(str(plugin_path))
 
     # Config + error handler usam <root>/data por padrão (andaime).
     import andaime.paths as _andaime_paths
