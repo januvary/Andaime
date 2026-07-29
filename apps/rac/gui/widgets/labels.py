@@ -7,9 +7,11 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QWidget,
 )
+from PySide6.QtGui import QIcon
 from rac.gui.constants import TIPO_HEX, TIPO_SYMBOLS, TIPO_LABELS
 from rac.gui.styles import colors
 from rac.gui.widgets.base_page import make_hbox
+from rac.gui.widgets.buttons import _load_material_icon
 
 
 class Separator(QFrame):
@@ -38,8 +40,8 @@ class TipoLabel(QWidget):
     def __init__(self, tipo_key: str, parent=None):
         super().__init__(parent)
         hex_color = TIPO_HEX[tipo_key]
-        symbol = TIPO_SYMBOLS[tipo_key]
         label = TIPO_LABELS[tipo_key]
+        self._icon_name = TIPO_SYMBOLS[tipo_key]
 
         h = make_hbox(spacing=6)
         self.setLayout(h)
@@ -49,10 +51,17 @@ class TipoLabel(QWidget):
         dot.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         h.addWidget(dot)
 
+        icon_label = QLabel()
+        icon_label.setFixedSize(16, 16)
+        icon_label.setPixmap(_load_material_icon(self._icon_name, color=hex_color).pixmap(16, 16))
+        h.addWidget(icon_label)
+
         c = colors()
-        text = QLabel(f"{symbol} {label}")
+        text = QLabel(label)
         text.setStyleSheet(
             f"color: {c['text_primary']}; font-size: 14px; font-weight: 600; border: none;"
         )
         text.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         h.addWidget(text)
+
+        h.addStretch(1)

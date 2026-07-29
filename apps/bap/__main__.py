@@ -69,6 +69,7 @@ def main():
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QFont, QIcon
     from PySide6.QtCore import QCoreApplication
+    from andaime.qt.fonts import FontSpec, apply_font
     from bap.utils.config import SS54Config
     from bap.database.ss54_database import SS54Database
 
@@ -88,7 +89,14 @@ def main():
 
     from andaime.updater import get_shared_root
 
-    app = andaime.App("BAP", "BAP", config_cls=SS54Config, db_cls=SS54Database, root=get_shared_root())
+    app = andaime.App(
+        "BAP",
+        "BAP",
+        config_cls=SS54Config,
+        db_cls=SS54Database,
+        root=get_shared_root(),
+        font=FontSpec("IBM Plex Sans", 11, style_hint=QFont.StyleHint.SansSerif, bundled=True),
+    )
 
     # Fecha o banco (backup síncrono) no atexit, fora da thread de UI.
     from andaime.shutdown import register_cleanup, setup_shutdown_handlers
@@ -100,6 +108,8 @@ def main():
 
     qt_app = QApplication(sys.argv)
 
+    apply_font(qt_app, app.font)
+
     # Window icon (taskbar + alt-tab)
     icon_path = Path(__file__).resolve().parent / "icon.ico"
     if icon_path.exists():
@@ -107,10 +117,6 @@ def main():
 
     from andaime.qt.dev_inspector import enable_if_env
     enable_if_env(qt_app)
-
-    font = QFont("Segoe UI", 11)
-    font.setStyleHint(QFont.StyleHint.SansSerif)
-    qt_app.setFont(font)
 
     theme = app.config.get("theme", "dark")
     set_theme(theme)

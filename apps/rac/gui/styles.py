@@ -180,7 +180,7 @@ def _build_qss(c: dict) -> str:
     return f"""
 /* -- Global -- */
 * {{
-    font-family: "Geist", sans-serif;
+    font-family: inherit;
 }}
 QMainWindow {{
     background-color: {c["bg_main"]};

@@ -2,7 +2,10 @@
 
 import sys
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from andaime.qt.fonts import FontSpec
 
 import andaime
 from andaime.config import ConfigManager
@@ -19,9 +22,11 @@ class App(Generic[_D]):
         config_cls: type,
         db_cls: type[_D],
         root: Path | None = None,
+        font: "FontSpec | None" = None,
     ) -> None:
         self._app_name = app_name
         self._app_folder = app_folder
+        self._font = font
         if root is not None:
             self._root = Path(root) / app_folder
         else:
@@ -33,6 +38,9 @@ class App(Generic[_D]):
         self._db: _D = db_cls()
         self._config = ConfigManager()
 
+    @property
+    def font(self) -> "FontSpec | None":
+        return self._font
     def _detect_root(self) -> Path:
         if getattr(sys, "frozen", False):
             exe_dir = Path(sys.executable).parent

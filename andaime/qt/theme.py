@@ -38,6 +38,17 @@ def _platform_font() -> str:
 
 FONT_FAMILY = _platform_font()
 
+
+def set_font_family(family: str) -> None:
+    """Define a família usada pelo QSS global gerado por ``get_stylesheet``.
+
+    Pode ser chamada antes de ``get_stylesheet()`` para que cada app use uma
+    fonte distinta sem precisar editar o QSS manualmente.
+    """
+    global FONT_FAMILY
+    FONT_FAMILY = family
+
+
 PX = 13
 PX_SMALL = 12
 PX_HEADER = 14

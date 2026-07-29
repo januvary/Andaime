@@ -37,20 +37,26 @@ set -euo pipefail
 
 # --- Paths ---
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# Original local repos (source of truth for app code)
-SRC_BAP="$HOME/Projects/SS 54 - Vindication"
-SRC_EMISSOR="$HOME/Projects/Emissor"
-SRC_RAC="$HOME/Projects/RAC - Registros Alto Custo"
-# Vendored copies committed into this repo (synced from the above)
-BAP_REPO="$SCRIPT_DIR/apps/bap"
-EMISSOR_REPO="$SCRIPT_DIR/apps/emissor"
-RAC_REPO="$SCRIPT_DIR/apps/rac"
 ANDAIME_REPO="$SCRIPT_DIR"
 WINE_PY_DIR="$HOME/.wine/drive_c/Python310"
 WINE_PYTHON='C:\Python310\python.exe'
 
 DIST="$ANDAIME_REPO/dist"
 STAGE="$DIST/SISTEMAS"
+
+# --- Apps Registry ---
+# Format: "name|src_path|icon_path"
+declare -A APPS
+APPS[bap]="bap|$HOME/Projects/SS 54 - Vindication|$ANDAIME_REPO/launchers/icons/bap.ico"
+APPS[emissor]="emissor|$HOME/Projects/Emissor|$ANDAIME_REPO/launchers/icons/emissor.ico"
+APPS[rac]="rac|$HOME/Projects/RAC - Registros Alto Custo|$ANDAIME_REPO/launchers/icons/rac.ico"
+APPS[negativas]="negativas|$HOME/Projects/SISTEMA DE NEGATIVAS|$ANDAIME_REPO/launchers/icons/negativas.ico"
+
+# Helper functions to extract app info
+app_name() { echo "$1" | cut -d'|' -f1; }
+app_src() { echo "$1" | cut -d'|' -f2; }
+app_icon() { echo "$1" | cut -d'|' -f3; }
+app_repo() { echo "$ANDAIME_REPO/apps/$(app_name "$1")"; }
 
 # --- Args ---
 APP_TARGET="all"
@@ -66,15 +72,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-BUILD_BAP=0
-BUILD_EMISSOR=0
-BUILD_RAC=0
+# Build flags
+declare -A BUILD_FLAGS
+for app_key in "${!APPS[@]}"; do
+    BUILD_FLAGS[$app_key]=0
+done
+
 case "$APP_TARGET" in
-    bap)     BUILD_BAP=1 ;;
-    emissor) BUILD_EMISSOR=1 ;;
-    rac)     BUILD_RAC=1 ;;
-    all)     BUILD_BAP=1; BUILD_EMISSOR=1; BUILD_RAC=1 ;;
-    *)       echo "Invalid --app: $APP_TARGET (use bap|emissor|rac|all)"; exit 1 ;;
+    all) for app_key in "${!BUILD_FLAGS[@]}"; do BUILD_FLAGS[$app_key]=1; done ;;
+    *)   if [ -n "${BUILD_FLAGS[$APP_TARGET]+x}" ]; then
+            BUILD_FLAGS[$APP_TARGET]=1
+         else
+            echo "Invalid --app: $APP_TARGET (use ${!BUILD_FLAGS[@]}|all)"
+            exit 1
+         fi ;;
 esac
 
 # --- Colors ---
@@ -108,12 +119,23 @@ echo "============================================"
 # ============================================
 step "1" "Checking prerequisites..."
 
-for d in "$BAP_REPO" "$EMISSOR_REPO" "$ANDAIME_REPO" "$WINE_PY_DIR"; do
-    if [ ! -d "$d" ]; then
-        err "Not found: $d"
+for app_key in "${!APPS[@]}"; do
+    src=$(app_src "${APPS[$app_key]}")
+    if [ ! -d "$src" ]; then
+        err "Not found: $src"
         exit 1
     fi
 done
+
+if [ ! -d "$ANDAIME_REPO" ]; then
+    err "Not found: $ANDAIME_REPO"
+    exit 1
+fi
+
+if [ ! -d "$WINE_PY_DIR" ]; then
+    err "Not found: $WINE_PY_DIR"
+    exit 1
+fi
 
 if ! command -v wine &>/dev/null; then
     err "Wine is not installed"
@@ -129,8 +151,11 @@ fi
 WINE_VER=$(wine --version 2>&1 | head -1)
 ok "Wine: $WINE_VER"
 ok "mingw:    $(x86_64-w64-mingw32-gcc -dumpmachine)"
-ok "BAP:       $BAP_REPO"
-ok "Emissor:   $EMISSOR_REPO"
+for app_key in "${!APPS[@]}"; do
+    name=$(app_name "${APPS[$app_key]}")
+    src=$(app_src "${APPS[$app_key]}")
+    ok "$name:       $src"
+done
 ok "Andaime:   $ANDAIME_REPO"
 ok "Wine Py:   $WINE_PY_DIR"
 
@@ -154,33 +179,23 @@ sync_app() {
     fi
 }
 
-if [ $BUILD_BAP -eq 1 ]; then
-    step "1b" "Syncing BAP source -> apps/bap/"
-    if [ -d "$SRC_BAP" ]; then
-        sync_app "bap" "$SRC_BAP" "$BAP_REPO" "$ANDAIME_REPO/launchers/icons/bap.ico"
-        ok "apps/bap/ updated from $SRC_BAP"
-    else
-        echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_BAP — building from committed apps/bap/"
+for app_key in "${!BUILD_FLAGS[@]}"; do
+    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
+        app_info="${APPS[$app_key]}"
+        name=$(app_name "$app_info")
+        src=$(app_src "$app_info")
+        repo=$(app_repo "$app_info")
+        icon=$(app_icon "$app_info")
+
+        step "1b" "Syncing $name source -> apps/$name/"
+        if [ -d "$src" ]; then
+            sync_app "$name" "$src" "$repo" "$icon"
+            ok "apps/$name/ updated from $src"
+        else
+            echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $src — building from committed apps/$name/"
+        fi
     fi
-fi
-if [ $BUILD_EMISSOR -eq 1 ]; then
-    step "1b" "Syncing Emissor source -> apps/emissor/"
-    if [ -d "$SRC_EMISSOR" ]; then
-        sync_app "emissor" "$SRC_EMISSOR" "$EMISSOR_REPO" "$ANDAIME_REPO/launchers/icons/emissor.ico"
-        ok "apps/emissor/ updated from $SRC_EMISSOR"
-    else
-        echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_EMISSOR — building from committed apps/emissor/"
-    fi
-fi
-if [ $BUILD_RAC -eq 1 ]; then
-    step "1b" "Syncing RAC source -> apps/rac/"
-    if [ -d "$SRC_RAC" ]; then
-        sync_app "rac" "$SRC_RAC" "$RAC_REPO" "$SRC_RAC/RAC.ico"
-        ok "apps/rac/ updated from $SRC_RAC"
-    else
-        echo -e "  ${YELLOW}[WARN]${NC} source dir not found: $SRC_RAC — building from committed apps/rac/"
-    fi
-fi
+done
 
 # ============================================
 # 2. Prepare Wine Python (install/clean deps)
@@ -316,77 +331,47 @@ XML
     rm -rf "$rc_dir"
 }
 
-# --- BAP ---
-if [ $BUILD_BAP -eq 1 ]; then
-    step "6a" "Staging BAP..."
-    mkdir -p "$STAGE/apps/bap"
-    cp -r "$BAP_REPO/"* "$STAGE/apps/bap/"
+# --- Staging function for all apps ---
+stage_app() {
+    local app="$1"
+    local repo="$2"
+    local icon="$3"
+
+    step "6x" "Staging $app..."
+    mkdir -p "$STAGE/apps/$app"
+    cp -r "$repo/"* "$STAGE/apps/$app/"
 
     # Verify no stale src. imports remain
-    if grep -r "from src\.\|import src\b" "$STAGE/apps/bap/" --include="*.py" -q; then
-        err "Stale 'src.' imports found in BAP:"
-        grep -rn "from src\.\|import src\b" "$STAGE/apps/bap/" --include="*.py"
+    if grep -r "from src\.\|import src\b" "$STAGE/apps/$app/" --include="*.py" -q; then
+        err "Stale 'src.' imports found in $app:"
+        grep -rn "from src\.\|import src\b" "$STAGE/apps/$app/" --include="*.py"
         exit 1
     fi
-    ok "BAP staged (imports renamed)"
+    ok "$app staged (imports renamed)"
 
-    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/bap/LICENSE"
-    ok "LICENSE copied to apps/bap/"
+    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/$app/LICENSE"
+    ok "LICENSE copied to apps/$app/"
 
     # Regenerate PNG icons from SVGs so runtime never depends on Qt SVG plugins.
-    if [ -f "$STAGE/apps/bap/tools/generate_tile_icons.py" ]; then
-        (cd "$STAGE/apps/bap" && PYTHONPATH="$STAGE/apps/bap" python -m tools.generate_tile_icons)
-        ok "BAP tile icons regenerated as PNG"
+    if [ -f "$STAGE/apps/$app/tools/generate_tile_icons.py" ]; then
+        (cd "$STAGE/apps/$app" && PYTHONPATH="$STAGE/apps/$app" python -m tools.generate_tile_icons)
+        ok "$app tile icons regenerated as PNG"
     fi
-
-    # Compile launcher (.exe) with icon if available
-    compile_launcher "$STAGE/bap.exe" "$ANDAIME_REPO/launchers/icons/bap.ico"
-    ok "bap.exe compiled"
-fi
-
-# --- Emissor ---
-if [ $BUILD_EMISSOR -eq 1 ]; then
-    step "6b" "Staging Emissor..."
-    mkdir -p "$STAGE/apps/emissor"
-    cp -r "$EMISSOR_REPO/"* "$STAGE/apps/emissor/"
-
-    # Verify no stale src. imports remain
-    if grep -r "from src\.\|import src\b" "$STAGE/apps/emissor/" --include="*.py" -q; then
-        err "Stale 'src.' imports found in Emissor:"
-        grep -rn "from src\.\|import src\b" "$STAGE/apps/emissor/" --include="*.py"
-        exit 1
-    fi
-    ok "Emissor staged (imports renamed)"
-
-    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/emissor/LICENSE"
-    ok "LICENSE copied to apps/emissor/"
 
     # Compile launcher (.exe) with icon
-    compile_launcher "$STAGE/emissor.exe" "$ANDAIME_REPO/launchers/icons/emissor.ico"
-    ok "emissor.exe compiled"
-fi
+    compile_launcher "$STAGE/$app.exe" "$icon"
+    ok "$app.exe compiled"
+}
 
-# --- RAC ---
-if [ $BUILD_RAC -eq 1 ]; then
-    step "6c" "Staging RAC..."
-    mkdir -p "$STAGE/apps/rac"
-    cp -r "$RAC_REPO/"* "$STAGE/apps/rac/"
-
-    # Verify no stale src. imports remain
-    if grep -r "from src\.\|import src\b" "$STAGE/apps/rac/" --include="*.py" -q; then
-        err "Stale 'src.' imports found in RAC:"
-        grep -rn "from src\.\|import src\b" "$STAGE/apps/rac/" --include="*.py"
-        exit 1
+for app_key in "${!BUILD_FLAGS[@]}"; do
+    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
+        app_info="${APPS[$app_key]}"
+        name=$(app_name "$app_info")
+        repo=$(app_repo "$app_info")
+        icon=$(app_icon "$app_info")
+        stage_app "$name" "$repo" "$icon"
     fi
-    ok "RAC staged (imports renamed)"
-
-    cp "$ANDAIME_REPO/LICENSE" "$STAGE/apps/rac/LICENSE"
-    ok "LICENSE copied to apps/rac/"
-
-    # Compile launcher (.exe) with icon
-    compile_launcher "$STAGE/rac.exe" "$ANDAIME_REPO/launchers/icons/rac.ico"
-    ok "rac.exe compiled"
-fi
+done
 
 # ============================================
 # 7. Prune (size optimisation — whitelist approach)
@@ -526,9 +511,13 @@ find "$STAGE" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 # Pre-compile only the app source + chassis (site-packages is already compiled by pip).
 # Running compileall on the entire Python tree via Wine is extremely slow.
 COMPILE_TARGETS=""
-[ $BUILD_BAP -eq 1 ]     && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/bap" 2>/dev/null | tr -d '\r')"
-[ $BUILD_EMISSOR -eq 1 ] && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/emissor" 2>/dev/null | tr -d '\r')"
-[ $BUILD_RAC -eq 1 ]     && COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/rac" 2>/dev/null | tr -d '\r')"
+for app_key in "${!BUILD_FLAGS[@]}"; do
+    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
+        app_info="${APPS[$app_key]}"
+        name=$(app_name "$app_info")
+        COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/apps/$name" 2>/dev/null | tr -d '\r')"
+    fi
+done
 COMPILE_TARGETS="$COMPILE_TARGETS $(winepath -w "$STAGE/python/Lib/site-packages/andaime" 2>/dev/null | tr -d '\r')"
 
 if [ -n "$COMPILE_TARGETS" ]; then
@@ -553,23 +542,23 @@ TOTAL=$(du -sh "$STAGE" | cut -f1)
 PY_FINAL=$(du -sh "$STAGE/python" | cut -f1)
 echo -e "  ${GREEN}Total:${NC}   $TOTAL"
 echo -e "  python/: $PY_FINAL"
-if [ $BUILD_BAP -eq 1 ]; then
-    BAP_SIZE=$(du -sh "$STAGE/apps/bap" | cut -f1)
-    echo -e "  bap/:    $BAP_SIZE"
-fi
-if [ $BUILD_EMISSOR -eq 1 ]; then
-    EMISSOR_SIZE=$(du -sh "$STAGE/apps/emissor" | cut -f1)
-    echo -e "  emissor/: $EMISSOR_SIZE"
-fi
-if [ $BUILD_RAC -eq 1 ]; then
-    RAC_SIZE=$(du -sh "$STAGE/apps/rac" | cut -f1)
-    echo -e "  rac/:    $RAC_SIZE"
-fi
+for app_key in "${!BUILD_FLAGS[@]}"; do
+    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
+        app_info="${APPS[$app_key]}"
+        name=$(app_name "$app_info")
+        APP_SIZE=$(du -sh "$STAGE/apps/$name" | cut -f1)
+        echo -e "  $name/:  $APP_SIZE"
+    fi
+done
 echo ""
 echo "Launchers:"
-[ $BUILD_BAP -eq 1 ]     && echo "  $STAGE/bap.exe"
-[ $BUILD_EMISSOR -eq 1 ] && echo "  $STAGE/emissor.exe"
-[ $BUILD_RAC -eq 1 ]     && echo "  $STAGE/rac.exe"
+for app_key in "${!BUILD_FLAGS[@]}"; do
+    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
+        app_info="${APPS[$app_key]}"
+        name=$(app_name "$app_info")
+        echo "  $STAGE/${name}.exe"
+    fi
+done
 echo ""
 
 # --- Create dist.zip inside SISTEMAS/ (for network-share deployment) ---
@@ -579,10 +568,16 @@ rm -f "$ZIP_PATH"
 cd "$DIST"
 zip -r "$ZIP_PATH" SISTEMAS/ -q \
     -x "SISTEMAS/dist.zip" \
-       "SISTEMAS/bap.exe" \
-       "SISTEMAS/emissor.exe" \
-       "SISTEMAS/rac.exe" \
        "SISTEMAS/shortcuts.bat"
+ZIP_EXCLUDES=""
+for app_key in "${!BUILD_FLAGS[@]}"; do
+    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
+        app_info="${APPS[$app_key]}"
+        name=$(app_name "$app_info")
+        ZIP_EXCLUDES="$ZIP_EXCLUDES SISTEMAS/${name}.exe"
+    fi
+done
+[ -n "$ZIP_EXCLUDES" ] && zip -d "$ZIP_PATH" $ZIP_EXCLUDES 2>/dev/null || true
 ZIP_SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
 echo -e "  ${GREEN}dist.zip:${NC} $ZIP_SIZE"
 echo ""

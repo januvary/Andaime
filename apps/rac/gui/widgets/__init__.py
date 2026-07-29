@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from rac.gui.widgets.buttons import TipoButton, ThemeToggleButton, make_button
+from rac.gui.widgets.buttons import (
+    TipoButton,
+    ThemeToggleButton,
+    make_button,
+    _load_material_icon,
+    IconButtonBase,
+)
 from rac.gui.widgets.labels import Separator, SectionLabel, HeadingLabel, TipoLabel
 from rac.gui.widgets.inputs import (
     TipoCombo,
@@ -23,6 +29,8 @@ __all__ = [
     "TipoButton",
     "ThemeToggleButton",
     "make_button",
+    "IconButtonBase",
+    "_load_material_icon",
     "Separator",
     "SectionLabel",
     "HeadingLabel",

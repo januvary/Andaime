@@ -15,11 +15,13 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import andaime  # noqa: E402
 from andaime.shutdown import setup_shutdown_handlers  # noqa: E402
+from andaime.qt.fonts import FontSpec, apply_font  # noqa: E402
 from emissor.database.emissor_db import EmissorDatabase  # noqa: E402
 from emissor.utils.config import AppConfig  # noqa: E402
 from emissor.utils.updater import get_shared_root  # noqa: E402
 from emissor.main_window import QtApp  # noqa: E402
 
+from PySide6.QtGui import QFont  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from emissor.ui_qt.theme import get_palette, qpalette, stylesheet  # noqa: E402
@@ -42,6 +44,12 @@ def main() -> None:
         config_cls=AppConfig,
         db_cls=EmissorDatabase,
         root=get_shared_root(),
+        font=FontSpec(
+            family="IBM Plex Sans",
+            size=11,
+            style_hint=QFont.StyleHint.SansSerif,
+            bundled=True,
+        ),
     )
     setup_shutdown_handlers()
 
@@ -49,10 +57,12 @@ def main() -> None:
     # mas só atua enquanto existir a pasta antiga 0-INSULINAS.
     from emissor.utils.insulina_folder_migration import migrate_insulina_folders
 
-    _migration_root = andaime_instance.config.get("save_location")
-    migrate_insulina_folders(Path(_migration_root) if _migration_root else None)
+    _migration_root = andaime_instance.root
+    migrate_insulina_folders(_migration_root)
 
     app = QApplication(sys.argv)
+
+    apply_font(app, andaime_instance.font)
 
     # Window icon (taskbar + alt-tab)
     from PySide6.QtGui import QIcon

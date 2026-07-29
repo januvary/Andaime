@@ -20,6 +20,7 @@ from andaime.widgets import SearchableComboBox
 from rac.gui.brasao import get_brasao_pixmap, get_rac_pixmap
 from rac.gui.widgets import (
     TipoButton,
+    IconButtonBase,
     make_button,
     make_hbox,
     MaloteLabel,
@@ -27,6 +28,7 @@ from rac.gui.widgets import (
     BasePage,
     export_with_fallback,
     confirm_past_malote,
+    _load_material_icon,
 )
 from rac.gui.constants import (
     TIPO_LABELS,
@@ -34,12 +36,16 @@ from rac.gui.constants import (
     SHORTCUT_LABELS,
     TIPO_SHORTCUT_KEYS,
     TIPO_SYMBOLS,
+    RIGHT_BUTTON_SYMBOLS,
 )
 
 from rac.export.excel_exporter import ExcelExporter
 from rac.models import Malote
 from rac.utils.text_utils import format_malote_date, is_malote_past
-from rac.gui.styles import colors
+from rac.gui.styles import colors, get_theme
+
+
+from rac import __version__
 
 
 class StartPage(BasePage):
@@ -109,17 +115,20 @@ class StartPage(BasePage):
         ]
 
     def _build_brasao(self, layout: QVBoxLayout):
-        """Build brasao section with subtitles and brasão."""
-        from rac.gui.styles import colors as _colors
+        """Build brasao section with RAC logo, subtitles, and brasão."""
         
-        # R.A.C logo text (temporary replacement for RAC SVG)
+        # RAC logo (top)
         layout.addSpacing(self.RAC_SPACING)
-        c = _colors()
-        title_color = c.get('text_primary', c.get('text', '#000000'))
-        self._rac_label = QLabel("R.A.C")
+        self._rac_label = QLabel()
         self._rac_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._rac_label.setStyleSheet(f"border: none; background: transparent; color: {title_color}; font-size: 16pt; font-weight: bold;")
+        self._rac_label.setStyleSheet("border: none; background: transparent;")
         layout.addWidget(self._rac_label)
+
+        # Version label
+        self._version_label = QLabel(f"v{__version__}")
+        self._version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._version_label.setStyleSheet("border: none; background: transparent; font-size: 7pt;")
+        layout.addWidget(self._version_label)
         
         # Subtitles
         layout.addSpacing(self.SUBTITLE_SPACING)
@@ -201,6 +210,7 @@ class StartPage(BasePage):
         right.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self._shortcut_widgets = {}
+        self._shortcut_icon_names: dict[str, str] = {}
 
         for key, handler in (
             ("preview", self._on_preview),
@@ -210,14 +220,20 @@ class StartPage(BasePage):
             ("stats", self._on_stats),
         ):
             _, label = SHORTCUT_LABELS[key]
-            shortcut_btn = make_button(label, "flat")
+            icon_name = RIGHT_BUTTON_SYMBOLS[key]
+            shortcut_btn = IconButtonBase(label, icon_align="right")
+            shortcut_btn.setProperty("btnrole", "flat")
             shortcut_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             shortcut_btn.setFixedHeight(54)
             shortcut_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             shortcut_btn.setStyleSheet(self._flat_btn_style(c, "right"))
+            icon = _load_material_icon(icon_name, white=(get_theme() == "dark"))
+            shortcut_btn.setIcon(icon)
+            shortcut_btn.setProperty("shortcutKey", key)
             shortcut_btn.clicked.connect(handler)
             right.addWidget(shortcut_btn)
             self._shortcut_widgets[key] = shortcut_btn
+            self._shortcut_icon_names[key] = icon_name
 
         right.addSpacing(24)
 
@@ -311,13 +327,20 @@ class StartPage(BasePage):
 
     def _on_theme_changed(self):
         self._malote_label.refresh()
-        from rac.gui.styles import colors as _colors, faded_tipo_color
+        from rac.gui.styles import colors as _colors, faded_tipo_color, get_theme
 
         c = _colors()
+        theme = get_theme()
+        dark_mode = (theme == "dark")
         for btn in self._tipo_btns:
             faded = faded_tipo_color(TIPO_HEX[btn.tipo_key])
+            icon = _load_material_icon(TIPO_SYMBOLS[btn.tipo_key], color=TIPO_HEX[btn.tipo_key])
+            btn.setIcon(icon)
             btn.setStyleSheet(self._flat_btn_style(c, "left", faded))
         for btn in self._shortcut_widgets.values():
+            icon_name = self._shortcut_icon_names.get(btn.property("shortcutKey"), "")
+            icon = _load_material_icon(icon_name, white=dark_mode)
+            btn.setIcon(icon)
             btn.setStyleSheet(self._flat_btn_style(c, "right"))
         if self._sep_line:
             self._sep_line.setStyleSheet(
@@ -334,12 +357,16 @@ class StartPage(BasePage):
         theme = self._mw.config.get("theme", "light")
         dark_mode = (theme == "dark")
         
-        # Update brasão logo
+        # Update logos
         brasao_pixmap = get_brasao_pixmap(height=self.BRASAO_HEIGHT, dark_mode=dark_mode)
         if brasao_pixmap:
             self._brasao_label.setPixmap(brasao_pixmap)
         
-        # Update R.A.C text color
+        rac_pixmap = get_rac_pixmap(height=self.RAC_HEIGHT, dark_mode=dark_mode)
+        if rac_pixmap:
+            self._rac_label.setPixmap(rac_pixmap)
+        
+        # Update subtitle colors
         self._update_subtitle_colors()
     
     def _update_subtitle_colors(self):
@@ -350,9 +377,9 @@ class StartPage(BasePage):
         subtitle_color = c.get('text_primary', c.get('text', '#000000'))
         style_base = f"border: none; background: transparent; color: {subtitle_color};"
         
-        self._rac_label.setStyleSheet(f"{style_base} font-size: 16pt; font-weight: bold;")
         self._subtitle_label.setStyleSheet(f"{style_base} font-size: {self.SUBTITLE_FONT_SIZE};")
         self._usafa_label.setStyleSheet(f"{style_base} font-size: {self.USAFA_FONT_SIZE};")
+        self._version_label.setStyleSheet(f"{style_base} font-size: 7pt;")
     
     def _on_usafa_click(self, event):
         """Handle click on USAFA name to edit it."""
@@ -366,11 +393,10 @@ class StartPage(BasePage):
         super().set_shortcuts_visible(show)
         for btn in self._tipo_btns:
             label = TIPO_LABELS[btn.tipo_key]
-            symbol = TIPO_SYMBOLS[btn.tipo_key]
             if show:
                 key = TIPO_SHORTCUT_KEYS[btn.tipo_key]
-                btn.setText(f"{symbol}  {label}  ({key})")
+                btn.setText(f"{label}  ({key})")
             else:
-                btn.setText(f"{symbol}  {label}")
+                btn.setText(label)
         self._malote_label.set_shortcut_hint_visible(show)
 

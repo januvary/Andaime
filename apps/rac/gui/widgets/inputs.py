@@ -14,6 +14,7 @@ from rac.gui.widgets._completer import (
 )
 from rac.gui.widgets.base_page import make_hbox
 from rac.gui.constants import TIPO_LABELS, TIPO_SYMBOLS, TIPO_HEX
+from rac.gui.widgets.buttons import _load_material_icon
 from rac.gui.styles import colors, faded_tipo_color, combo_style_qss
 
 
@@ -58,7 +59,9 @@ class TipoCombo(QWidget):
 
         self._combo.blockSignals(True)
         for key in TIPO_LABELS:
-            self._combo.addItem(f"{TIPO_SYMBOLS[key]}  {TIPO_LABELS[key]}", key)
+            icon = _load_material_icon(TIPO_SYMBOLS[key], color=TIPO_HEX[key])
+            self._combo.addItem(icon, TIPO_LABELS[key], key)
+
         self._combo.blockSignals(False)
 
         self._update_display(current_tipo)
@@ -87,6 +90,8 @@ class TipoCombo(QWidget):
         self._combo._popup_bg = dropdown_bg
         hex_color = TIPO_HEX.get(tipo_key, "")
         faded = faded_tipo_color(hex_color)
+        icon = _load_material_icon(TIPO_SYMBOLS[tipo_key], color=TIPO_HEX[tipo_key])
+        self._combo.setItemIcon(self._combo.findData(tipo_key), icon)
         self._combo.setStyleSheet(combo_style_qss(
             text_color=faded,
             bg="transparent",

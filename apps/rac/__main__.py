@@ -11,24 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import andaime
 from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+from andaime.qt.fonts import FontSpec, apply_font
 from rac.utils.config import RACConfig
 from rac.database.rac_database import RACDatabase
 
 
-def _load_bundled_fonts():
-    from PySide6.QtGui import QFontDatabase
-    from andaime.paths import get_root_directory
-
-    fonts_dir = get_root_directory() / "fonts"
-    if fonts_dir.is_dir():
-        db = QFontDatabase()
-        for f in fonts_dir.iterdir():
-            if f.suffix in (".ttf", ".otf"):
-                db.addApplicationFont(str(f))
-
-
 def _get_app_icon_path():
-    return Path(__file__).parent / "src" / "gui" / "img" / "folder-1486.svg"
+    return Path(__file__).parent / "icon.ico"
 
 
 def _apply_pending_update():
@@ -43,10 +32,10 @@ def _show_usafa_dialog(config, parent=None):
     from rac.gui.widgets.buttons import make_button
     from rac.gui.widgets.labels import HeadingLabel
     from rac.gui.styles import colors
-    
+
     current_name = config.get("usafa_name", "")
     display_name = current_name.replace("USAFA ", "") if current_name else ""
-    
+
     dlg = QDialog(parent)
     dlg.setWindowTitle("Configuração da USAFA")
     dlg.setMinimumWidth(400)
@@ -176,7 +165,8 @@ def main():
 
     from andaime.updater import get_shared_root
 
-    app = andaime.App("RAC", "RAC", config_cls=RACConfig, db_cls=RACDatabase, root=get_shared_root())
+    app = andaime.App("RAC", "RAC", config_cls=RACConfig, db_cls=RACDatabase, root=get_shared_root(),
+                      font=FontSpec("Geist", 11, bundled=True))
 
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QFont, QIcon
@@ -187,17 +177,14 @@ def main():
 
     # Dev: Ctrl+Shift+I abre o código-fonte do widget sob o cursor (var. DEV_INSPECTOR).
     from andaime.qt.dev_inspector import enable_if_env
+
     enable_if_env(qapp)
 
     icon_path = _get_app_icon_path()
     if icon_path.exists():
         qapp.setWindowIcon(QIcon(str(icon_path)))
 
-    _load_bundled_fonts()
-
-    font = QFont("Geist", 11)
-    font.setStyleHint(QFont.StyleHint.SansSerif)
-    qapp.setFont(font)
+    apply_font(qapp, app.font)
 
     config = app.config
     _prompt_usafa_name(config)

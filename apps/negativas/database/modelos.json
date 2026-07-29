@@ -1,0 +1,28 @@
+{
+  "modelos": [
+    {
+      "tipo": "fornecimento_ceaf",
+      "texto": "é fornecido pela Secretaria de Estado da Saúde, por meio do Componente Especializado da Assistência Farmacêutica (CEAF),"
+    },
+    {
+      "tipo": "fornecimento_usafa",
+      "texto": "faz parte da Relação Municipal de Medicamentos deste município, sendo fornecido através dos dispensários de medicamentos das Unidades de Saúde de Atenção Básica (USAFAs)."
+    },
+    {
+      "tipo": "fornecimento_caps",
+      "texto": "faz parte da Relação Municipal de Medicamentos deste município, sendo fornecido através dos dispensários de medicamentos dos Centros de Atenção Psicossocial (CAPS II)."
+    },
+    {
+      "tipo": "falta",
+      "texto": "Entretanto, informo que o item se encontra sem saldo no momento, ao passo que já foram iniciados os trâmites administrativos pertinentes para a regularização do estoque o mais breve possível."
+    },
+    {
+      "tipo": "nao_padronizado",
+      "texto": "não faz parte da Relação Municipal de Medicamentos (REMUME) deste município."
+    },
+    {
+      "tipo": "insumo_nao_padronizado",
+      "texto": "não é padronizado por este município."
+    }
+  ]
+}

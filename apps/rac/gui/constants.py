@@ -11,12 +11,20 @@ from rac.constants import (  # noqa: F401
     TIPO_HEX,
 )
 
-TIPO_SYMBOLS = {
-    "entrada": "\u25b2",
-    "renovacao": "\u21bb",
-    "retirada": "\u25bc",
-    "urgente": "!",
-    "medcasa": "\u2302",
+TIPO_SYMBOLS: dict[str, str] = {
+    "entrada": "arrow_upward",
+    "renovacao": "autorenew",
+    "retirada": "arrow_downward",
+    "urgente": "frame_source",
+    "medcasa": "home",
+}
+
+RIGHT_BUTTON_SYMBOLS: dict[str, str] = {
+    "preview": "view_list",
+    "export": "file_export",
+    "medicamentos": "pill",
+    "pacientes": "person",
+    "stats": "leaderboard",
 }
 
 SHORTCUT_LABELS: dict[str, tuple[str, str]] = {

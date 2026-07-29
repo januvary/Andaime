@@ -29,8 +29,16 @@ cleanup() {
 }
 trap 'cleanup' EXIT
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUILD_PORTABLE="$SCRIPT_DIR/build_portable.sh"
+DIST_DIR="$SCRIPT_DIR/dist"
+SISTEMAS="$DIST_DIR/SISTEMAS"
+ZIP_NAME="SISTEMAS-${TAG}-portable.zip"
+ZIP_PATH="/tmp/${ZIP_NAME}"
+
 if [ -z "$1" ]; then
-    read -rp "Version (e.g. 1.0.0): " VERSION
+    CURRENT_VERSION=$(grep "^version" "$SCRIPT_DIR/pyproject.toml" | sed 's/.*"\([^"]*\)".*/\1/')
+    read -rp "Version (e.g. 1.0.0) [current: $CURRENT_VERSION]: " VERSION
     if [ -z "$VERSION" ]; then
         echo -e "${RED}[ERROR]${NC} Version is required."
         exit 1
