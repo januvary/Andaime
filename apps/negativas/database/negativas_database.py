@@ -8,9 +8,9 @@ from pathlib import Path
 from andaime.database import BaseDatabase, db_op
 from andaime.error_handler import ErrorHandler, ErrorLevel
 from andaime.text import to_upper_normalized
+from andaime.paths import resolve_db_path
 
 from negativas.models import Medicamento, ModeloTexto
-from negativas.constants import DB_PATH
 
 # Caminho para o arquivo de modelos
 _MODELOS_PATH = Path(__file__).resolve().parent / "modelos.json"
@@ -19,7 +19,7 @@ _MODELOS_PATH = Path(__file__).resolve().parent / "modelos.json"
 class NegativasDatabase(BaseDatabase):
     def __init__(self, db_path: Optional[str] = None) -> None:
         if db_path is None:
-            db_path = str(DB_PATH)
+            db_path = resolve_db_path("database.db", create_dir=True)
         super().__init__(db_path=db_path, entity_name="negativas")
         self._modelos_cache: dict[str, ModeloTexto] = {}
         self._cache_modelos()

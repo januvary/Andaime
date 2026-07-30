@@ -46,12 +46,12 @@ from negativas.services.document_builder import DocumentBuilder
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, app: "App", db: NegativasDatabase, config: NegativasConfig):
+    def __init__(self, app_instance):
         super().__init__()
-        self.app = app
-        self.db = db
-        self.config = config
-        self.document_builder = DocumentBuilder(db)
+        self.app = app_instance
+        self.db = app_instance.db
+        self.config = app_instance.config
+        self.document_builder = DocumentBuilder(self.db)
 
         self.itens_selecionados: List[ItemSelecionado] = []
         self.next_item_id = 0

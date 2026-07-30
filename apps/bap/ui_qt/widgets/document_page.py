@@ -79,7 +79,7 @@ class DocumentPage(QWidget):
                 ("Retornar", "flat-fill", self.retornar.emit)
             ],
             right_actions=[("Salvar", "flat-fill", self.salvar.emit)],
-            col_weights=(2, 4, 4, 4),
+            col_weights=(2, 4, 3, 4),
         )
 
         # Painel único (padrão Emissor): cabeçalho + conteúdo + rodapé

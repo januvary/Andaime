@@ -5,16 +5,13 @@ from pathlib import Path
 # ── Identificação do App ────────────────────────────────────────
 APP_NAME = "Negativas"
 APP_DISPLAY_NAME = "Sistema de Negativas - SESAP PG"
-UPDATE_REPO = ""  # Preencher com user/repo para atualizações automáticas
+UPDATE_REPO = "januvary/negativas"
 
 # ── Caminhos ─────────────────────────────────────────────────────
 # Resolvido em runtime para funcionar tanto em dev quanto em build
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Agora usando o sistema de caminhos padrão do Andaime para
+# suporte a shares de rede e instalações locais
 
-# Caminhos relativos ao projeto
-DATA_DIR = _PROJECT_ROOT / "data"
-DB_PATH = DATA_DIR / "database.db"
-CONFIG_PATH = DATA_DIR / "config.json"
 BRASAO_SVG_PATH = Path(__file__).resolve().parent / "ui_qt" / "img" / "brasao_prefeitura.svg"
 
 # ── Interface ───────────────────────────────────────────────────

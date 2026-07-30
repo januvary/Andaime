@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from pathlib import Path
 
-from negativas.constants import DB_PATH, CONFIG_PATH
+from andaime.paths import get_config_path
 
 
 @dataclass
@@ -32,9 +32,5 @@ class NegativasConfig:
         return data
 
     @staticmethod
-    def get_db_path() -> Path:
-        return DB_PATH
-
-    @staticmethod
     def get_config_path() -> Path:
-        return CONFIG_PATH
+        return get_config_path()
