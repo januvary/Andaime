@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QTableWidget,
-    QTableWidgetItem,
     QSizePolicy,
     QHeaderView,
     QTreeWidgetItem,
@@ -15,11 +14,12 @@ from PySide6.QtWidgets import (
 )
 from datetime import datetime
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from rac.gui.widgets import (
     make_button,
     BasePage,
+    SortableTableWidgetItem,
     make_dialog_button_row,
     export_with_fallback,
 )
@@ -41,6 +41,7 @@ class _TipoCard(QWidget):
     def __init__(self, tipo_key: str, value: str, label: str | None = None, label_color: str | None = None):
         super().__init__()
         c = colors()
+        self._on_click = None
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.setStyleSheet(
             f"QWidget {{ background: transparent; border: 1px solid {c['border_light']}; "
@@ -54,7 +55,7 @@ class _TipoCard(QWidget):
         self._value_label = QLabel(value)
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._value_label.setStyleSheet(
-            f"font-size: 20px; font-weight: 700; color: {c['text_primary']}; border: none;"
+            f"font-size: 18px; font-weight: 700; color: {c['text_primary']}; border: none;"
         )
         layout.addWidget(self._value_label)
 
@@ -69,6 +70,15 @@ class _TipoCard(QWidget):
 
     def set_value(self, value: str):
         self._value_label.setText(value)
+
+    def set_on_click(self, callback):
+        self._on_click = callback
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mouseReleaseEvent(self, event):
+        if self._on_click is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._on_click()
+        super().mouseReleaseEvent(event)
 
 
 class StatsPage(BasePage):
@@ -167,6 +177,7 @@ class StatsPage(BasePage):
         self._tipo_cards: dict[str, _TipoCard] = {}
         for tipo_key in TIPO_LABELS:
             card = _TipoCard(tipo_key, "0", label_color=faded_tipo_color(TIPO_HEX[tipo_key]))
+            card.set_on_click(lambda k=tipo_key: self._open_tipo_list(k))
             self._tipo_cards[tipo_key] = card
             tipo_row.addWidget(card)
         tipo_row.addStretch(1)
@@ -178,45 +189,66 @@ class StatsPage(BasePage):
         totals_row.setSpacing(10)
         totals_row.addStretch(1)
         self._total_registros_card = _TipoCard("__total_reg", "0", label="Total Registros")
+        self._total_registros_card.set_on_click(self._open_all_registros)
         totals_row.addWidget(self._total_registros_card)
         self._total_pacientes_card = _TipoCard("__total_pac", "0", label="Total Pacientes")
+        self._total_pacientes_card.set_on_click(
+            lambda: self._mw.navigate_to("pacientes", return_to="stats")
+        )
         totals_row.addWidget(self._total_pacientes_card)
         totals_row.addStretch(1)
         layout.addLayout(totals_row)
+
+    def _open_tipo_list(self, tipo_key: str):
+        self._mw.navigate_to(
+            "registro_list",
+            kind="tipo",
+            tipo=tipo_key,
+            date_from=self._date_from,
+            date_to=self._date_to,
+        )
+
+    def _open_all_registros(self):
+        self._mw.navigate_to(
+            "registro_list",
+            kind="all",
+            date_from=self._date_from,
+            date_to=self._date_to,
+        )
 
     def _build_medications_table(self, layout: QVBoxLayout):
         layout.addSpacing(2)
 
         self._meds_search = QLineEdit()
         self._meds_search.setPlaceholderText("Buscar medicamento...")
-        self._meds_search.setFixedHeight(20)
         layout.addWidget(self._meds_search)
-        layout.addSpacing(18)
+        layout.addSpacing(12)
 
         self._meds_table = QTableWidget(0, 3)
         self._meds_table.setHorizontalHeaderLabels(["Medicamento", "Registros", "%"])
-        self._meds_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch
-        )
-        self._meds_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Fixed
-        )
-        self._meds_table.horizontalHeader().resizeSection(1, 90)
-        self._meds_table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Fixed
-        )
-        self._meds_table.horizontalHeader().resizeSection(2, 90)
-        self._meds_table.horizontalHeader().setFixedHeight(28)
+        header = self._meds_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(1, 90)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(2, 90)
+        header.setFixedHeight(28)
         self._meds_table.verticalHeader().setVisible(False)
         self._meds_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._meds_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self._meds_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._meds_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._meds_table.setAlternatingRowColors(True)
+        self._meds_table.setCursor(Qt.CursorShape.PointingHandCursor)
         self._meds_table.verticalHeader().setDefaultSectionSize(32)
         self._meds_table.setMinimumHeight(28 + 32 * 8)
-        self._meds_table.setStyleSheet(data_view_style_qss(include_selected=False, include_hover=True))
+        self._meds_table.setStyleSheet(data_view_style_qss(include_selected=True, include_hover=True))
         layout.addWidget(self._meds_table, 1)
 
         self._meds_search.textChanged.connect(self._filter_meds_table)
+        self._meds_table.cellDoubleClicked.connect(self._on_med_double_clicked)
+        self.register_keyboard_nav(
+            self._meds_table, self._meds_search, lambda _w: self._on_med_enter()
+        )
         self._shortcut_searches.append(("Buscar medicamento", self._meds_search))
 
     def _load_stats(self):
@@ -244,15 +276,50 @@ class StatsPage(BasePage):
         with table_batch_populate(self._meds_table):
             self._meds_table.setRowCount(len(rows))
             for row, r in enumerate(rows):
-                self._meds_table.setItem(row, 0, self._cell(r["medicamento"]))
-                self._meds_table.setItem(
-                    row, 1, self._cell(str(r["registros"]), center=True)
+                name_item = SortableTableWidgetItem(r["medicamento"])
+                name_item.setData(
+                    Qt.ItemDataRole.UserRole, (r["item_id"], r["medicamento"])
                 )
+                self._meds_table.setItem(row, 0, name_item)
+
+                reg_item = SortableTableWidgetItem(str(r["registros"]), r["registros"])
+                reg_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._meds_table.setItem(row, 1, reg_item)
+
                 pct = r["registros"] / total * 100
-                self._meds_table.setItem(row, 2, self._cell(f"{pct:.1f}%", center=True))
+                pct_item = SortableTableWidgetItem(f"{pct:.1f}%", pct)
+                pct_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._meds_table.setItem(row, 2, pct_item)
+        self._meds_table.setSortingEnabled(True)
+        self._meds_table.sortByColumn(1, Qt.SortOrder.DescendingOrder)
 
     def _filter_meds_table(self, text: str):
         filter_table_rows(self._meds_table, text)
+
+    def _on_med_double_clicked(self, row: int, _col: int):
+        item = self._meds_table.item(row, 0)
+        if item is None:
+            return
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data is None:
+            return
+        item_id, item_name = data
+        QTimer.singleShot(0, lambda: self._open_item_list(item_id, item_name))
+
+    def _on_med_enter(self):
+        row = self._meds_table.currentRow()
+        if row >= 0:
+            self._on_med_double_clicked(row, 0)
+
+    def _open_item_list(self, item_id: int, item_name: str):
+        self._mw.navigate_to(
+            "registro_list",
+            kind="item",
+            item_id=item_id,
+            item_name=item_name,
+            date_from=self._date_from,
+            date_to=self._date_to,
+        )
 
     def _on_export(self):
         exporter = ExcelExporter(self._mw.db)
@@ -262,13 +329,6 @@ class StatsPage(BasePage):
                 date_from=self._date_from, date_to=self._date_to
             ),
         )
-
-    @staticmethod
-    def _cell(text: str, center: bool = False) -> QTableWidgetItem:
-        item = QTableWidgetItem(text)
-        if center:
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        return item
 
 
 

@@ -30,7 +30,7 @@ from rac.models import (
 
 
 class RACDatabase(BaseDatabase):
-    SCHEMA_VERSION = 6
+    SCHEMA_VERSION = 7
 
     def __init__(self, db_path: Optional[str] = None) -> None:
         if db_path is None:
@@ -49,8 +49,19 @@ class RACDatabase(BaseDatabase):
 
     def _create_schema(self) -> None:
         self._create_fresh_schema()
+        self._migrate_schema_if_needed()
         self._set_schema_version(self.SCHEMA_VERSION)
         self._seed_catalog_if_empty()
+
+    def _migrate_schema_if_needed(self) -> None:
+        current_version = self._ensure_schema_version()
+        if current_version < 7:
+            with self._cursor() as cur:
+                cur.execute("PRAGMA table_info(registro_items)")
+                columns = {row["name"] for row in cur.fetchall()}
+                if "quantidade" not in columns:
+                    cur.execute("ALTER TABLE registro_items ADD COLUMN quantidade INTEGER NOT NULL DEFAULT 0")
+            self._commit()
 
     def _create_fresh_schema(self) -> None:
         with self._cursor() as cur:
@@ -96,7 +107,8 @@ class RACDatabase(BaseDatabase):
                     process_id INTEGER REFERENCES processes(id),
                     item_id INTEGER NOT NULL REFERENCES items_catalog(id),
                     process_group INTEGER NOT NULL DEFAULT 1,
-                    cid TEXT NOT NULL DEFAULT ''
+                    cid TEXT NOT NULL DEFAULT '',
+                    quantidade INTEGER NOT NULL DEFAULT 0
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_registros_malote ON registros(malote_id);
@@ -120,15 +132,18 @@ class RACDatabase(BaseDatabase):
         )
 
     def _seed_catalog_if_empty(self) -> None:
+        from rac.utils.unidade_parser import parse_unidade_from_name
+        
         with self._cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM items_catalog")
             count = cur.fetchone()[0]
 
             if count == 0:
                 for name, unidade, cids_json in DEFINITIVE_CATALOG:
+                    parsed_unidade = parse_unidade_from_name(name)
                     cur.execute(
                         "INSERT INTO items_catalog (name, unidade, cids) VALUES (?, ?, ?)",
-                        (to_upper_normalized(name), unidade, cids_json),
+                        (to_upper_normalized(name), parsed_unidade, cids_json),
                     )
                 self._commit()
                 ErrorHandler.log(
@@ -392,7 +407,7 @@ class RACDatabase(BaseDatabase):
 
     @db_op("write")
     def set_registro_items(
-        self, registro_id: int, items: list[tuple[int, int, str]]
+        self, registro_id: int, items: list[tuple[int, int, str, int]]
     ) -> None:
         with self._cursor() as cur:
             cur.execute(
@@ -401,14 +416,14 @@ class RACDatabase(BaseDatabase):
             )
             if items:
                 cur.executemany(
-                    "INSERT INTO registro_items (registro_id, item_id, process_group, cid) VALUES (?, ?, ?, ?)",
-                    [(registro_id, iid, pg, cid) for iid, pg, cid in items],
+                    "INSERT INTO registro_items (registro_id, item_id, process_group, cid, quantidade) VALUES (?, ?, ?, ?, ?)",
+                    [(registro_id, iid, pg, cid, qty) for iid, pg, cid, qty in items],
                 )
             self._commit()
 
     @db_op("write")
     def set_registro_items_with_process(
-        self, registro_id: int, items: list[tuple[int, int, int | None, str]]
+        self, registro_id: int, items: list[tuple[int, int, int | None, str, int]]
     ) -> None:
         with self._cursor() as cur:
             cur.execute(
@@ -417,10 +432,10 @@ class RACDatabase(BaseDatabase):
             )
             if items:
                 cur.executemany(
-                    "INSERT INTO registro_items (registro_id, item_id, process_group, process_id, cid) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO registro_items (registro_id, item_id, process_group, process_id, cid, quantidade) VALUES (?, ?, ?, ?, ?, ?)",
                     [
-                        (registro_id, iid, pg, pid, cid)
-                        for iid, pg, pid, cid in items
+                        (registro_id, iid, pg, pid, cid, qty)
+                        for iid, pg, pid, cid, qty in items
                     ],
                 )
             self._commit()
@@ -428,7 +443,7 @@ class RACDatabase(BaseDatabase):
     @db_op("read")
     def get_items_by_registro(self, registro_id: int) -> list[RegistroItem]:
         return [RegistroItem.from_row(r) for r in self._fetch_all(
-            "SELECT ri.*, ic.name as item_name, ic.unidade "
+            "SELECT ri.*, ic.name as item_name "
             "FROM registro_items ri "
             "JOIN items_catalog ic ON ri.item_id = ic.id "
             "WHERE ri.registro_id = ? "
@@ -686,9 +701,14 @@ class RACDatabase(BaseDatabase):
         tipo: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        extra: str | None = None,
+        extra_params: list | None = None,
     ) -> tuple[str, list]:
         clauses: list[str] = []
         params: list = []
+        if extra:
+            clauses.append(extra)
+            params.extend(extra_params or [])
         if tipo:
             clauses.append("r.tipo = ?")
             params.append(tipo)
@@ -768,7 +788,7 @@ class RACDatabase(BaseDatabase):
         with self._cursor() as cur:
             where, params = self._stats_where( tipo, date_from, date_to)
             cur.execute(
-                f"SELECT ic.name AS medicamento, COUNT(*) AS registros "
+                f"SELECT ri.item_id AS item_id, ic.name AS medicamento, COUNT(*) AS registros "
                 f"FROM registro_items ri "
                 f"JOIN items_catalog ic ON ri.item_id = ic.id "
                 f"JOIN registros r ON ri.registro_id = r.id "
@@ -777,3 +797,118 @@ class RACDatabase(BaseDatabase):
                 params,
             )
             return [dict(r) for r in cur.fetchall()]
+
+    @db_op("read")
+    def get_stats_registros(
+        self,
+        tipo: str | None = None,
+        item_id: int | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[Registro]:
+        item_join = ""
+        extra = None
+        extra_params: list = []
+        if item_id is not None:
+            item_join = "JOIN registro_items ri ON ri.registro_id = r.id "
+            extra = "ri.item_id = ?"
+            extra_params = [item_id]
+        where, params = self._stats_where(
+            tipo, date_from, date_to, extra, extra_params
+        )
+        return [Registro.from_row(r) for r in self._fetch_all(
+            f"SELECT r.*, p.name as paciente_name, m.date as malote_date "
+            f"FROM registros r "
+            f"JOIN pacientes p ON r.paciente_id = p.id "
+            f"JOIN malotes m ON r.malote_id = m.id "
+            f"{item_join}{where} "
+            f"GROUP BY r.id "
+            f"ORDER BY m.date DESC, r.created_at DESC, r.id DESC",
+            params,
+        )]
+
+    @db_op("read")
+    def get_items_by_registros(
+        self, registro_ids: list[int]
+    ) -> dict[int, list[RegistroItem]]:
+        if not registro_ids:
+            return {}
+        placeholders = ", ".join("?" for _ in registro_ids)
+        rows = self._fetch_all(
+            f"SELECT ri.*, ic.name as item_name "
+            f"FROM registro_items ri "
+            f"JOIN items_catalog ic ON ri.item_id = ic.id "
+            f"WHERE ri.registro_id IN ({placeholders}) "
+            f"ORDER BY ri.process_group, ic.name COLLATE NOCASE",
+            registro_ids,
+        )
+        result: dict[int, list[RegistroItem]] = {}
+        for r in rows:
+            item = RegistroItem.from_row(r)
+            if item.registro_id is not None:
+                result.setdefault(item.registro_id, []).append(item)
+        return result
+
+    @db_op("read")
+    def get_item_cids_by_registro(
+        self,
+        item_id: int,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict[int, list[str]]:
+        where, params = self._stats_where(
+            date_from=date_from,
+            date_to=date_to,
+            extra="ri.item_id = ? AND ri.cid != ''",
+            extra_params=[item_id],
+        )
+        rows = self._fetch_all(
+            f"SELECT ri.registro_id, ri.cid "
+            f"FROM registro_items ri "
+            f"JOIN registros r ON ri.registro_id = r.id "
+            f"JOIN malotes m ON r.malote_id = m.id{where}",
+            params,
+        )
+        cids_map: dict[int, set[str]] = {}
+        for r in rows:
+            cids_map.setdefault(r["registro_id"], set()).add(r["cid"])
+        return {rid: sorted(cids) for rid, cids in cids_map.items()}
+
+    @db_op("read")
+    def get_stats_item_totals(
+        self,
+        item_id: int,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict:
+        with self._cursor() as cur:
+            where, params = self._stats_where(
+                date_from=date_from,
+                date_to=date_to,
+                extra="ri.item_id = ?",
+                extra_params=[item_id],
+            )
+            cur.execute(
+                f"SELECT COUNT(*) AS registros, "
+                f"COUNT(DISTINCT r.paciente_id) AS pacientes "
+                f"FROM registro_items ri "
+                f"JOIN registros r ON ri.registro_id = r.id "
+                f"JOIN malotes m ON r.malote_id = m.id{where}",
+                params,
+            )
+            row = dict(cur.fetchone())
+            total_where, total_params = self._stats_where(
+                date_from=date_from, date_to=date_to
+            )
+            cur.execute(
+                f"SELECT COUNT(*) AS total, "
+                f"COUNT(DISTINCT r.paciente_id) AS total_pacientes "
+                f"FROM registro_items ri "
+                f"JOIN registros r ON ri.registro_id = r.id "
+                f"JOIN malotes m ON r.malote_id = m.id{total_where}",
+                total_params,
+            )
+            total_row = cur.fetchone()
+            row["total"] = total_row["total"]
+            row["total_pacientes"] = total_row["total_pacientes"]
+            return row

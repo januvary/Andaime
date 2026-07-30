@@ -23,16 +23,16 @@ class SaveResult:
 @dataclass
 class EditContext:
     registro: Registro
-    items: list[tuple[int, int, str]]
+    items: list[tuple[int, int, str, int]]
     processes: list[tuple[int, int]]
 
 
 @dataclass
 class ContextResult:
     registro: Registro | None
-    items: list[tuple[int, int, str]]
+    items: list[tuple[int, int, str, int]]
     processes: list[tuple[int, int]]
-    suggested_items: list[tuple[int, int, str]]
+    suggested_items: list[tuple[int, int, str, int]]
 
 
 @dataclass
@@ -41,7 +41,7 @@ class DeleteSnapshot:
     paciente_id: int
     malote_id: int
     waiting_docs: bool
-    items: list[tuple[int, int, str]]
+    items: list[tuple[int, int, str, int]]
     process_months: list[tuple[int, int]]
 
 
@@ -75,7 +75,7 @@ class RegistroService:
         tipo: str,
         paciente_id: int,
         malote_id: int,
-        items: list[tuple[int, int, str]],
+        items: list[tuple[int, int, str, int]],
         waiting_docs: bool,
         process_months: list[tuple[int, int]] | None = None,
     ) -> SaveResult:
@@ -106,7 +106,7 @@ class RegistroService:
         malote_id: int,
         waiting_docs: bool,
         process_months: list[tuple[int, int]],
-        items: list[tuple[int, int, str]] | None = None,
+        items: list[tuple[int, int, str, int]] | None = None,
     ) -> None:
         arrival_date = self._resolve_arrival_date(malote_id)
         returns = calculate_return_dates(
@@ -125,12 +125,12 @@ class RegistroService:
         process_by_group = {p.group_number: p.id for p in new_processes}
         if items is None:
             items = [
-                (i.item_id, i.process_group, i.cid)
+                (i.item_id, i.process_group, i.cid, i.quantidade)
                 for i in self._db.get_items_by_registro(registro_id)
                 if i.item_id is not None
             ]
-        items_with_process: list[tuple[int, int, int | None, str]] = [
-            (iid, pg, process_by_group.get(pg), cid) for iid, pg, cid in items
+        items_with_process: list[tuple[int, int, int | None, str, int]] = [
+            (iid, pg, process_by_group.get(pg), cid, qty) for iid, pg, cid, qty in items
         ]
         self._db.set_registro_items_with_process(registro_id, items_with_process)
 
@@ -139,7 +139,7 @@ class RegistroService:
         tipo: str,
         paciente_name: str,
         malote_id: int,
-        items: list[tuple[int, int, str]],
+        items: list[tuple[int, int, str, int]],
         edit_id: int | None = None,
         waiting_docs: bool = False,
         paciente_id: int | None = None,
@@ -215,7 +215,7 @@ class RegistroService:
         return EditContext(
             registro=reg,
             items=[
-                (item.item_id, item.process_group, item.cid)
+                (item.item_id, item.process_group, item.cid, item.quantidade)
                 for item in items
                 if item.item_id is not None
             ],
@@ -238,7 +238,7 @@ class RegistroService:
             return ContextResult(
                 registro=existing,
                 items=[
-                    (item.item_id, item.process_group, item.cid)
+                    (item.item_id, item.process_group, item.cid, item.quantidade)
                     for item in items
                     if item.item_id is not None
                 ],
@@ -251,12 +251,12 @@ class RegistroService:
         usage = self._db.get_last_usage_by_paciente(paciente_id)
         cid_to_group: dict[str, int] = {}
         next_group = 1
-        suggested: list[tuple[int, int, str]] = []
+        suggested: list[tuple[int, int, str, int]] = []
         for item_id, cid in usage:
             if cid not in cid_to_group:
                 cid_to_group[cid] = next_group
                 next_group += 1
-            suggested.append((item_id, cid_to_group[cid], cid))
+            suggested.append((item_id, cid_to_group[cid], cid, 0))
         return ContextResult(
             registro=None,
             items=[],
@@ -272,7 +272,7 @@ class RegistroService:
             raise ValidationError("Registro inválido")
         items = self._db.get_items_by_registro(registro_id)
         item_tuples = [
-            (i.item_id, i.process_group, i.cid) for i in items if i.item_id is not None
+            (i.item_id, i.process_group, i.cid, i.quantidade) for i in items if i.item_id is not None
         ]
         processes = self._db.get_processes_by_registro(registro_id)
         process_months = [(p.group_number, p.months_supply) for p in processes]
@@ -306,7 +306,7 @@ class RegistroService:
                     continue
                 items = self._db.get_items_by_registro(rid)
                 item_tuples = [
-                    (i.item_id, i.process_group, i.cid) for i in items if i.item_id is not None
+                    (i.item_id, i.process_group, i.cid, i.quantidade) for i in items if i.item_id is not None
                 ]
                 processes = self._db.get_processes_by_registro(rid)
                 process_months = [(p.group_number, p.months_supply) for p in processes]
@@ -332,7 +332,7 @@ class RegistroService:
             paciente_id=reg.paciente_id,
             malote_id=reg.malote_id,
             waiting_docs=reg.waiting_docs,
-            items=[(i.item_id, i.process_group, i.cid) for i in items if i.item_id is not None],
+            items=[(i.item_id, i.process_group, i.cid, i.quantidade) for i in items if i.item_id is not None],
             process_months=[(p.group_number, p.months_supply) for p in processes],
         )
         self.delete(registro_id)

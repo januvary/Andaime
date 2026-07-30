@@ -372,3 +372,86 @@ class ExcelExporter:
         _apply_page_setup(ws)
 
         return self._save_workbook(wb, "Catalogo", log_label="Catálogo exportado")
+
+    def export_registro_list(
+        self,
+        title: str,
+        headers: list[str],
+        rows: list[list[str]],
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> Optional[str]:
+        openpyxl = _ensure_openpyxl()
+        if openpyxl is None:
+            return None
+        if not rows:
+            return None
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        if ws is not None:
+            ws.title = "Registros"
+
+        styles = _make_excel_styles()
+        n_cols = len(headers)
+
+        date_range = ""
+        if date_from or date_to:
+            parts = []
+            for d in (date_from, date_to):
+                if d:
+                    try:
+                        parts.append(datetime.fromisoformat(d).strftime("%d/%m/%Y"))
+                    except ValueError:
+                        parts.append(d)
+            date_range = " - ".join(parts)
+
+        ws["A1"] = title
+        ws.merge_cells(
+            start_row=1, start_column=1, end_row=1, end_column=n_cols
+        )
+
+        header_row = 2
+        if date_range:
+            ws["A2"] = date_range
+            ws.merge_cells(
+                start_row=2, start_column=1, end_row=2, end_column=n_cols
+            )
+            header_row = 3
+
+        ws.append(headers)
+        for row in rows:
+            ws.append(row)
+
+        ws.column_dimensions["A"].width = 18
+        ws.column_dimensions["B"].width = 40
+        for i, col_letter in enumerate("CDEFG"[: max(0, n_cols - 2)]):
+            ws.column_dimensions[col_letter].width = 45
+
+        _style_title_row(ws, 1, styles)
+        if date_range:
+            _style_title_row(ws, 2, styles, "title2_font", 26, styles["fill_odd"])
+
+        _style_data_rows(ws, header_row, styles)
+
+        _apply_page_setup(ws)
+
+        date_label = ""
+        if date_from or date_to:
+            parts = []
+            if date_from:
+                try:
+                    parts.append(datetime.fromisoformat(date_from).strftime("%d-%m-%Y"))
+                except ValueError:
+                    parts.append(date_from)
+            parts.append("a")
+            if date_to:
+                try:
+                    parts.append(datetime.fromisoformat(date_to).strftime("%d-%m-%Y"))
+                except ValueError:
+                    parts.append(date_to)
+            date_label = "_".join(parts)
+
+        return self._save_workbook(
+            wb, "Registros", date_label, "Registros exportados"
+        )

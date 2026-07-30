@@ -44,7 +44,17 @@ def next_send_date(existing_dates: set[date] | None = None) -> date:
     if not existing_dates:
         return candidate
     while candidate in existing_dates:
-        candidate = calculate_send_date(candidate)
+        next_day = candidate + timedelta(days=1)
+        while next_day.weekday() >= 5 or next_day in DateCalculator.get_holidays():
+            next_day = next_day + timedelta(days=1)
+        days_until_monday = (7 - next_day.weekday()) % 7
+        if days_until_monday == 0:
+            days_until_monday = 7
+        next_monday = next_day + timedelta(days=days_until_monday)
+        if next_monday in DateCalculator.get_holidays():
+            candidate = DateCalculator.skip_to_previous_business_day(next_monday)
+        else:
+            candidate = next_monday
     return candidate
 
 

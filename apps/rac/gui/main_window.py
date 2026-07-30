@@ -20,6 +20,7 @@ from rac.gui.pages.medicamentos_page import MedicamentosPage
 from rac.gui.pages.pacientes_page import PacientesPage
 from rac.gui.pages.stats_page import StatsPage
 from rac.gui.pages.patient_page import PatientPage
+from rac.gui.pages.registro_list_page import RegistroListPage
 from andaime.qt.status_line import StatusLine
 from andaime.qt import ShortcutManager
 
@@ -27,8 +28,9 @@ from andaime.qt import ShortcutManager
 class MainWindow(QMainWindow):
     theme_changed = Signal()
 
-    def __init__(self):
+    def __init__(self, app_instance):
         super().__init__()
+        self._app = app_instance
         self.setWindowTitle("RAC - Registros de Apoio ao CEAF")
         self.setMinimumSize(750, 600)
         self.resize(900, 700)
@@ -60,10 +62,11 @@ class MainWindow(QMainWindow):
         self._services = None
         self._last_patient_id: int | None = None
         self._last_preview_tipo: str | None = None
+        self._last_registro_list_params: dict | None = None
 
     def init_backend(self):
-        self.config = ConfigManager()
-        self.db = RACDatabase()
+        self.config = self._app.config
+        self.db = self._app.db
         self.state = RACStateManager()
         self._services = None
 
@@ -136,9 +139,17 @@ class MainWindow(QMainWindow):
         elif page_name == "medicamentos":
             self._show_medicamentos_page()
         elif page_name == "pacientes":
-            self._show_pacientes_page()
+            return_to = kwargs.get("return_to", "start")
+            self._show_pacientes_page(return_to)
         elif page_name == "stats":
             self._show_stats_page()
+        elif page_name == "registro_list":
+            params = kwargs if kwargs.get("kind") else self._last_registro_list_params
+            if params:
+                self._last_registro_list_params = params
+                self._show_registro_list_page(params)
+            else:
+                self._show_stats_page()
 
     def _show_start_page(self):
         for i in range(self._stack.count()):
@@ -178,11 +189,14 @@ class MainWindow(QMainWindow):
     def _show_medicamentos_page(self):
         self._push_page(MedicamentosPage)
 
-    def _show_pacientes_page(self):
-        self._push_page(PacientesPage)
+    def _show_pacientes_page(self, return_to: str = "start"):
+        self._push_page(PacientesPage, return_to)
 
     def _show_stats_page(self):
         self._push_page(StatsPage)
+
+    def _show_registro_list_page(self, params: dict):
+        self._push_page(RegistroListPage, **params)
 
     def _show_patient_page(self, paciente_id: int, highlight_registro: int | None = None, return_to: str | None = None):
         self._push_page(PatientPage, paciente_id, highlight_registro, return_to or "start")
@@ -225,9 +239,11 @@ class MainWindow(QMainWindow):
 
     def _shortcut_back(self):
         page = self._current_page()
-        if isinstance(page, (EntryPage, PatientPage)):
+        if isinstance(page, (EntryPage, PatientPage, PacientesPage)):
             self.navigate_to(page._return_to)
-        elif isinstance(page, (PreviewPage, MedicamentosPage, PacientesPage, StatsPage)):
+        elif isinstance(page, RegistroListPage):
+            self.navigate_to("stats")
+        elif isinstance(page, (PreviewPage, MedicamentosPage, StatsPage)):
             self.navigate_to("start")
 
     def _shortcut_malote_dialog(self):
@@ -245,6 +261,9 @@ class MainWindow(QMainWindow):
             search = page._crud.search
             search.setFocus()
             search.selectAll()
+        elif isinstance(page, RegistroListPage):
+            page.search.setFocus()
+            page.search.selectAll()
         elif isinstance(page, PreviewPage):
             search = page._tab_searches.get(page._tabs.currentIndex())
             if search:

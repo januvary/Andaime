@@ -104,9 +104,9 @@ class RegistroItem:
     process_id: int | None = None
     item_id: int | None = None
     item_name: str | None = None
-    unidade: str | None = None
     process_group: int = 1
     cid: str = ""
+    quantidade: int = 0
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> RegistroItem:
@@ -116,9 +116,9 @@ class RegistroItem:
             process_id=row.get("process_id"),
             item_id=row.get("item_id"),
             item_name=row.get("item_name"),
-            unidade=row.get("unidade"),
             process_group=row.get("process_group", 1),
             cid=row.get("cid", ""),
+            quantidade=row.get("quantidade", 0),
         )
 
 

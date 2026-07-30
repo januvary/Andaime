@@ -5,7 +5,7 @@ from datetime import date as date_type
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from rac.models import Malote
+    from rac.models import Malote, RegistroItem
 
 from andaime.dates import parse_date, format_date
 
@@ -27,6 +27,24 @@ def is_malote_past(malote: Optional[Malote]) -> bool:
         return date_type.fromisoformat(malote.date) < date_type.today()
     except ValueError:
         return False
+
+
+def format_registro_meds(items: list[RegistroItem]) -> str:
+    meds_by_group: dict[int, list[str]] = {}
+    for item in items:
+        meds_by_group.setdefault(item.process_group, []).append(
+            item.item_name or ""
+        )
+
+    meds_parts = []
+    for pg in sorted(meds_by_group):
+        names = sorted(set(meds_by_group[pg]))
+        formatted = [format_item(n) for n in names if n]
+        if formatted:
+            prefix = f"G{pg}: " if len(meds_by_group) > 1 else ""
+            meds_parts.append(f"{prefix}{', '.join(formatted)}")
+
+    return " | ".join(meds_parts) if meds_parts else "—"
 
 
 def format_item(name: str) -> str:

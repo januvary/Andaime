@@ -55,7 +55,7 @@ class MaloteService:
                 continue
             items = self._db.get_items_by_registro(reg.id)
             item_tuples = [
-                (i.item_id, i.process_group, i.cid)
+                (i.item_id, i.process_group, i.cid, i.quantidade)
                 for i in items
                 if i.item_id is not None
             ]

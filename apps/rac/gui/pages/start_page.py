@@ -21,7 +21,6 @@ from rac.gui.brasao import get_brasao_pixmap, get_rac_pixmap
 from rac.gui.widgets import (
     TipoButton,
     IconButtonBase,
-    make_button,
     make_hbox,
     MaloteLabel,
     ThemeToggleButton,
@@ -42,7 +41,7 @@ from rac.gui.constants import (
 from rac.export.excel_exporter import ExcelExporter
 from rac.models import Malote
 from rac.utils.text_utils import format_malote_date, is_malote_past
-from rac.gui.styles import colors, get_theme
+from rac.gui.styles import get_theme
 
 
 from rac import __version__

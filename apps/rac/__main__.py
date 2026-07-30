@@ -7,7 +7,6 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import andaime
 from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
@@ -194,7 +193,7 @@ def main():
 
     from rac.gui.main_window import MainWindow
 
-    window = MainWindow()
+    window = MainWindow(app)
     if icon_path.exists():
         window.setWindowIcon(QIcon(str(icon_path)))
     window.init_backend()

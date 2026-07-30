@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QStyledItemDelegate,
 )
-from PySide6.QtGui import QPainter, QFontMetrics, QColor, QIcon
+from PySide6.QtGui import QPainter, QFontMetrics, QColor
 from PySide6.QtWidgets import QStyleOptionViewItem, QStyle
 from PySide6.QtCore import Qt, QRect
 

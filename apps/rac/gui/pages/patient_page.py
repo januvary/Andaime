@@ -25,7 +25,7 @@ from rac.gui.styles import (
     data_view_style_qss,
     faded_tipo_color,
 )
-from rac.utils.text_utils import format_malote_date, format_item
+from rac.utils.text_utils import format_malote_date, format_registro_meds
 from rac.models import Malote
 from andaime.qt.table import table_batch_populate
 
@@ -113,21 +113,7 @@ class PatientPage(BasePage):
         with table_batch_populate(self._table):
             for row, reg in enumerate(registros):
                 items = self._mw.services.registro.get_items(reg.id)
-                meds_by_group: dict[int, list[str]] = {}
-                for item in items:
-                    meds_by_group.setdefault(item.process_group, []).append(
-                        item.item_name or ""
-                    )
-
-                meds_parts = []
-                for pg in sorted(meds_by_group):
-                    names = sorted(set(meds_by_group[pg]))
-                    formatted = [format_item(n) for n in names if n]
-                    if formatted:
-                        prefix = f"G{pg}: " if len(meds_by_group) > 1 else ""
-                        meds_parts.append(f"{prefix}{', '.join(formatted)}")
-
-                meds_str = " | ".join(meds_parts) if meds_parts else "—"
+                meds_str = format_registro_meds(items)
 
                 cids = sorted(set(item.cid for item in items if item.cid))
                 if not cids:

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QCheckBox,
     QSizePolicy,
+    QLineEdit,
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -45,6 +46,7 @@ class _RowData:
     group_btn: CycleButton
     row_widget: QWidget
     combo: SearchableComboBox | None = None
+    quantidade_input: QLineEdit | None = None
     cid_combo: SearchableComboBox | None = None
     pg: int = 1
 
@@ -184,11 +186,12 @@ class EntryPage(BasePage):
         layout.addWidget(add_btn)
 
         if self._edit_ctx:
-            for item_id, process_group, cid in self._edit_ctx.items:
+            for item_id, process_group, cid, quantidade in self._edit_ctx.items:
                 self._add_item_row(
                     item_id=item_id,
                     process_group=process_group,
                     cid=cid,
+                    quantidade=quantidade,
                 )
         else:
             self._add_item_row()
@@ -255,7 +258,7 @@ class EntryPage(BasePage):
             f"color: {c['text_secondary']}; font-size: 12px; font-style: italic;"
         )
 
-    def _add_item_row(self, item_id: int | None = None, process_group: int = 1, cid: str = ""):
+    def _add_item_row(self, item_id: int | None = None, process_group: int = 1, cid: str = "", quantidade: int = 0):
         row = QWidget()
         row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         row_h = make_hbox(spacing=2)
@@ -278,6 +281,15 @@ class EntryPage(BasePage):
             combo.set_current_by_data(str(item_id))
         rd.combo = combo
         row_h.addWidget(combo)
+
+        # quantidade_input = None
+        # if self._tipo == "retirada":
+        #     quantidade_input = QLineEdit()
+        #     quantidade_input.setFixedWidth(80)
+        #     quantidade_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        #     quantidade_input.setPlaceholderText("Qnt")
+        #     rd.quantidade_input = quantidade_input
+        #     row_h.addWidget(quantidade_input)
 
         cid_combo = SearchableComboBox(static_search_fn({}), "CID")
         cid_combo.setFixedWidth(80)
@@ -446,14 +458,20 @@ class EntryPage(BasePage):
                 w.deleteLater()
         self._rebuild_focusable_combos()
 
-    def _collect_items(self) -> list[tuple[int, int, str]]:
+    def _collect_items(self) -> list[tuple[int, int, str, int]]:
         items = []
         for rd in self._rows:
             data = rd.combo.current_data() if rd.combo else None
             if not data:
                 continue
             cid = rd.cid_combo.current_data() or "" if rd.cid_combo else ""
-            items.append((int(data), rd.pg, cid))
+            quantidade = 0
+            if self._tipo == "retirada" and rd.quantidade_input:
+                try:
+                    quantidade = int(rd.quantidade_input.text() or "0")
+                except ValueError:
+                    quantidade = 0
+            items.append((int(data), rd.pg, cid, quantidade))
         return items
 
     def _load_items_for_context(self, paciente_id: int):
@@ -468,22 +486,24 @@ class EntryPage(BasePage):
         if ctx.registro:
             self._update_registro_status(True)
             if ctx.items:
-                for item_id, process_group, cid in ctx.items:
+                for item_id, process_group, cid, quantidade in ctx.items:
                     self._add_item_row(
                         item_id=item_id,
                         process_group=process_group,
                         cid=cid,
+                        quantidade=quantidade,
                     )
             else:
                 self._add_item_row()
         else:
             self._update_registro_status(False)
             if ctx.suggested_items:
-                for item_id, process_group, cid in ctx.suggested_items:
+                for item_id, process_group, cid, quantidade in ctx.suggested_items:
                     self._add_item_row(
                         item_id=item_id,
                         process_group=process_group,
                         cid=cid,
+                        quantidade=quantidade,
                     )
             else:
                 self._add_item_row()

@@ -22,13 +22,14 @@ def _format_last_registro(p: Paciente) -> str:
 
 
 class PacientesPage(BasePage):
-    def __init__(self, main_window):
+    def __init__(self, main_window, return_to: str = "start"):
         super().__init__(main_window)
+        self._return_to = return_to
         self._build_ui()
 
     def _build_ui(self):
         layout = self._scaffold(expand_vertical=True)
-        self._add_back_button(layout)
+        self._add_back_button(layout, target=self._return_to)
         layout.addSpacing(20)
 
         self._heading = HeadingLabel("Pacientes")
