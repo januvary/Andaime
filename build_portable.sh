@@ -106,6 +106,13 @@ rename_imports() {
         -e "s/import src\\b/import ${pkg}/g"
 }
 
+# Clean bytecode cache directories (avoid mixing Python versions)
+clean_bytecode() {
+    local dir="$1"
+    find "$dir" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find "$dir" -type f -name "*.pyc" -delete 2>/dev/null || true
+}
+
 # ============================================
 echo "============================================"
 echo "SISTEMAS — Portable Build"
@@ -172,6 +179,7 @@ sync_app() {
     cp -r "$src/src/"* "$dst/"
     cp "$src/main.py" "$dst/__main__.py"
     cp "$icon" "$dst/icon.ico"
+    clean_bytecode "$dst"
     rename_imports "$pkg" "$dst"
     if [ "$pkg" = "bap" ]; then
         sed -i '/sys\.path\.insert(0, os\.path\.dirname/d' "$dst/__main__.py"
@@ -399,7 +407,8 @@ if [ $NO_PRUNE -eq 0 ]; then
         avcodec-61.dll avformat-61.dll avutil-59.dll \
         swscale-8.dll swresample-5.dll \
         pyside6qml.abi3.dll \
-        vcamp140.dll vccorlib140.dll concrt140.dll vcomp140.dll; do
+        vcamp140.dll vccorlib140.dll concrt140.dll vcomp140.dll \
+        vcruntime140.dll vcruntime140_1.dll; do
         rm -f "$PYSIDE/$f"
     done
 
@@ -487,6 +496,15 @@ PYEOF
     rm -f "$STAGE/python/DLLs/tcl86t.dll" "$STAGE/python/DLLs/tk86t.dll"
     ok "Tcl/Tk removed (stdlib + DLLs)"
 
+    # --- Remove shiboken6 runtime DLLs (duplicates of python/ root) ---
+    SHIBOKEN="$SP/shiboken6"
+    if [ -d "$SHIBOKEN" ]; then
+        for f in vcruntime140.dll vcruntime140_1.dll msvcp140.dll msvcp140_1.dll msvcp140_2.dll msvcp140_codecvt_ids.dll concrt140.dll; do
+            rm -f "$SHIBOKEN/$f"
+        done
+        ok "Shiboken6 runtime DLLs removed (use python/ root versions)"
+    fi
+
     # --- Remove Python Doc/Tools/tests/idlelib/ensurepip ---
     rm -rf "$STAGE/python/Doc" "$STAGE/python/Tools"
     find "$STAGE/python/Lib" -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
@@ -562,22 +580,24 @@ done
 echo ""
 
 # --- Create dist.zip inside SISTEMAS/ (for network-share deployment) ---
-# Must be created AFTER zipping so it doesn't include itself.
 ZIP_PATH="$STAGE/dist.zip"
 rm -f "$ZIP_PATH"
 cd "$DIST"
+
+# Create zip with proper exclusions (avoid file conflicts on Windows extraction)
 zip -r "$ZIP_PATH" SISTEMAS/ -q \
     -x "SISTEMAS/dist.zip" \
        "SISTEMAS/shortcuts.bat"
-ZIP_EXCLUDES=""
+
+# Remove .exe files from zip (they should remain in the share root)
 for app_key in "${!BUILD_FLAGS[@]}"; do
     if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
         app_info="${APPS[$app_key]}"
         name=$(app_name "$app_info")
-        ZIP_EXCLUDES="$ZIP_EXCLUDES SISTEMAS/${name}.exe"
+        zip -d "$ZIP_PATH" "SISTEMAS/${name}.exe" >/dev/null 2>&1 || true
     fi
 done
-[ -n "$ZIP_EXCLUDES" ] && zip -d "$ZIP_PATH" $ZIP_EXCLUDES 2>/dev/null || true
+
 ZIP_SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
 echo -e "  ${GREEN}dist.zip:${NC} $ZIP_SIZE"
 echo ""

@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
 )
 
-from bap.ui_qt.styles import colors, context_menu_stylesheet
+from bap.ui_qt.styles import colors, context_menu_stylesheet, get_theme
 from bap.ui_qt.widgets.remessa import RemessaLabel
 from bap.constants import (
     STATUS_LABELS,
@@ -72,11 +72,22 @@ from andaime.dates import parse_date
 _TAB_KEYS = ["primeira", "renovacao"]
 
 
+# Cache de QColor por (tema, status): o lambda ``foreground`` da coluna
+# Status roda a cada repaint de célula; evita reconstruir o dict de cores
+# e o QColor em todo paint.
+_STATUS_COLOR_CACHE: dict = {}
+
+
 def _status_color(status: str) -> QColor:
-    hex_color = colors().get(
-        STATUS_SEMANTIC.get(status, "text_dim"), "#6B7280"
-    )
-    return QColor(hex_color)
+    key = (get_theme(), status)
+    color = _STATUS_COLOR_CACHE.get(key)
+    if color is None:
+        hex_color = colors().get(
+            STATUS_SEMANTIC.get(status, "text_dim"), "#6B7280"
+        )
+        color = QColor(hex_color)
+        _STATUS_COLOR_CACHE[key] = color
+    return color
 
 
 def _format_obs(p) -> str:
@@ -206,6 +217,8 @@ class RemessasPage(QWidget):
         self._last_signature = None
         # Token monotônico para descartar resultados de fetches obsoletos.
         self._refresh_token = 0
+        # Highlight pendente após refresh assíncrono: (tab_key, processo_id)
+        self._pending_highlight = None
 
         self._content = QWidget(self)
         self._content_layout = QVBoxLayout(self._content)
@@ -242,17 +255,13 @@ class RemessasPage(QWidget):
         self._enviar_btn.clicked.connect(self.enviar.emit)
         self._enviar_btn.setEnabled(False)
 
-        self._atualizacoes_btn = make_button("Atualizações", "flat-fill")
-        self._atualizacoes_btn.setMaximumWidth(160)
-        self._atualizacoes_btn.clicked.connect(self._show_atulizacoes)
-
         self._bottom_bar = BottomBar(
             parent=self,
             left_widget=self.remessa_label,
-            status_widget=self._atualizacoes_btn,
+            status_widget=None,
             actions=[("Novo Processo", "flat-fill", self.novo_processo.emit)],
             right_widget=self._enviar_btn,
-            col_weights=(2, 4, 4, 4),
+            col_weights=(2, 4, 3, 4),
         )
 
         # Painel único (padrão Emissor): conteúdo + rodapé dentro de um
@@ -442,6 +451,11 @@ class RemessasPage(QWidget):
                 self._populate(key, [p for p in processos if p.solicitacao == key])
             self._last_signature = signature
             self._set_loading(False)
+            # Aplica highlight pendente se houver
+            if self._pending_highlight:
+                tab_key, processo_id = self._pending_highlight
+                self._pending_highlight = None
+                self._highlight_processo(tab_key, processo_id)
 
         if self._runner is not None:
             self._set_loading(True)
@@ -481,14 +495,6 @@ class RemessasPage(QWidget):
         if processo is None:
             return
 
-        # A busca retorna processos "incompleto" mesmo quando o filtro em
-        # massa ("Mostrar incompletos") está desmarcado. Ao selecionar um
-        # explicitamente, revela-os para que a navegação até ele funcione
-        # (caso contrário a linha não existe na tabela e a seleção anterior
-        # permanece).
-        if processo.status == Status.INCOMPLETO and not self._show_incompletos.isChecked():
-            self._show_incompletos.setChecked(True)
-
         # Troca a remessa ativa se o processo pertence a outra remessa.
         active = self.remessa_active()
         remessa_changed = False
@@ -500,11 +506,27 @@ class RemessasPage(QWidget):
                 self.set_remessa_active(lote, emit=True)
                 remessa_changed = True
 
+        # A busca retorna processos "incompleto" mesmo quando o filtro em
+        # massa ("Mostrar incompletos") está desmarcado. Ao selecionar um
+        # explicitamente, revela-os para que a navegação até ele funcione
+        # (caso contrário a linha não existe na tabela e a seleção anterior
+        # permanece).
+        # Importante: fazer isso após trocar a remessa, pois setChecked
+        # pode trigger refresh() que precisará ter o lote correto.
+        checkbox_changed = False
+        if processo.status == Status.INCOMPLETO and not self._show_incompletos.isChecked():
+            self._show_incompletos.setChecked(True)
+            checkbox_changed = True
+
         # Troca a aba correspondente (solicitação/renovação).
         if processo.solicitacao in _TAB_KEYS:
             self._tabs.setCurrentIndex(_TAB_KEYS.index(processo.solicitacao))
 
-        self._highlight_processo(processo.solicitacao, processo_id)
+        # Se vai houver refresh assíncrono, agenda o highlight para depois
+        if remessa_changed or checkbox_changed:
+            self._pending_highlight = (processo.solicitacao, processo_id)
+        else:
+            self._highlight_processo(processo.solicitacao, processo_id)
 
     def _highlight_processo(self, tab_key: str, processo_id: int) -> None:
         table = self._tables.get(tab_key)
@@ -621,7 +643,9 @@ class RemessasPage(QWidget):
 
         nome_action = edit_menu.addAction("Nome do paciente")
         nome_action.triggered.connect(
-            lambda _c=False, pid=processo_id: self._edit_paciente_nome(pid)
+            lambda _c=False, pid=processo_id: self._edit_field(
+                pid, "paciente_nome", "Nome do paciente"
+            )
         )
 
         remessa_action = edit_menu.addAction("Remessa")
@@ -865,178 +889,6 @@ class RemessasPage(QWidget):
         )
 
     # ========== Atualizações DRS ==========
-
-    def update_atulizacoes_count(self) -> None:
-        if self._db is None:
-            return
-        count = self._db.get_unseen_drs_count()
-        if count > 0:
-            self._atualizacoes_btn.setText(f"Atualizações ({count})")
-        else:
-            self._atualizacoes_btn.setText("Atualizações")
-
-    def _show_atulizacoes(self) -> None:
-        if self._db is None:
-            return
-        messages = self._db.get_drs_messages()
-        if not messages:
-            return
-
-        dlg, layout = scaffold_dialog(
-            self, "Atualizações DRS", spacing=8, min_width=520
-        )
-        dlg.setMinimumHeight(500)
-
-        tree = QTreeWidget()
-        tree.setHeaderLabels(["Data", "Status"])
-        tree.setProperty("class", "remessa-tree")
-        tree.setAlternatingRowColors(True)
-        tree.header().setStretchLastSection(False)
-        tree.header().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch
-        )
-        tree.header().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.ResizeToContents
-        )
-
-        by_patient: dict[int, dict] = {}
-        for msg in messages:
-            pid = msg["paciente_id"]
-            if pid not in by_patient:
-                by_patient[pid] = {"nome": msg["paciente_nome"], "msgs": []}
-            by_patient[pid]["msgs"].append(msg)
-
-        for pdata in by_patient.values():
-            pdata["msgs"].sort(
-                key=lambda m: m.get("message_date") or "", reverse=True
-            )
-        sorted_patients = sorted(
-            by_patient.values(),
-            key=lambda p: p["msgs"][0].get("message_date") or "",
-            reverse=True,
-        )
-
-        for pdata in sorted_patients:
-            header = QTreeWidgetItem(
-                [pdata["nome"], f"({len(pdata['msgs'])})"]
-            )
-            header.setFlags(header.flags() & ~Qt.ItemFlag.ItemIsSelectable)
-            tree.addTopLevelItem(header)
-            has_unseen = any(not msg.get("seen") for msg in pdata["msgs"])
-            header.setExpanded(has_unseen)
-
-            for msg in pdata["msgs"]:
-                date_str = format_date_display(
-                    (msg.get("message_date") or "")[:10]
-                )
-                status_key = msg.get("inferred_status") or ""
-                status_label = STATUS_LABELS.get(status_key, "—")
-                child = QTreeWidgetItem([date_str, status_label])
-                child.setData(0, Qt.ItemDataRole.UserRole, msg)
-
-                if not msg.get("seen"):
-                    f = child.font(0)
-                    f.setBold(True)
-                    child.setFont(0, f)
-
-                child.setForeground(1, _status_color(status_key))
-                header.addChild(child)
-
-        tree.itemClicked.connect(self._on_atulizacoes_click)
-        layout.addWidget(tree)
-
-        btn_row, [close_btn] = make_dialog_button_row(
-            [("Fechar", "primary")]
-        )
-        close_btn.clicked.connect(dlg.accept)
-        layout.addLayout(btn_row)
-
-        dlg.exec()
-        self.update_atulizacoes_count()
-
-    def _on_atulizacoes_click(self, item: QTreeWidgetItem, _col: int) -> None:
-        msg = item.data(0, Qt.ItemDataRole.UserRole)
-        if msg is None:
-            return
-        parent_dlg = item.treeWidget().window()
-        self._open_email_content(msg, parent_dlg)
-        font = item.font(0)
-        font.setBold(False)
-        item.setFont(0, font)
-
-    def _open_email_content(self, msg: dict, parent=None) -> None:
-        if self._db is None:
-            return
-        self._db.mark_drs_message_seen(msg["message_id"])
-
-        dlg, layout = scaffold_dialog(
-            parent or self, "E-mail DRS", spacing=8, min_width=520
-        )
-        dlg.setMinimumHeight(480)
-
-        meta_parts = []
-        if msg.get("from_email"):
-            meta_parts.append(f"De: {msg['from_email']}")
-        if msg.get("subject"):
-            meta_parts.append(f"Assunto: {msg['subject']}")
-        date_str = format_date_display((msg.get("message_date") or "")[:10])
-        if date_str:
-            meta_parts.append(f"Data: {date_str}")
-        meta = QLabel("\n".join(meta_parts))
-        meta.setWordWrap(True)
-        meta.setStyleSheet("color: #6B7280; font-size: 12px;")
-        layout.addWidget(meta)
-
-        body_edit = QTextEdit()
-        body_edit.setReadOnly(True)
-        body_edit.setPlainText(msg.get("body") or msg.get("snippet") or "")
-        layout.addWidget(body_edit, stretch=1)
-
-        btn_row, [fechar, alterar] = make_dialog_button_row(
-            [("Fechar", "flat-fill"), ("Alterar Status", "primary")]
-        )
-        fechar.clicked.connect(dlg.reject)
-        alterar.clicked.connect(dlg.accept)
-        layout.addLayout(btn_row)
-
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._alterar_status(
-                msg["paciente_id"], msg.get("inferred_status") or ""
-            )
-
-    def _alterar_status(self, paciente_id: int, inferred_status: str = "") -> None:
-        if self._db is None:
-            return
-        processos = self._db.get_processos_by_paciente(paciente_id)
-        if not processos:
-            return
-
-        latest_date = processos[0].lote_date or ""
-        latest = [p for p in processos if (p.lote_date or "") == latest_date]
-
-        if len(latest) == 1:
-            processo = latest[0]
-        else:
-            processo = self._select_process_dialog(latest)
-
-        if processo is None:
-            return
-
-        def on_select(key, obs=""):
-            self._db.update_processo_status(processo.id, key, obs or None)
-            self.refresh()
-
-        def on_observation(obs):
-            self._db.add_status_observation(processo.id, obs)
-            self.refresh()
-
-        show_status_dialog(
-            self.window(),
-            processo.status,
-            on_select,
-            on_observation=on_observation,
-            preselect=inferred_status or None,
-        )
 
     def _select_process_dialog(self, processos: list) -> object | None:
         def _fmt(p):

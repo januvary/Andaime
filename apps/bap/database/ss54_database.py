@@ -354,9 +354,13 @@ class SS54Database(BaseDatabase):
             (Status.INCOMPLETO, Status.EM_ANALISE, lote_id),
         )
         count = 0
-        for row in rows:
-            if self.reassign_processo_lote(row["id"], lote_id) is not None:
-                count += 1
+        # Uma única transação para toda a movimentação: atômica (tudo ou
+        # nada) e um só commit — cada commit individual é caro em shares de
+        # rede (journal_mode=DELETE).
+        with self.transaction():
+            for row in rows:
+                if self.reassign_processo_lote(row["id"], lote_id) is not None:
+                    count += 1
         return count
 
     @db_op("read")
@@ -470,14 +474,25 @@ class SS54Database(BaseDatabase):
     def _fetch_processos_joined(
         self, where: str = "", params: tuple = (), order_by: str = ""
     ) -> list[dict]:
+        # O último status_log de cada processo vem de uma derived table com
+        # window function (um único scan de status_logs por query), em vez de
+        # um subselect correlacionado por linha de processo. O desempate por
+        # ``id DESC`` preserva a semântica de "mais recente" mesmo com
+        # ``created_at`` iguais ou fora de ordem (imports com timestamps
+        # customizados).
         sql = (
             "SELECT p.*, pac.nome as paciente_nome, pac.telefone as paciente_telefone, l.date as lote_date, "
             "sl.observacoes AS last_obs, sl.created_at AS last_obs_at "
             "FROM processos p "
             "JOIN pacientes pac ON p.paciente_id = pac.id "
             "JOIN lotes l ON p.lote_id = l.id "
-            "LEFT JOIN status_logs sl ON sl.id = "
-            "(SELECT id FROM status_logs WHERE processo_id = p.id ORDER BY created_at DESC LIMIT 1)"
+            "LEFT JOIN ("
+            "SELECT processo_id, observacoes, created_at, "
+            "ROW_NUMBER() OVER ("
+            "PARTITION BY processo_id ORDER BY created_at DESC, id DESC"
+            ") AS rn "
+            "FROM status_logs"
+            ") sl ON sl.processo_id = p.id AND sl.rn = 1"
         )
         if where:
             sql += f" WHERE {where}"
@@ -786,6 +801,28 @@ class SS54Database(BaseDatabase):
             return None
         blob = row["conteudo"]
         return bytes(blob) if blob is not None else None
+
+    @db_op("read")
+    def get_arquivos_conteudos(self, arquivo_ids: list[int]) -> dict[int, bytes]:
+        """Busca os BLOBs de vários arquivos em uma única query.
+
+        Retorna ``{arquivo_id: conteudo}`` apenas para ids encontrados.
+        Em shares de rede, uma query ``IN (...)`` substitui N round-trips
+        individuais de ``get_arquivo_conteudo``.
+        """
+        if not arquivo_ids:
+            return {}
+        placeholders = ", ".join("?" for _ in arquivo_ids)
+        rows = self._fetch_all(
+            f"SELECT arquivo_id, conteudo FROM {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
+            f"WHERE arquivo_id IN ({placeholders})",
+            tuple(arquivo_ids),
+        )
+        return {
+            r["arquivo_id"]: bytes(r["conteudo"])
+            for r in rows
+            if r["conteudo"] is not None
+        }
 
     @db_op("write")
     def update_arquivo_conteudo(self, arquivo_id: int, conteudo: bytes) -> bool:

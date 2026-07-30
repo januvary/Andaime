@@ -435,14 +435,18 @@ class RemessaSender(QObject):
     def _mark_lote_sent_and_finalize(self, lote_id: int) -> None:
         """Marca a remessa como enviada e cria a próxima/arquiva a anterior."""
         pendings = self._db.get_pending_sends("pending")
-        for ps in pendings:
-            if ps["lote_id"] != lote_id:
-                continue
-            for pid in ps["processo_ids"]:
-                self._db.update_processo_status(pid, Status.ENVIADO)
-            self._db.resolve_pending_send(ps["id"], "sent")
+        # Transição de status + resolução dos pendentes + sent_at da remessa
+        # em uma única transação: atômica e com um só commit (commits
+        # individuais são caros em shares de rede).
+        with self._db.transaction():
+            for ps in pendings:
+                if ps["lote_id"] != lote_id:
+                    continue
+                for pid in ps["processo_ids"]:
+                    self._db.update_processo_status(pid, Status.ENVIADO)
+                self._db.resolve_pending_send(ps["id"], "sent")
 
-        self._db.mark_lote_sent(lote_id)
+            self._db.mark_lote_sent(lote_id)
 
         from bap.utils.arquivo_storage import resolve_arquivos_root
         from bap.utils.remessa_service import ensure_next_open_lote
@@ -534,9 +538,16 @@ class RemessaSender(QObject):
     def scan_drs_messages(self) -> None:
         """Escaneia e-mails do Gmail em busca de menções a pacientes.
 
-        A varredura (rede + DB) roda no async runner; a contagem de
-        atualizações é atualizada na thread principal, antes e depois.
+        DESATIVADO temporariamente: a varredura (rede + fuzzy matching de
+        todos os pacientes contra cada corpo de e-mail) consome um núcleo
+        inteiro em PCs fracas, causando lag percebido mesmo "em repouso".
+        Reativar após melhorar o algoritmo (ver ``gmail_scanner``). O botão
+        "Atualizações" continua funcionando com os dados já gravados no banco.
         """
+        return
+
+    def _scan_drs_messages_disabled(self) -> None:
+        """Implementação original da varredura DRS (ver stub acima)."""
         if self._db is None or self._config is None:
             return
         self.atualizacoes_changed.emit()

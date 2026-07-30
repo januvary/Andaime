@@ -126,7 +126,7 @@ def main():
     from bap.ui_qt.main_window import MainWindow
     from PySide6.QtCore import QTimer
 
-    window = MainWindow()
+    window = MainWindow(app)
     if icon_path.exists():
         window.setWindowIcon(QIcon(str(icon_path)))
     window.show()

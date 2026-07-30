@@ -87,8 +87,38 @@ def merge_pdfs(conteudos: Iterable[Union[bytes, str, Path]], output_path: str) -
 # ---------------------------------------------------------------------------
 
 
+def _clamped_layout_fun(imgwidthpx, imgheightpx, ndpi):
+    """Layout padrão do img2pdf com as dimensões limitadas a 3–14400 pt.
+
+    O img2pdf aborta (via pikepdf) quando o DPI declarado — ou o tamanho em
+    pixels — produz uma página fora do limite do PDF (3–14400 unidades):
+    DPI absurdo (1, 9999), imagens minúsculas (ícones de poucos pixels) ou
+    gigantes (panoramas). Aqui a página é escalada uniformemente para caber,
+    preservando a proporção. Para imagens dentro do limite, o resultado é
+    idêntico ao layout padrão.
+    """
+    import img2pdf
+
+    pw, ph, iw, ih = img2pdf.default_layout_fun(imgwidthpx, imgheightpx, ndpi)
+    scale = 1.0
+    major = max(pw, ph)
+    if major > 14400.0:
+        scale = 14400.0 / major
+    minor = min(pw, ph) * scale
+    if 0 < minor < 3.0:
+        scale *= 3.0 / minor
+    if scale == 1.0:
+        return pw, ph, iw, ih
+    return pw * scale, ph * scale, iw * scale, ih * scale
+
+
 def image_to_pdf(source: Union[bytes, str, Path], filetype: str = "") -> bytes:
-    """Converte uma imagem em PDF de página única."""
+    """Converte uma imagem em PDF de página única.
+
+    Usa um layout que limita a página ao intervalo exigido pelo PDF
+    (3–14400 unidades): imagens com DPI corrompido ou dimensões extremas
+    são escaladas em vez de abortar a conversão.
+    """
     import img2pdf
 
     if isinstance(source, (str, Path)):
@@ -96,7 +126,7 @@ def image_to_pdf(source: Union[bytes, str, Path], filetype: str = "") -> bytes:
             raw = f.read()
     else:
         raw = source
-    return img2pdf.convert(raw)
+    return img2pdf.convert(raw, layout_fun=_clamped_layout_fun)
 
 
 # ---------------------------------------------------------------------------

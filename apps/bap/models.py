@@ -147,4 +147,9 @@ class GridItem:
         raw = self.raw_bytes(loader)
         if not raw:
             return None
-        return extract_page(raw, self.page or 0)
+        try:
+            return extract_page(raw, self.page or 0)
+        except Exception as e:
+            # Anexa o nome do arquivo: num lote de N arquivos, a mensagem
+            # crua não diz qual deles falhou.
+            raise ValueError(f"{self.display_name}: {e}") from e

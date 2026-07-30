@@ -43,7 +43,7 @@ def remessa_folder_relpath(lote_date: str, solicitacao: str) -> str:
     return f"REMESSAS/{year}/{mmdd}/{_tipo_folder(solicitacao)}"
 
 
-def build_processo_dir(
+def processo_dir_path(
     root: Path,
     lote_date: str,
     solicitacao: str,
@@ -51,6 +51,11 @@ def build_processo_dir(
     tipo: str,
     ciclo: int = 1,
 ) -> Path:
+    """Caminho da pasta do processo (puro — não cria nada em disco).
+
+    Chamadores que vão escrever devem garantir a existência da pasta
+    (``path.mkdir(parents=True, exist_ok=True)``) no momento da escrita.
+    """
     d = parse_date(lote_date)
     if d is None:
         year, mmdd = "0000", "00-00"
@@ -59,9 +64,7 @@ def build_processo_dir(
         mmdd = f"{d.month:02d}-{d.day:02d}"
 
     # PDFs ficam direto na pasta do tipo (sem subpasta por paciente).
-    d = root / year / mmdd / _tipo_folder(solicitacao)
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return root / year / mmdd / _tipo_folder(solicitacao)
 
 
 def merge_conteudos_to_pdf(conteudos: "Iterable[bytes]", output_path: str) -> str:

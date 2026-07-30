@@ -19,7 +19,7 @@ from bap.database.ss54_database import SS54Database
 from bap.models import Lote, Processo
 from bap.utils.arquivo_storage import (
     _safe_filename,
-    build_processo_dir,
+    processo_dir_path,
     compute_processo_sig,
     merge_conteudos_to_pdf,
     remessa_folder_relpath,
@@ -65,7 +65,7 @@ def _attachment_name(paciente_nome: str, tipo_label: str) -> str:
 def processo_pdf_path(root: Path, processo: Processo) -> Path:
     """Caminho determinístico do PDF combinado de um processo."""
     tipo_label = TIPO_LABELS.get(processo.tipo, processo.tipo or "")
-    folder = build_processo_dir(
+    folder = processo_dir_path(
         root,
         processo.lote_date or "",
         processo.solicitacao,
@@ -87,7 +87,7 @@ def ensure_processo_pdf(
 
     A assinatura deriva só de metadados (``compute_processo_sig``): decidir se
     o PDF combinado está atualizado **não lê nenhum BLOB**. Só ao regenerar os
-    BLOBs são lidos, uma vez, um por vez (pico de memória de um BLOB).
+    BLOBs são lidos, uma única vez, em batch (uma query para todos).
 
     Para processos arquivados, o PDF é a fonte de verdade; a verificação é
     apenas de existência do arquivo, já que os BLOBs foram removidos.
@@ -108,7 +108,10 @@ def ensure_processo_pdf(
         return str(dest), True
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    conteudos = (db.get_arquivo_conteudo(a.id) or b"" for a in arqs)
+    # Uma única query para todos os BLOBs (em vez de um round-trip por
+    # arquivo) — decisivo quando o banco está em share de rede.
+    conteudos_by_id = db.get_arquivos_conteudos([a.id for a in arqs])
+    conteudos = (conteudos_by_id.get(a.id) or b"" for a in arqs)
     merge_conteudos_to_pdf(conteudos, str(dest))
     db.set_processo_pdf_sig(processo.id, sig)
     return str(dest), True

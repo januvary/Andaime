@@ -35,8 +35,9 @@ from bap.utils.arquivo_storage import resolve_arquivos_root
 class MainWindow(QMainWindow):
     theme_changed = Signal()
 
-    def __init__(self):
+    def __init__(self, app_instance):
         super().__init__()
+        self._app = app_instance
         self.setWindowTitle("BAP — Bancada de Administração de Processos")
         self.resize(1280, 720)
         self.showMaximized()
@@ -98,9 +99,6 @@ class MainWindow(QMainWindow):
         sender.info.connect(self._info)
         sender.warn.connect(self._warn)
         sender.remessas_changed.connect(self._remessa_page.refresh)
-        sender.atualizacoes_changed.connect(
-            self._remessa_page.update_atulizacoes_count
-        )
 
         # Atalhos de backend (mantêm o código existente sem alteração).
         self._header = dp.header
@@ -235,13 +233,20 @@ class MainWindow(QMainWindow):
 
         from bap.utils.export_to_xlsx import export_processos_to_xlsx
 
-        try:
-            saved = export_processos_to_xlsx(self.db, path)
-        except Exception as e:  # pragma: no cover - defensivo
-            QMessageBox.warning(parent, "BAP", f"Falha ao exportar planilha:\n{e}")
-            return
+        self.set_status("Exportando planilha…", "status_warning")
 
-        QMessageBox.information(parent, "BAP", f"Planilha exportada:\n{saved}")
+        def _work():
+            return export_processos_to_xlsx(self.db, path)
+
+        def _done(saved):
+            self.set_status("")
+            QMessageBox.information(self, "BAP", f"Planilha exportada:\n{saved}")
+
+        def _error(e):
+            self.set_status("")
+            QMessageBox.warning(self, "BAP", f"Falha ao exportar planilha:\n{e}")
+
+        self._run_async(_work, on_done=_done, on_error=_error)
 
     def _revert_archive_migration(self, parent) -> None:
         """Remove os arquivos migrados de remessas anteriores a 15/07/2026.
@@ -318,8 +323,8 @@ class MainWindow(QMainWindow):
         )
 
     def init_backend(self):
-        self.config = ConfigManager()
-        self.db = SS54Database()
+        self.config = self._app.config
+        self.db = self._app.db
 
         from andaime.db_worker import DatabaseWorker
         from andaime.qt.db_runner import DbAsyncRunner
@@ -687,30 +692,34 @@ class MainWindow(QMainWindow):
         existing = {a.id: a for a in arqs}
         seen: set[int] = set()
 
-        for ordem, item in enumerate(items, start=1):
-            aid = item.arquivo_id
-            if aid is not None and aid in existing:
-                seen.add(aid)
-                existing_doc = existing[aid]
-                item_tipo = item.tipo_documento
-                if existing_doc.ordem != ordem or existing_doc.tipo_documento != item_tipo:
-                    self.db.update_arquivo(
-                        aid, ordem=ordem, tipo_documento=item_tipo,
-                    )
-                continue
-            original = item.display_name
-            arq = self.db.create_arquivo(
-                processo_id=processo_id,
-                tipo_documento=item.tipo_documento,
-                conteudo=None,
-                arquivo_original=original,
-                ordem=ordem,
-            )
-            item.arquivo_id = arq.id
+        # Metadados (criação/atualização/remoção de arquivos) em uma única
+        # transação: atômico e um só commit. A montagem do PDF fica fora —
+        # é I/O de disco e não deve segurar um write lock no banco.
+        with self.db.transaction():
+            for ordem, item in enumerate(items, start=1):
+                aid = item.arquivo_id
+                if aid is not None and aid in existing:
+                    seen.add(aid)
+                    existing_doc = existing[aid]
+                    item_tipo = item.tipo_documento
+                    if existing_doc.ordem != ordem or existing_doc.tipo_documento != item_tipo:
+                        self.db.update_arquivo(
+                            aid, ordem=ordem, tipo_documento=item_tipo,
+                        )
+                    continue
+                original = item.display_name
+                arq = self.db.create_arquivo(
+                    processo_id=processo_id,
+                    tipo_documento=item.tipo_documento,
+                    conteudo=None,
+                    arquivo_original=original,
+                    ordem=ordem,
+                )
+                item.arquivo_id = arq.id
 
-        for aid in existing:
-            if aid not in seen:
-                self.db.delete_arquivo(aid)
+            for aid in existing:
+                if aid not in seen:
+                    self.db.delete_arquivo(aid)
 
         root = resolve_arquivos_root(self.config.get_all())
         pdf_path = processo_pdf_path(root, fresh)
@@ -737,40 +746,43 @@ class MainWindow(QMainWindow):
         existing = {a.id: a for a in arqs}
         seen: set[int] = set()
 
-        for ordem, item in enumerate(items, start=1):
-            aid = item.arquivo_id
-            if aid is not None and aid in existing:
-                # Já salvo: atualiza ordem e tipo_documento se mudaram.
-                seen.add(aid)
-                existing_doc = existing[aid]
-                item_tipo = item.tipo_documento
-                if existing_doc.ordem != ordem or existing_doc.tipo_documento != item_tipo:
-                    self.db.update_arquivo(
-                        aid, ordem=ordem, tipo_documento=item_tipo,
-                    )
-                # Conteúdo pode ter mudado (ex.: rotação da página) —
-                # re-grava o BLOB para que o PDF exportado reflita isso.
-                if item.data is not None:
-                    self.db.update_arquivo_conteudo(aid, item.data)
-                continue
-            # Novo item: converte para PDF de página única e grava o BLOB.
-            conteudo = item.to_pdf_bytes()
-            original = item.display_name
-            arq = self.db.create_arquivo(
-                processo_id=processo_id,
-                tipo_documento=item.tipo_documento,
-                conteudo=conteudo,
-                arquivo_original=original,
-                ordem=ordem,
-            )
-            item.arquivo_id = arq.id
-            item.page = 0
-            item.data = None
-            item.path = None
+        # Toda a mutação de metadados + BLOBs em uma única transação:
+        # atômica e um só commit (commits individuais são caros em rede).
+        with self.db.transaction():
+            for ordem, item in enumerate(items, start=1):
+                aid = item.arquivo_id
+                if aid is not None and aid in existing:
+                    # Já salvo: atualiza ordem e tipo_documento se mudaram.
+                    seen.add(aid)
+                    existing_doc = existing[aid]
+                    item_tipo = item.tipo_documento
+                    if existing_doc.ordem != ordem or existing_doc.tipo_documento != item_tipo:
+                        self.db.update_arquivo(
+                            aid, ordem=ordem, tipo_documento=item_tipo,
+                        )
+                    # Conteúdo pode ter mudado (ex.: rotação da página) —
+                    # re-grava o BLOB para que o PDF exportado reflita isso.
+                    if item.data is not None:
+                        self.db.update_arquivo_conteudo(aid, item.data)
+                    continue
+                # Novo item: converte para PDF de página única e grava o BLOB.
+                conteudo = item.to_pdf_bytes()
+                original = item.display_name
+                arq = self.db.create_arquivo(
+                    processo_id=processo_id,
+                    tipo_documento=item.tipo_documento,
+                    conteudo=conteudo,
+                    arquivo_original=original,
+                    ordem=ordem,
+                )
+                item.arquivo_id = arq.id
+                item.page = 0
+                item.data = None
+                item.path = None
 
-        for aid in existing:
-            if aid not in seen:
-                self.db.delete_arquivo(aid)
+            for aid in existing:
+                if aid not in seen:
+                    self.db.delete_arquivo(aid)
 
     def _on_salvar_done(self, res: dict | None, is_update: bool) -> None:
         # Destrava a grade travada no início do Save (ver ``_on_salvar``).
