@@ -43,8 +43,9 @@ def _make_excel_styles():
 
     return {
         "main_font": Font(name="Tahoma", size=11),
-        "title1_font": Font(name="Tahoma", size=20),
-        "title2_font": Font(name="Tahoma", size=16),
+        "title1_font": Font(name="Tahoma", size=20, bold=True),
+        "title2_font": Font(name="Tahoma", size=16, bold=True),
+        "bold_header_font": Font(name="Tahoma", size=11, bold=True),
         "center": Alignment(horizontal="center", vertical="center"),
         "left_wrap": Alignment(horizontal="left", vertical="center", wrap_text=True),
         "thin_border": Border(
@@ -158,7 +159,7 @@ class ExcelExporter:
         date_str = malote.date or "unknown"
         try:
             dt = datetime.fromisoformat(date_str)
-            date_display = dt.strftime("%d/%m")
+            date_display = dt.strftime("%d/%m/%Y")
         except ValueError:
             date_display = date_str
 
@@ -172,10 +173,11 @@ class ExcelExporter:
         for tipo, tab_name in TIPO_LABELS.items():
             ws = wb.create_sheet(title=tab_name)
 
-            ws["A1"] = f"{self._get_usafa_name()} - {date_display}"
+            ws["A1"] = f"{self._get_usafa_name()}"
             ws.merge_cells("A1:B1")
-            ws["A2"] = TIPO_TITLES[tipo]
+            ws["A2"] = f"{TIPO_TITLES[tipo]} - {date_display}"
             ws.merge_cells("A2:B2")
+            ws.append(["PACIENTE", "ITENS"])
 
             tipo_registros = [r for r in registros if r.tipo == tipo]
             tipo_registros.sort(key=lambda r: r.paciente_name or "")
@@ -196,7 +198,8 @@ class ExcelExporter:
 
             _style_title_row(ws, 1, styles)
             _style_title_row(ws, 2, styles, "title2_font", 26, styles["fill_odd"])
-            _style_data_rows(ws, 3, styles)
+            _style_title_row(ws, 3, styles, "bold_header_font", 20, styles["fill_even"])
+            _style_data_rows(ws, 4, styles)
 
             _apply_page_setup(ws)
 
