@@ -32,5 +32,10 @@ def get_app_folder() -> str:
 
 def get_root_directory() -> Path:
     if _app_root is None:
-        raise RuntimeError("andaime.init() must be called before using get_root_directory()")
+        raise RuntimeError(
+            "andaime.init() must be called before using get_root_directory()"
+        )
     return _app_root
+
+
+from andaime.app import App
