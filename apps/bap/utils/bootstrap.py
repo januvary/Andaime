@@ -16,5 +16,5 @@ def ensure_initialized() -> None:
     Usado pelos entry points CLI standalone (import_remessas, export_to_xlsx).
     """
     if getattr(andaime, "_app_root", None) is None:
-        andaime.init("BAP", "BAP", Path(".").resolve())
+        andaime.init("BAP", "BAP", Path("..").resolve() / "SS 54")
     ConfigManager.init(SS54Config)

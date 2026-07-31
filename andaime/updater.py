@@ -252,10 +252,19 @@ def resolve_data_root(app_folder: str) -> Path:
     * If a network pointer exists **and** is reachable → ``<pointer>/<app_folder>``.
     * If a pointer exists but is unreachable → warn, fall back to install root.
     * No pointer → install root (standalone, silent).
+
+    **Note:** When ``SISTEMAS_DATA_ROOT`` env var is set (by the launcher),
+    we use it directly without appending ``app_folder`` since the launcher
+    creates a folder structure where exe and data are siblings.
     """
     shared = get_shared_root()
 
     if shared is not None:
+        # If shared root comes from SISTEMAS_DATA_ROOT env var, use it directly
+        # (launcher sets this to the folder containing exe, data will be sibling)
+        if os.environ.get("SISTEMAS_DATA_ROOT"):
+            return shared
+
         network_data = shared / app_folder
         if _is_path_reachable(shared):
             return network_data

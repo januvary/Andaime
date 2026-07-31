@@ -239,6 +239,12 @@ echo "[7/7] Creating GitHub release..."
 # Build release notes with runtime hash
 FULL_NOTES="${NOTES}
 
+## Instalação
+
+1. Baixe \`$(basename "$LAUNCHER_EXE")\`
+2. Execute-o para instalar e iniciar automaticamente
+
+---
 Runtime: ${RUNTIME_HASH}"
 
 gh release create "$TAG" \

@@ -34,6 +34,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
+#include <sys/stat.h>
 
 #ifdef APP_REPO
 #include <wininet.h>
@@ -62,6 +64,65 @@ write_file(const char *path, const char *content)
     if (!f) return -1;
     fputs(content, f);
     fclose(f);
+    return 0;
+}
+
+/* Debug logging. Writes to %LOCALAPPDATA%\SISTEMAS\launcher.log so we can
+ * diagnose failures on real Windows machines without a debugger. */
+static char _log_path[MAX_PATH * 2] = "";
+
+static void
+log_init(const char *localAppData)
+{
+    if (_log_path[0]) return;
+    snprintf(_log_path, sizeof(_log_path),
+             "%s\\SISTEMAS\\launcher.log", localAppData);
+}
+
+static void
+log_message(const char *fmt, ...)
+{
+    if (!_log_path[0]) {
+        char lad[MAX_PATH];
+        DWORD len = GetEnvironmentVariableA("LOCALAPPDATA", lad, sizeof(lad));
+        if (len == 0 || len >= sizeof(lad)) return;
+        log_init(lad);
+    }
+
+    FILE *f = fopen(_log_path, "a");
+    if (!f) return;
+
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d] ",
+            st.wYear, st.wMonth, st.wDay,
+            st.wHour, st.wMinute, st.wSecond);
+
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(f, fmt, args);
+    va_end(args);
+
+    fprintf(f, "\n");
+    fclose(f);
+}
+
+/* Recursively create a directory tree (like mkdir -p). */
+static int
+mkdir_recursive(char *path)
+{
+    char *p = path;
+    if (p[1] == ':' && p[2] == '\\') p += 3;  /* skip C:\ */
+
+    for (; *p; ++p) {
+        if (*p == '\\' || *p == '/') {
+            char sep = *p;
+            *p = '\0';
+            CreateDirectoryA(path, NULL);
+            *p = sep;
+        }
+    }
+    CreateDirectoryA(path, NULL);
     return 0;
 }
 
@@ -176,6 +237,80 @@ run_and_pump(HWND hdlg, const char *cmd)
     return exitCode;
 }
 
+#include "miniz.h"
+
+/* Extract a .zip file using the embedded miniz library. Creates directories
+ * as needed and skips entries with path-traversal components. Returns 0 on
+ * success, non-zero on failure. Errors are logged to launcher.log. */
+static int
+extract_miniz(const char *zipPath, const char *destPath)
+{
+    mz_zip_archive zip;
+    mz_zip_zero_struct(&zip);
+
+    if (!mz_zip_reader_init_file(&zip, zipPath, 0)) {
+        log_message("miniz: failed to open zip: %s", zipPath);
+        return 1;
+    }
+
+    int fileCount = (int)mz_zip_reader_get_num_files(&zip);
+    log_message("miniz: %d entries in %s", fileCount, zipPath);
+
+    int errors = 0;
+    for (int i = 0; i < fileCount; i++) {
+        mz_zip_archive_file_stat stat;
+        if (!mz_zip_reader_file_stat(&zip, i, &stat)) {
+            log_message("miniz: failed to stat entry %d", i);
+            errors++;
+            continue;
+        }
+
+        /* Reject path traversal. */
+        if (strstr(stat.m_filename, "..")) {
+            log_message("miniz: skipping suspicious path: %s", stat.m_filename);
+            continue;
+        }
+
+        /* Build output path: destPath + \ + filename. */
+        char outPath[MAX_PATH * 4];
+        snprintf(outPath, sizeof(outPath), "%s\\%s", destPath, stat.m_filename);
+        for (char *p = outPath; *p; ++p) {
+            if (*p == '/') *p = '\\';
+        }
+
+        if (stat.m_is_directory) {
+            mkdir_recursive(outPath);
+            continue;
+        }
+
+        /* Ensure parent directory exists. */
+        char parent[MAX_PATH * 4];
+        strncpy(parent, outPath, sizeof(parent) - 1);
+        parent[sizeof(parent) - 1] = '\0';
+        char *lastSlash = strrchr(parent, '\\');
+        if (lastSlash) {
+            *lastSlash = '\0';
+            mkdir_recursive(parent);
+        }
+
+        if (!mz_zip_reader_extract_to_file(&zip, i, outPath, 0)) {
+            log_message("miniz: failed to extract: %s", stat.m_filename);
+            errors++;
+            continue;
+        }
+    }
+
+    mz_zip_reader_end(&zip);
+
+    if (errors > 0) {
+        log_message("miniz: extraction finished with %d error(s)", errors);
+        return 1;
+    }
+
+    log_message("miniz: extraction complete");
+    return 0;
+}
+
 #ifdef APP_REPO
 /* --- GitHub download (standalone mode) --- */
 
@@ -189,11 +324,19 @@ run_and_pump(HWND hdlg, const char *cmd)
 static int
 http_download(const char *url, const char *destPath, HWND hdlg)
 {
+    log_message("http_download: url=%s dest=%s", url, destPath);
+
+    /* Use an empty agent in InternetOpenA because we set the real User-Agent
+     * header explicitly below. Some servers reject duplicate User-Agent
+     * headers or ignore the agent from InternetOpenA. */
     HINTERNET hInternet = InternetOpenA(
-        "SISTEMAS-Launcher",
+        "",
         INTERNET_OPEN_TYPE_PRECONFIG,
         NULL, NULL, 0);
-    if (!hInternet) return -1;
+    if (!hInternet) {
+        log_message("InternetOpenA failed: %lu", GetLastError());
+        return -1;
+    }
 
     /* Parse URL into host, port, path, scheme. */
     URL_COMPONENTSA uc;
@@ -214,6 +357,7 @@ http_download(const char *url, const char *destPath, HWND hdlg)
     uc.dwExtraInfoLength = sizeof(extra);
 
     if (!InternetCrackUrlA(url, 0, ICU_DECODE, &uc)) {
+        log_message("InternetCrackUrlA failed: %lu", GetLastError());
         InternetCloseHandle(hInternet);
         return -1;
     }
@@ -225,10 +369,14 @@ http_download(const char *url, const char *destPath, HWND hdlg)
                                                       : INTERNET_DEFAULT_HTTP_PORT;
     }
 
+    log_message("Parsed URL: scheme=%s host=%s port=%d path=%s",
+                scheme, host, (int)port, path);
+
     HINTERNET hConnect = InternetConnectA(
         hInternet, host, port, NULL, NULL,
         INTERNET_SERVICE_HTTP, 0, 0);
     if (!hConnect) {
+        log_message("InternetConnectA failed: %lu", GetLastError());
         InternetCloseHandle(hInternet);
         return -1;
     }
@@ -237,7 +385,9 @@ http_download(const char *url, const char *destPath, HWND hdlg)
     char fullPath[sizeof(path) + sizeof(extra)];
     snprintf(fullPath, sizeof(fullPath), "%s%s", path, extra);
 
-    /* Request flags: reload, no cache, secure (for HTTPS), follow redirects. */
+    /* Request flags: reload, no cache, secure (for HTTPS), follow redirects.
+     * We do NOT set INTERNET_FLAG_NO_AUTO_REDIRECT so WinINet follows 302
+     * redirects (needed for GitHub asset downloads). */
     DWORD flags = INTERNET_FLAG_RELOAD
                 | INTERNET_FLAG_NO_CACHE_WRITE
                 | INTERNET_FLAG_NO_COOKIES;
@@ -248,6 +398,7 @@ http_download(const char *url, const char *destPath, HWND hdlg)
     HINTERNET hRequest = HttpOpenRequestA(
         hConnect, "GET", fullPath, NULL, NULL, NULL, flags, 0);
     if (!hRequest) {
+        log_message("HttpOpenRequestA failed: %lu", GetLastError());
         InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
         return -1;
@@ -259,27 +410,46 @@ http_download(const char *url, const char *destPath, HWND hdlg)
         "Accept: application/vnd.github+json\r\n";
 
     if (!HttpSendRequestA(hRequest, headers, (DWORD)-1, NULL, 0)) {
+        log_message("HttpSendRequestA failed: %lu", GetLastError());
         InternetCloseHandle(hRequest);
         InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
         return -1;
     }
 
-    /* Check HTTP status. WinINet follows 30x redirects automatically
-     * unless INTERNET_FLAG_NO_AUTO_REDIRECT is set. */
-    DWORD statusCode = 0;
-    DWORD statusLen = sizeof(statusCode);
+    log_message("HttpSendRequestA succeeded");
+
     DWORD idx = 0;
+
+    /* Check HTTP status. Query as a string to avoid WinINet quirks
+     * with HTTP_QUERY_FLAG_NUMBER. The string may contain a reason
+     * phrase (e.g. "200 OK"), so we parse only the leading digits. */
+    char statusStr[64] = "";
+    DWORD statusLen = sizeof(statusStr);
+    idx = 0;
     if (!HttpQueryInfoA(hRequest,
-                        HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
-                        &statusCode, &statusLen, &idx)) {
+                        HTTP_QUERY_STATUS_CODE,
+                        statusStr, &statusLen, &idx)) {
+        log_message("HttpQueryInfoA(STATUS_CODE) failed: %lu", GetLastError());
         InternetCloseHandle(hRequest);
         InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
         return -1;
     }
+
+    /* Robust parse: skip non-digits, then read digits. */
+    int statusCode = 0;
+    const char *p = statusStr;
+    while (*p && !isdigit((unsigned char)*p)) p++;
+    while (*p && isdigit((unsigned char)*p)) {
+        statusCode = statusCode * 10 + (*p - '0');
+        p++;
+    }
+
+    log_message("HTTP status: '%s' parsed as %d", statusStr, statusCode);
 
     if (statusCode < 200 || statusCode >= 300) {
+        log_message("HTTP status not success: %d", statusCode);
         InternetCloseHandle(hRequest);
         InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
@@ -288,11 +458,15 @@ http_download(const char *url, const char *destPath, HWND hdlg)
 
     /* Query content length for progress. */
     DWORD contentLength = 0;
-    DWORD bufLen = sizeof(contentLength);
+    char contentLenStr[32] = "";
+    DWORD bufLen = sizeof(contentLenStr);
     idx = 0;
-    HttpQueryInfoA(hRequest,
-                   HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER,
-                   &contentLength, &bufLen, &idx);
+    if (HttpQueryInfoA(hRequest,
+                       HTTP_QUERY_CONTENT_LENGTH,
+                       contentLenStr, &bufLen, &idx)) {
+        contentLength = (DWORD)atoi(contentLenStr);
+        log_message("Content-Length: %lu", contentLength);
+    }
 
     /* Switch progress bar from marquee to determinate. */
     HWND hBar = hdlg ? GetDlgItem(hdlg, IDC_PROGRESS) : NULL;
@@ -303,6 +477,7 @@ http_download(const char *url, const char *destPath, HWND hdlg)
 
     FILE *fp = fopen(destPath, "wb");
     if (!fp) {
+        log_message("fopen failed for '%s': errno=%d", destPath, errno);
         InternetCloseHandle(hRequest);
         InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
@@ -341,6 +516,8 @@ http_download(const char *url, const char *destPath, HWND hdlg)
     InternetCloseHandle(hRequest);
     InternetCloseHandle(hConnect);
     InternetCloseHandle(hInternet);
+
+    log_message("Download complete: %lu bytes, ok=%d", totalRead, ok);
     return ok ? 0 : -1;
 }
 
@@ -549,6 +726,102 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
         return 1;
     }
 
+    /* Initialize logging so we can diagnose Windows-specific failures. */
+    log_init(lad);
+    log_message("Launcher started: %s", appName);
+
+    /* --- Create folder structure on first launch ---
+     * Desired structure (matches multi-app SISTEMAS):
+     * <APP_DISPLAY>/
+     * ├── <app>.exe
+     * └── <app>/
+     *     └── data/
+     *
+     * Example: RAC/
+     *          ├── rac.exe
+     *          └── rac/
+     *              └── data/
+     *
+     * Check if exe is already in the right structure by verifying
+     * the directory name matches APP_DISPLAY.
+     */
+
+    /* Get the directory name (the folder containing the exe) */
+    char dirName[MAX_PATH];
+    char *slash = strrchr(exeDir, '\\');
+    if (slash) {
+        /* Skip the trailing backslash */
+        if (slash > exeDir) slash--;
+        char *start = slash;
+        while (start > exeDir && start[-1] != '\\' && start[-1] != '/') start--;
+        strncpy(dirName, start, slash - start + 1);
+        dirName[slash - start + 1] = '\0';
+    } else {
+        dirName[0] = '\0';
+    }
+
+    /* Check if directory name matches APP_DISPLAY (we're in the right structure) */
+    int alreadyReorganized = (dirName[0] && _stricmp(dirName, displayName) == 0);
+
+    if (!alreadyReorganized) {
+        /* First launch: create structure and move exe */
+        char appFolder[MAX_PATH * 2];
+        snprintf(appFolder, sizeof(appFolder), "%s%s", exeDir, displayName);
+
+        char exeNewPath[MAX_PATH * 2];
+        snprintf(exeNewPath, sizeof(exeNewPath), "%s\\%s.exe", appFolder, appName);
+
+        char dataFolder[MAX_PATH * 2];
+        snprintf(dataFolder, sizeof(dataFolder), "%s\\%s", appFolder, appName);
+
+        char marker[MAX_PATH * 2];
+        snprintf(marker, sizeof(marker), "%s\\.folder_created", appFolder);
+
+        /* Check if we already created the structure but haven't relaunched yet */
+        struct _stat st;
+        if (_stat(marker, &st) != 0) {
+            log_message("First launch: creating folder structure %s", appFolder);
+            mkdir_recursive(appFolder);
+            mkdir_recursive(dataFolder);
+
+            /* Copy exe to new location (can't move running exe) */
+            if (CopyFileA(exePath, exeNewPath, FALSE)) {
+                log_message("Copied exe to %s", exeNewPath);
+                /* Create marker so we don't do this again */
+                FILE *f = fopen(marker, "w");
+                if (f) fclose(f);
+                /* Delete old exe on next reboot */
+                MoveFileExA(exePath, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
+
+                /* Relaunch from new location */
+                STARTUPINFOA si;
+                PROCESS_INFORMATION pi;
+                ZeroMemory(&si, sizeof(si));
+                si.cb = sizeof(si);
+                ZeroMemory(&pi, sizeof(pi));
+
+                if (CreateProcessA(exeNewPath, NULL, NULL, NULL, FALSE,
+                                  0, NULL, appFolder, &si, &pi)) {
+                    CloseHandle(pi.hThread);
+                    CloseHandle(pi.hProcess);
+                    log_message("Relaunched from %s", exeNewPath);
+                    ReleaseMutex(hMutex);
+                    return 0;
+                }
+            } else {
+                log_message("Failed to copy exe: %lu", GetLastError());
+            }
+        } else {
+            /* Marker exists, just delete the old exe and update exeDir */
+            log_message("Structure already created, cleaning up");
+            MoveFileExA(exePath, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
+        }
+
+        /* Update exeDir to point to the new location */
+        strncpy(exeDir, appFolder, sizeof(exeDir) - 1);
+        exeDir[sizeof(exeDir) - 1] = '\0';
+    }
+
     /* --- Local install path --- */
     char localRoot[MAX_PATH * 2];
 
@@ -576,13 +849,13 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
          * Standalone mode: download from GitHub Releases.
          * ============================================================ */
 
-        /* Create local directory. */
-        CreateDirectoryA(localRoot, NULL);
+        /* Create local directory (recursively, like mkdir -p). */
+        mkdir_recursive(localRoot);
 
         /* Temp directory for download. */
         char tempDir[MAX_PATH * 2];
         snprintf(tempDir, sizeof(tempDir), "%s\\_download", localRoot);
-        CreateDirectoryA(tempDir, NULL);
+        mkdir_recursive(tempDir);
 
         /* Step 1: Download release JSON from GitHub API. */
         char jsonPath[MAX_PATH * 2];
@@ -594,7 +867,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 
         char progressTitle[256];
         snprintf(progressTitle, sizeof(progressTitle),
-                 "%s — Conectando...", displayName);
+                 "%s - Conectando...", displayName);
         HWND hdlg = show_progress(progressTitle);
 
         if (http_download(apiUrl, jsonPath, NULL) != 0) {
@@ -642,7 +915,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 
         /* Step 3: Download payload.zip. */
         snprintf(progressTitle, sizeof(progressTitle),
-                 "%s — Baixando %s...", displayName, tag[0] ? tag : "update");
+                 "%s - Baixando %s...", displayName, tag[0] ? tag : "update");
         SetWindowTextA(hdlg, progressTitle);
 
         char zipPath[MAX_PATH * 2];
@@ -658,9 +931,9 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             return 1;
         }
 
-        /* Step 4: Extract to localRoot. */
+        /* Step 4: Extract to localRoot using the embedded miniz extractor. */
         snprintf(progressTitle, sizeof(progressTitle),
-                 "%s — Instalando...", displayName);
+                 "%s - Instalando...", displayName);
         SetWindowTextA(hdlg, progressTitle);
 
         /* Reset progress bar to marquee for extraction. */
@@ -669,24 +942,18 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             SendMessageA(hBar, PBM_SETMARQUEE, TRUE, 0);
         }
 
-        char tarCmd[MAX_PATH * 8];
-        snprintf(tarCmd, sizeof(tarCmd),
-                 "cmd.exe /c tar -xf \"%s\" -C \"%s\"",
-                 zipPath, localRoot);
-
-        DWORD tarExit = run_and_pump(hdlg, tarCmd);
-
-        if (hdlg) DestroyWindow(hdlg);
-
-        if (tarExit != 0) {
+        if (extract_miniz(zipPath, localRoot) != 0) {
+            if (hdlg) DestroyWindow(hdlg);
             char msg[512];
             snprintf(msg, sizeof(msg),
-                     "Installation failed (tar exit code %lu).\n"
-                     "Source: %s", tarExit, zipPath);
+                     "Installation failed.\n"
+                     "See details in: %%LOCALAPPDATA%%\\SISTEMAS\\launcher.log");
             MessageBoxA(NULL, msg, displayName, MB_ICONERROR | MB_OK);
             ReleaseMutex(hMutex);
             return 1;
         }
+
+        if (hdlg) DestroyWindow(hdlg);
 
         /* Clean up temp directory. */
         char cleanupCmd[MAX_PATH * 4];
@@ -706,9 +973,10 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             return 1;
         }
 
-#else  /* !APP_REPO — Legacy SISTEMAS mode */
+#else  /* !APP_REPO — Portable/Legacy SISTEMAS mode */
         /* ============================================================
-         * Legacy: extract dist.zip from the launcher's directory.
+         * Portable/Legacy mode: extract dist.zip from launcher's directory
+         * to shared %LOCALAPPDATA%\SISTEMAS location.
          * ============================================================ */
 
         char distZip[MAX_PATH * 2];
@@ -720,46 +988,46 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             char msg[512];
             snprintf(msg, sizeof(msg),
                      "SISTEMAS needs setup but dist.zip was not found:\n%s\n\n"
-                     "Please contact your administrator.", distZip);
-            MessageBoxA(NULL, msg, displayName, MB_ICONERROR | MB_OK);
+                     "Please copy dist.zip and VERSION to the SISTEMAS folder.", distZip);
+            MessageBoxA(NULL, msg, "SISTEMAS", MB_ICONERROR | MB_OK);
             ReleaseMutex(hMutex);
             return 1;
         }
 
-        /* Remove old installation to avoid stale-file conflicts. */
+        /* Remove old shared installation to avoid conflicts. */
         char delCmd[MAX_PATH * 4];
         snprintf(delCmd, sizeof(delCmd),
                  "cmd.exe /c rd /s /q \"%s\" 2>nul", localRoot);
         system(delCmd);
 
-        /* Extract dist.zip (creates SISTEMAS\ subtree in %LOCALAPPDATA%). */
-        char tarCmd[MAX_PATH * 8];
-        snprintf(tarCmd, sizeof(tarCmd),
-                 "cmd.exe /c tar -xf \"%s\" -C \"%s\"",
-                 distZip, lad);
+        /* Extract dist.zip to shared SISTEMAS location. */
+        char progressTitle[256];
+        snprintf(progressTitle, sizeof(progressTitle), "SISTEMAS - Instalando...");
+        HWND hdlg = show_progress(progressTitle);
 
-        HWND hdlg = show_progress(NULL);
-        DWORD tarExit = run_and_pump(hdlg, tarCmd);
-        if (hdlg) DestroyWindow(hdlg);
-
-        if (tarExit != 0) {
+        if (extract_miniz(distZip, localRoot) != 0) {
+            if (hdlg) DestroyWindow(hdlg);
             char msg[512];
             snprintf(msg, sizeof(msg),
-                     "Installation failed (tar exit code %lu).\n"
-                     "Source: %s", tarExit, distZip);
-            MessageBoxA(NULL, msg, displayName, MB_ICONERROR | MB_OK);
+                     "Installation failed.\n"
+                     "See details in: %%LOCALAPPDATA%%\\SISTEMAS\\launcher.log");
+            MessageBoxA(NULL, msg, "SISTEMAS", MB_ICONERROR | MB_OK);
             ReleaseMutex(hMutex);
             return 1;
         }
 
-        /* Verify pythonw.exe. */
+        if (hdlg) DestroyWindow(hdlg);
+
+        log_message("Portable mode: extracted to shared SISTEMAS at %s", localRoot);
+
+        /* Verify pythonw.exe appeared. */
         attr = GetFileAttributesA(localPython);
         if (attr == INVALID_FILE_ATTRIBUTES ||
             (attr & FILE_ATTRIBUTE_DIRECTORY)) {
             MessageBoxA(NULL,
                         "Installation completed but pythonw.exe not found.\n"
                         "The dist.zip may be corrupted.",
-                        displayName, MB_ICONERROR | MB_OK);
+                        "SISTEMAS", MB_ICONERROR | MB_OK);
             ReleaseMutex(hMutex);
             return 1;
         }
@@ -767,7 +1035,11 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     }
 
     /* --- Tell the app where the network data lives --- */
-    SetEnvironmentVariableA("SISTEMAS_DATA_ROOT", exeDir);
+    /* SISTEMAS_DATA_ROOT is set to the data folder (e.g., RAC/rac/).
+     * This matches the multi-app SISTEMAS format. */
+    char sharedDataFolder[MAX_PATH * 2];
+    snprintf(sharedDataFolder, sizeof(sharedDataFolder), "%s\\%s", exeDir, appName);
+    SetEnvironmentVariableA("SISTEMAS_DATA_ROOT", sharedDataFolder);
 
     /* --- Launch pythonw.exe -m <appName> --- */
     char workDir[MAX_PATH * 2];
@@ -781,26 +1053,77 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
         snprintf(cmdLine, sizeof(cmdLine),
                  "\"%s\" -m %s", localPython, appName);
 
+    log_message("Launching: %s cwd=%s", cmdLine, workDir);
+
+    /* Capture stdout/stderr to a log file so pythonw.exe crashes are visible.
+     * pythonw.exe is windowless, so without this any startup error is lost. */
+    char appLogPath[MAX_PATH * 2];
+    snprintf(appLogPath, sizeof(appLogPath), "%s\\app.log", localRoot);
+    HANDLE hAppLog = CreateFileA(appLogPath,
+                                 GENERIC_WRITE,
+                                 FILE_SHARE_READ,
+                                 NULL,
+                                 CREATE_ALWAYS,
+                                 FILE_ATTRIBUTE_NORMAL,
+                                 NULL);
+
+    HANDLE hStdIn = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ,
+                                NULL, OPEN_EXISTING, 0, NULL);
+
     STARTUPINFOA si;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
+    if (hAppLog != INVALID_HANDLE_VALUE && hStdIn != INVALID_HANDLE_VALUE) {
+        si.dwFlags = STARTF_USESTDHANDLES;
+        si.hStdInput = hStdIn;
+        si.hStdOutput = hAppLog;
+        si.hStdError = hAppLog;
+    }
 
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
 
-    if (!CreateProcessA(localPython, cmdLine, NULL, NULL, FALSE,
-                        0, NULL, workDir, &si, &pi)) {
+    if (!CreateProcessA(localPython, cmdLine, NULL, NULL, TRUE,
+                          0, NULL, workDir, &si, &pi)) {
+        log_message("CreateProcessA failed: %lu", GetLastError());
         char msg[512];
         snprintf(msg, sizeof(msg),
                  "Failed to start %s.\n\nPython: %s\nError: %lu",
                  appName, localPython, GetLastError());
         MessageBoxA(NULL, msg, displayName, MB_ICONERROR | MB_OK);
+        if (hAppLog != INVALID_HANDLE_VALUE) CloseHandle(hAppLog);
+        if (hStdIn != INVALID_HANDLE_VALUE) CloseHandle(hStdIn);
         ReleaseMutex(hMutex);
         return 1;
     }
 
+    log_message("Process started, pid unknown (handle=%p)", pi.hProcess);
+
+    /* Give the app a moment to start; if it exits quickly with an error,
+     * report it. Otherwise assume it is running normally. */
+    DWORD waitResult = WaitForSingleObject(pi.hProcess, 2000);
+    if (waitResult == WAIT_OBJECT_0) {
+        DWORD exitCode = 0;
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+        log_message("Process exited quickly with code: %lu", exitCode);
+
+        if (exitCode != 0) {
+            char msg[1024];
+            snprintf(msg, sizeof(msg),
+                     "%s closed unexpectedly (exit code %lu).\n\n"
+                     "Details may be in:\n%s",
+                     displayName, exitCode, appLogPath);
+            MessageBoxA(NULL, msg, displayName, MB_ICONERROR | MB_OK);
+        }
+    } else {
+        log_message("Process still running after 2s, launcher exiting");
+    }
+
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
+    if (hAppLog != INVALID_HANDLE_VALUE) CloseHandle(hAppLog);
+    if (hStdIn != INVALID_HANDLE_VALUE) CloseHandle(hStdIn);
+
     ReleaseMutex(hMutex);
     return 0;
 }

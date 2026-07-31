@@ -350,7 +350,6 @@ class MainWindow(QMainWindow):
         self._header.set_descricoes(self.db.get_distinct_descricoes())
         self._remessa_page.refresh(force=False)
         self._sender.scan_drs_messages()
-        self._remessa_page.update_atulizacoes_count()
         self.set_status("")
 
     def _init_remessa_with(self, active) -> None:
