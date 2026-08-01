@@ -610,8 +610,10 @@ json_find_asset_url(const char *json, const char *substr,
         p = strstr(p, "\"browser_download_url\"");
         if (!p) return -1;
 
-        /* Backtrack to find the asset name */
-        const char *nameStart = p - 512;
+        /* Backtrack to find the asset name.
+         * GitHub's JSON has a large uploader object between "name" and
+         * "browser_download_url", so we need a generous backtrack window. */
+        const char *nameStart = p - 2048;
         if (nameStart < json) nameStart = json;
 
         /* Look backwards for "name": */
