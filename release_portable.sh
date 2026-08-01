@@ -72,9 +72,22 @@ if [ ! -f "$SISTEMAS/dist.zip" ] || [ ! -f "$SISTEMAS/VERSION" ]; then
     exit 1
 fi
 
-echo "[3/4] Creating GitHub release on $REPO..."
+echo "[3/4] Creating release assets..."
+
+# Rename dist.zip → {TAG}-payload.zip (updater matches "payload" in name)
+PAYLOAD_ASSET="/tmp/${TAG}-payload.zip"
+cp "$SISTEMAS/dist.zip" "$PAYLOAD_ASSET"
+
+# Create app-update.zip (apps/ + VERSION only, no python/)
+APP_UPDATE_ASSET="/tmp/${TAG}-app-update.zip"
+cd "$SISTEMAS"
+zip -r "$APP_UPDATE_ASSET" "apps/" "VERSION" -q \
+    -x "apps/*/__pycache__"
+
+echo "[4/4] Creating GitHub release on $REPO..."
 gh release create "$TAG" \
-    "$SISTEMAS/dist.zip" \
+    "$PAYLOAD_ASSET" \
+    "$APP_UPDATE_ASSET" \
     "$SISTEMAS/VERSION" \
     --repo "$REPO" \
     --title "$TAG" \
