@@ -327,10 +327,10 @@ def upload_drive_file(
     return file_id, web_link
 
 
-def share_drive_file_with(creds, file_id: str, email: str) -> None:
-    """Concede acesso de leitura (reader) ao ``email`` para o arquivo do Drive."""
+def share_drive_file_with(creds, file_id: str, _email: str = "") -> None:
+    """Compartilha o arquivo do Drive com qualquer pessoa que tenha o link."""
     service = drive_service_from_credentials(creds)
-    permission = {"type": "user", "role": "reader", "emailAddress": email}
+    permission = {"type": "anyone", "role": "reader"}
     try:
         service.permissions().create(
             fileId=file_id,

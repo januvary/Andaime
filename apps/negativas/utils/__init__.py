@@ -8,30 +8,24 @@ from pathlib import Path
 
 from negativas.constants import MESES_PT, BRASAO_SVG_PATH
 
+_CID_PATTERN = re.compile(r"[A-Z]\d{2}\.\d{1,2}")
+
 
 def parse_cids(cids_text: str) -> List[str]:
     """Extrai códigos CID de texto
-    
+
     Args:
         cids_text: Texto contendo códigos CID
-        
+
     Returns:
         Lista ordenada de códigos CID únicos encontrados
     """
     if not cids_text:
         return []
-    
-    patterns = [
-        r'[A-Z]\d{2}\.\d',      # CID como M05.0
-        r'[A-Z]\d{2}\.\d{1,2}',  # CID com 1-2 dígitos após ponto
-    ]
-    
-    cids = []
-    for pattern in patterns:
-        matches = re.findall(pattern, cids_text)
-        cids.extend(matches)
-    
-    return sorted(set(cids))  # Remove duplicatas e ordena
+
+    matches = _CID_PATTERN.findall(cids_text)
+
+    return sorted(set(matches))
 
 
 def data_por_extenso() -> str:
@@ -41,6 +35,7 @@ def data_por_extenso() -> str:
 
 
 _svg_cache: str | None = None
+
 
 def svg_base64() -> str:
     """Retorna o SVG do brasão em base64 (com cache)."""

@@ -40,13 +40,12 @@ def _start_update_check(window) -> None:
     from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QHBoxLayout, QPushButton
 
     from andaime.updater import UpdateCheckWorker, restart_app
-    from negativas import __version__
     from negativas.constants import UPDATE_REPO
 
     if not UPDATE_REPO:
         return
 
-    worker = UpdateCheckWorker(UPDATE_REPO, __version__, parent=window)
+    worker = UpdateCheckWorker(parent=window)
 
     def _on_downloaded(tag: str) -> None:
         dlg = QDialog(window)
@@ -80,10 +79,9 @@ def main() -> None:
     # Set AppUserModelID + register icon in registry BEFORE QApplication (Windows only).
     try:
         from andaime.win32 import register_taskbar_identity
+
         register_taskbar_identity(
-            "SISTEMAS.Negativas", 
-            "Negativas", 
-            _get_app_icon_path()
+            "SISTEMAS.Negativas", "Negativas", _get_app_icon_path()
         )
     except ImportError:
         # Not on Windows, skip
@@ -99,31 +97,32 @@ def main() -> None:
         db_cls=NegativasDatabase,
         root=get_shared_root(),
     )
-    
+
     setup_shutdown_handlers()
 
     # Configura o Qt
     qt_app = QApplication(sys.argv)
-    
+
     # Ícone da aplicação (taskbar + alt-tab)
     icon_path = _get_app_icon_path()
     if icon_path.exists():
         qt_app.setWindowIcon(QIcon(str(icon_path)))
-    
+
     # Fonte padrão
     font = QFont("Segoe UI", 11)
     font.setStyleHint(QFont.StyleHint.SansSerif)
     qt_app.setFont(font)
-    
+
     # Dev: Ctrl+Alt+I abre o código-fonte do widget sob o cursor (var. DEV_INSPECTOR).
     from andaime.qt.dev_inspector import enable_if_env
+
     enable_if_env(qt_app)
-    
+
     # Cria a janela principal
     window = MainWindow(andaime_instance)
     if icon_path.exists():
         window.setWindowIcon(QIcon(str(icon_path)))
-    
+
     window.show()
 
     _start_update_check(window)

@@ -435,18 +435,14 @@ class RemessaSender(QObject):
     def _mark_lote_sent_and_finalize(self, lote_id: int) -> None:
         """Marca a remessa como enviada e cria a próxima/arquiva a anterior."""
         pendings = self._db.get_pending_sends("pending")
-        # Transição de status + resolução dos pendentes + sent_at da remessa
-        # em uma única transação: atômica e com um só commit (commits
-        # individuais são caros em shares de rede).
-        with self._db.transaction():
-            for ps in pendings:
-                if ps["lote_id"] != lote_id:
-                    continue
-                for pid in ps["processo_ids"]:
-                    self._db.update_processo_status(pid, Status.ENVIADO)
-                self._db.resolve_pending_send(ps["id"], "sent")
+        for ps in pendings:
+            if ps["lote_id"] != lote_id:
+                continue
+            for pid in ps["processo_ids"]:
+                self._db.update_processo_status(pid, Status.ENVIADO)
+            self._db.resolve_pending_send(ps["id"], "sent")
 
-            self._db.mark_lote_sent(lote_id)
+        self._db.mark_lote_sent(lote_id)
 
         from bap.utils.arquivo_storage import resolve_arquivos_root
         from bap.utils.remessa_service import ensure_next_open_lote
@@ -536,36 +532,10 @@ class RemessaSender(QObject):
         return
 
     def scan_drs_messages(self) -> None:
-        """Escaneia e-mails do Gmail em busca de menções a pacientes.
+        """Varredura de e-mails DRS foi desativada.
 
-        DESATIVADO temporariamente: a varredura (rede + fuzzy matching de
-        todos os pacientes contra cada corpo de e-mail) consome um núcleo
-        inteiro em PCs fracas, causando lag percebido mesmo "em repouso".
-        Reativar após melhorar o algoritmo (ver ``gmail_scanner``). O botão
-        "Atualizações" continua funcionando com os dados já gravados no banco.
+        Permanece como stub para compatibilidade com chamadores existentes
+        (``_goto_remessas``, ``_on_backend_loaded``).
         """
         return
-
-    def _scan_drs_messages_disabled(self) -> None:
-        """Implementação original da varredura DRS (ver stub acima)."""
-        if self._db is None or self._config is None:
-            return
-        self.atualizacoes_changed.emit()
-
-        def _work():
-            cfg = self._config.get_all()
-            from bap.utils.gmail_client import GmailError
-
-            try:
-                service = _gmail_service(cfg)
-            except GmailError:
-                return
-            from bap.utils.gmail_scanner import scan_drs_messages
-
-            scan_drs_messages(self._db, service)
-
-        def _done(_result):
-            self.atualizacoes_changed.emit()
-
-        self._run_async(_work, on_done=_done)
 

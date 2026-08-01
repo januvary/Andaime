@@ -19,9 +19,9 @@ echo.
 set /p "app=Escolha (1-4): "
 
 if "%app%"=="4" exit /b 0
-if "%app%"=="1" ( set "CMD=bap.exe"       & set "NAME=BAP"     )
-if "%app%"=="2" ( set "CMD=emissor.exe"   & set "NAME=Emissor" )
-if "%app%"=="3" ( set "CMD=rac.exe"       & set "NAME=RAC"     )
+if "%app%"=="1" ( set "CMD=BAP\bap.exe"       & set "APP=BAP"     & set "NAME=BAP"     )
+if "%app%"=="2" ( set "CMD=Emissor\emissor.exe" & set "APP=Emissor" & set "NAME=Emissor" )
+if "%app%"=="3" ( set "CMD=RAC\rac.exe"       & set "APP=RAC"     & set "NAME=RAC"     )
 if not defined CMD (
     echo   Escolha invalida.
     timeout /t 2 >nul
@@ -66,13 +66,14 @@ set "OUTPATH=%OUTDIR%\%NAME%.lnk"
 
 :: Pass paths via env vars to avoid quoting issues in PowerShell
 set "PS_TARGET=%DIR%\%CMD%"
+set "PS_WORKDIR=%DIR%\%APP%"
 set "PS_OUTPATH=%OUTPATH%"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ws = New-Object -ComObject WScript.Shell;" ^
   "$sc = $ws.CreateShortcut($env:PS_OUTPATH);" ^
   "$sc.TargetPath = $env:PS_TARGET;" ^
-  "$sc.WorkingDirectory = $env:DIR;" ^
+  "$sc.WorkingDirectory = $env:PS_WORKDIR;" ^
   "$sc.Description = 'SISTEMAS - %NAME%';" ^
   "$sc.Save();"
 

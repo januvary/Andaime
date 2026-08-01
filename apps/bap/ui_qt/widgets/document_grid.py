@@ -47,10 +47,6 @@ from bap.ui_qt.widgets.viewer_popup import (
 
 _ICON_DIR = Path(__file__).resolve().parent.parent / "img"
 
-# Cache de QIcons por (base, tema): evita reler os mesmos PNGs do disco a
-# cada tile criada. Invalidado implicitamente pela chave de tema.
-_ICON_CACHE: dict = {}
-
 
 def _icon_path(base: str) -> str:
     suffix = "-white" if get_theme() == "dark" else ""
@@ -58,15 +54,6 @@ def _icon_path(base: str) -> str:
     if png_path.exists():
         return str(png_path)
     return str(_ICON_DIR / f"{base}{suffix}.svg")
-
-
-def _tile_icon(base: str) -> QIcon:
-    key = (base, get_theme())
-    icon = _ICON_CACHE.get(key)
-    if icon is None:
-        icon = QIcon(_icon_path(base))
-        _ICON_CACHE[key] = icon
-    return icon
 
 
 class _Tile(QWidget):
@@ -120,10 +107,10 @@ class _Tile(QWidget):
         open_btn = QPushButton(self)
         rotate_btn = QPushButton(self)
         remove_btn = QPushButton(self)
-        copy_btn.setIcon(_tile_icon("copy-icon"))
-        open_btn.setIcon(_tile_icon("preview-icon"))
-        rotate_btn.setIcon(_tile_icon("rotate-icon"))
-        remove_btn.setIcon(_tile_icon("X-icon"))
+        copy_btn.setIcon(QIcon(_icon_path("copy-icon")))
+        open_btn.setIcon(QIcon(_icon_path("preview-icon")))
+        rotate_btn.setIcon(QIcon(_icon_path("rotate-icon")))
+        remove_btn.setIcon(QIcon(_icon_path("X-icon")))
 
         # Botões de ícone da tile: transparentes, com borda e padding zero
         # (para caber o glifo 16x16 em 26x22). Reaproveita as cores do tema.
@@ -469,10 +456,6 @@ class DocumentGrid(QWidget):
         self._items: list[GridItem] = []
         self._tiles: list[_Tile] = []
         self._drag_item: GridItem | None = None
-        # Índice-alvo do último reorder durante um drag: ``dragMoveEvent``
-        # dispara continuamente; sem este filtro cada evento refazia o layout
-        # inteiro da grade (O(N) por mouse-move).
-        self._last_drag_dst: int | None = None
         self._thumb_cache: dict = {}
         self._bytes_loader: "Callable[[GridItem], bytes | None] | None" = None
         self._doc_exclusions: set[str] = set()
@@ -527,6 +510,7 @@ class DocumentGrid(QWidget):
     def _setup_ui(self):
         self._apply_style()
         self.setAcceptDrops(True)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
 
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -614,26 +598,26 @@ class DocumentGrid(QWidget):
 
     def begin_drag(self, item: GridItem):
         self._drag_item = item
-        self._last_drag_dst = None
         self._apply_drag_styles()
 
     def end_drag(self):
         if self._drag_item is None:
             return
         self._drag_item = None
-        self._last_drag_dst = None
         self._apply_drag_styles()
 
     def drag_move_to(self, target_item: GridItem):
         if self._drag_item is None or target_item is self._drag_item:
             return
-        src = self._items.index(self._drag_item)
-        dst = self._items.index(target_item)
-        # Mouse ainda sobre a mesma célula-alvo: nada mudou, não relayout.
-        if dst == self._last_drag_dst:
-            return
-        self._last_drag_dst = dst
+        src = self._index_of(self._drag_item)
+        dst = self._index_of(target_item)
         self._move(src, dst)
+
+    def _index_of(self, item: GridItem) -> int:
+        for i, it in enumerate(self._items):
+            if it is item:
+                return i
+        return -1
 
     def _move(self, src: int, dst: int):
         if src == dst:
@@ -675,12 +659,12 @@ class DocumentGrid(QWidget):
         self._tiles = []
 
     def _append_tiles_incremental(self, items: list[GridItem], gen: int) -> int:
-        """Cria as tiles de ``items`` uma a uma, cedendo a UI em lotes.
+        """Cria as tiles de ``items`` uma a uma, com a UI livre entre passos.
 
-        A cada poucas tiles, ``processEvents`` mantém a janela responsiva e
-        pinta os placeholders (as miniaturas chegam depois, via thread pool).
-        Aborta se ``gen`` ficar obsoleto — i.e. outra carga (drop/set_items)
-        começou. Retorna quantas tiles foram efetivamente adicionadas.
+        Entre cada tile, ``processEvents`` mantém a janela responsiva e pinta
+        os placeholders (as miniaturas chegam depois, via thread pool). Aborta
+        se ``gen`` ficar obsoleto — i.e. outra carga (drop/set_items) começou.
+        Retorna quantas tiles foram efetivamente adicionadas.
 
         A tile nova é inserida diretamente na sua célula (sem refazer todo o
         layout a cada passo — evita custo O(N²) em grades grandes); apenas o
@@ -710,12 +694,8 @@ class DocumentGrid(QWidget):
                 pos = len(self._tiles) - 1
                 self._grid.addWidget(tile, pos // cols, pos % cols)
                 added += 1
-                # Cede a UI em lotes (não a cada tile): reduz o custo e a
-                # reentrância do processEvents mantendo a janela responsiva.
-                if added % 4 == 0:
-                    QApplication.processEvents()
-            if gen == self._load_gen:
                 QApplication.processEvents()
+            if gen == self._load_gen:
                 idx = len(self._tiles)
                 self._grid.addWidget(self._add_tile, idx // cols, idx % cols)
             return added
@@ -738,9 +718,6 @@ class DocumentGrid(QWidget):
     def _build_paths(self, paths: list[str]) -> None:
         from andaime.pdf import page_count
 
-        self._load_gen += 1
-        gen = self._load_gen
-        before = len(self._items)
         new_items: list[GridItem] = []
         for path in paths:
             suffix = Path(path).suffix.lower()
@@ -752,18 +729,21 @@ class DocumentGrid(QWidget):
                     new_items.append(GridItem(path=path, page=i))
             else:
                 new_items.append(GridItem(path=path, page=None))
+        self._add_new_items(new_items)
+
+    def _add_new_items(self, new_items: list[GridItem]) -> None:
         if not new_items:
             return
-
+        self._load_gen += 1
+        gen = self._load_gen
+        before = len(self._items)
         total = len(new_items)
         self.status_message.emit(
             f"Carregando {total} {'item' if total == 1 else 'itens'}…",
             "status_warning",
         )
-
         self._items.extend(new_items)
         self._append_tiles_incremental(new_items, gen)
-
         self._apply_drag_styles()
         added = len(self._items) - before
         if added:
@@ -772,6 +752,46 @@ class DocumentGrid(QWidget):
                 f"{added} {'item' if added == 1 else 'itens'} carregados.",
                 "status_success",
             )
+
+    def keyPressEvent(self, event):
+        if (
+            event.key() == Qt.Key.Key_V
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        ):
+            self._paste_from_clipboard()
+            return
+        super().keyPressEvent(event)
+
+    def _paste_from_clipboard(self) -> None:
+        if self.is_busy():
+            return
+        clipboard = QApplication.clipboard()
+        mime = clipboard.mimeData()
+        if mime.hasUrls():
+            paths = [
+                u.toLocalFile() for u in mime.urls()
+                if u.isLocalFile()
+            ]
+            if paths:
+                self._add_paths(paths)
+            return
+        if mime.hasImage():
+            image = clipboard.image()
+            if image.isNull():
+                return
+            import tempfile, os
+            fd, tmp_path = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
+            try:
+                image.save(tmp_path)
+                with open(tmp_path, "rb") as f:
+                    png_bytes = f.read()
+            finally:
+                os.unlink(tmp_path)
+            from bap.models import image_to_pdf_bytes
+            pdf_bytes = image_to_pdf_bytes(png_bytes, "png")
+            item = GridItem(data=pdf_bytes, page=0, arquivo_original="clipboard.png")
+            self._add_new_items([item])
 
     def _rebuild(self):
         self._clear_tiles()
@@ -911,9 +931,8 @@ class DocumentGrid(QWidget):
         popup.exec()
 
     def _remove_item(self, item: GridItem):
-        try:
-            idx = self._items.index(item)
-        except ValueError:
+        idx = self._index_of(item)
+        if idx < 0:
             return
         self._items.pop(idx)
         tile = self._tiles.pop(idx)

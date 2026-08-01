@@ -12,8 +12,9 @@ from andaime.paths import resolve_db_path
 
 from negativas.models import Medicamento, ModeloTexto
 
-# Caminho para o arquivo de modelos
+# Caminhos para os arquivos de dados
 _MODELOS_PATH = Path(__file__).resolve().parent / "modelos.json"
+_MEDICAMENTOS_PATH = Path(__file__).resolve().parent / "medicamentos.json"
 
 
 class NegativasDatabase(BaseDatabase):
@@ -46,40 +47,94 @@ class NegativasDatabase(BaseDatabase):
                     CREATE INDEX IF NOT EXISTS idx_medicamentos_categoria ON medicamentos(categoria);
                 """)
                 self._commit()
-                
+
                 # Insere modelos de texto se a tabela estiver vazia
                 if self._fetch_count("modelos_texto") == 0:
                     self._insert_modelos_texto()
-                    
+
+                # Insere medicamentos se a tabela estiver vazia
+                if self._fetch_count("medicamentos") == 0:
+                    self._insert_medicamentos()
+
         except Exception as e:
-            ErrorHandler.handle_database_error(e, operation="criar schema do banco Negativas")
+            ErrorHandler.handle_database_error(
+                e, operation="criar schema do banco Negativas"
+            )
             raise
 
-    def _insert_modelos_texto(self) -> None:
-        """Insere os modelos de texto padrão a partir do arquivo JSON."""
+    def _insert_medicamentos(self) -> None:
+        """Insere os medicamentos padrão a partir do arquivo JSON."""
         try:
-            with open(_MODELOS_PATH, 'r', encoding='utf-8') as f:
+            with open(_MEDICAMENTOS_PATH, "r", encoding="utf-8") as f:
+                medicamentos_data = json.load(f)
+
+            medicamentos = medicamentos_data.get("medicamentos", [])
+
+            rows = []
+            for medicamento in medicamentos:
+                nome = medicamento.get("nome")
+                categoria = medicamento.get("categoria")
+                cids = medicamento.get("cids", [])
+                disponivel = 1 if medicamento.get("disponivel", True) else 0
+                if nome and categoria:
+                    rows.append(
+                        (nome, categoria, json.dumps(cids), disponivel)
+                    )
+
+            if rows:
+                with self._cursor() as cur:
+                    cur.executemany(
+                        "INSERT INTO medicamentos (nome, categoria, cids, disponivel) VALUES (?, ?, ?, ?)",
+                        rows,
+                    )
+                self._commit()
+
+        except FileNotFoundError:
+            ErrorHandler.log(
+                f"Arquivo de medicamentos não encontrado: {_MEDICAMENTOS_PATH}",
+                level=ErrorLevel.WARNING,
+                context="Database",
+            )
+        except json.JSONDecodeError as e:
+            ErrorHandler.log(
+                f"Erro ao ler arquivo de medicamentos: {e}",
+                level=ErrorLevel.ERROR,
+                context="Database",
+            )
+
+    def _insert_modelos_texto(self) -> None:
+        try:
+            with open(_MODELOS_PATH, "r", encoding="utf-8") as f:
                 modelos_data = json.load(f)
-            
-            modelos = modelos_data.get('modelos', [])
-            
+
+            modelos = modelos_data.get("modelos", [])
+
+            rows = []
             for modelo in modelos:
-                tipo = modelo.get('tipo')
-                texto = modelo.get('texto')
+                tipo = modelo.get("tipo")
+                texto = modelo.get("texto")
                 if tipo and texto:
-                    self._insert_row("modelos_texto", tipo=tipo, texto=texto)
-                    
+                    rows.append((tipo, texto))
+
+            if rows:
+                with self._cursor() as cur:
+                    cur.executemany(
+                        "INSERT INTO modelos_texto (tipo, texto) VALUES (?, ?)",
+                        rows,
+                    )
+                self._commit()
+
         except FileNotFoundError:
             ErrorHandler.log(
                 f"Arquivo de modelos não encontrado: {_MODELOS_PATH}",
                 level=ErrorLevel.WARNING,
-                context="Database"
+                context="Database",
             )
         except json.JSONDecodeError as e:
             ErrorHandler.log(
                 f"Erro ao ler arquivo de modelos: {e}",
                 level=ErrorLevel.ERROR,
-                context="Database"
+                context="Database",
             )
 
     def _log_initialization_success(self) -> None:
@@ -108,11 +163,11 @@ class NegativasDatabase(BaseDatabase):
         """Busca medicamentos por nome (case insensitive, accent insensitive)."""
         if not query:
             return []
-        
+
         normalized_query = to_upper_normalized(query)
         rows = self._fetch_all(
             "SELECT * FROM medicamentos WHERE nome LIKE ? ORDER BY nome COLLATE NOCASE",
-            (f"%{normalized_query}%",)
+            (f"%{normalized_query}%",),
         )
         return [Medicamento.from_row(r) for r in rows]
 
@@ -133,18 +188,31 @@ class NegativasDatabase(BaseDatabase):
         return Medicamento.from_row(row) if row else None
 
     @db_op("read")
+    def get_medicamentos_por_nomes(self, nomes: List[str]) -> List[Medicamento]:
+        if not nomes:
+            return []
+        placeholders = ",".join("?" for _ in nomes)
+        rows = self._fetch_all(
+            f"SELECT * FROM medicamentos WHERE nome IN ({placeholders})",
+            tuple(nomes),
+        )
+        return [Medicamento.from_row(r) for r in rows]
+
+    @db_op("read")
     def get_medicamentos_por_categoria(self, categoria: str) -> List[Medicamento]:
         """Retorna medicamentos de uma categoria específica."""
         rows = self._fetch_all(
             "SELECT * FROM medicamentos WHERE categoria = ? ORDER BY nome COLLATE NOCASE",
-            (categoria,)
+            (categoria,),
         )
         return [Medicamento.from_row(r) for r in rows]
 
     @db_op("write")
     def atualizar_disponibilidade(self, medicamento_id: int, disponivel: bool) -> bool:
         """Atualiza a disponibilidade de um medicamento."""
-        return self._update_row("medicamentos", medicamento_id, disponivel=1 if disponivel else 0)
+        return self._update_row(
+            "medicamentos", medicamento_id, disponivel=1 if disponivel else 0
+        )
 
     # ========== MODELOS DE TEXTO ==========
 
@@ -157,7 +225,7 @@ class NegativasDatabase(BaseDatabase):
             ErrorHandler.log(
                 f"Erro ao cachear modelos: {e}",
                 level=ErrorLevel.WARNING,
-                context="Database"
+                context="Database",
             )
             self._modelos_cache = {}
 

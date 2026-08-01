@@ -28,6 +28,7 @@ Update flow::
 
 from __future__ import annotations
 
+import io
 import contextlib
 import hashlib
 import json
@@ -100,6 +101,20 @@ def get_install_root() -> Path:
     return Path.cwd()
 
 
+def get_shared_root() -> Path:
+    """Return the directory that contains the running exe (data root).
+
+    When launched by the SISTEMAS launcher, ``SISTEMAS_DATA_ROOT`` is
+    set to the exe's directory so that data lives next to the exe
+    regardless of where the Python runtime is installed.
+    Falls back to ``Path.cwd()`` for dev mode.
+    """
+    data_root = os.environ.get("SISTEMAS_DATA_ROOT")
+    if data_root:
+        return Path(data_root)
+    return Path.cwd()
+
+
 def staging_path() -> Path:
     """Directory where update zips are extracted before applying."""
     return get_install_root() / STAGING_DIR
@@ -123,66 +138,54 @@ def _get_app_module() -> str:
 
 
 # ============================================================================
-# VERSION file I/O
+# VERSION file I/O (hash-based manifest)
 # ============================================================================
 
 
-def _read_version_file(path: Path) -> tuple[str, str]:
-    """Parse a VERSION file, returning ``(app_version, runtime_hash)``.
+def read_version_manifest(path: Path | None = None) -> dict[str, str]:
+    """Parse a VERSION file, returning a manifest dict.
 
     Expected format::
 
-        1.2.3
-        runtime: a1b2c3d4
+        26.07.31-2202
+        runtime: d4c3b2a1
+        rac: f8e7d6c5
 
-    Lines starting with ``#`` are ignored.  If the file is absent,
-    ``("0.0.0", "")`` is returned.
+    Returns ``{"datestamp": ..., "runtime": ..., "<module>": ...}``.
+    If the file is absent, all values are empty strings.
     """
-    app_version = "0.0.0"
-    runtime_hash = ""
+    manifest: dict[str, str] = {"datestamp": "", "runtime": ""}
+    if path is None:
+        path = get_install_root() / VERSION_FILE
     if path.exists():
         try:
             for line in path.read_text(encoding="utf-8").strip().splitlines():
                 line = line.strip()
                 if line.startswith("#") or not line:
                     continue
-                if line.lower().startswith("runtime:"):
-                    runtime_hash = line.split(":", 1)[1].strip()
-                elif "." in line:
-                    app_version = line.lstrip("v")
+                if ":" in line:
+                    key, _, value = line.partition(":")
+                    manifest[key.strip()] = value.strip()
+                else:
+                    manifest["datestamp"] = line
         except OSError:
             pass
-    return app_version, runtime_hash
+    return manifest
 
 
-def get_local_version() -> tuple[str, str]:
-    """Return ``(app_version, runtime_hash)`` from the local VERSION file."""
-    return _read_version_file(get_install_root() / VERSION_FILE)
+def get_local_manifest() -> dict[str, str]:
+    """Return the local VERSION manifest."""
+    return read_version_manifest()
 
 
-# ============================================================================
-# Version comparison
-# ============================================================================
+def get_local_hash(module: str) -> str:
+    """Return the local hash for a given module, or empty string."""
+    return get_local_manifest().get(module, "")
 
 
-def _parse_version(tag: str) -> tuple[int, ...]:
-    parts = tag.lstrip("v").split(".")
-    result: list[int] = []
-    for p in parts:
-        try:
-            result.append(int(p))
-        except ValueError:
-            break
-    while len(result) < 3:
-        result.append(0)
-    return tuple(result)
-
-
-def is_newer(remote_tag: str, current_version: str) -> bool:
-    try:
-        return _parse_version(remote_tag) > _parse_version(current_version)
-    except (ValueError, IndexError):
-        return False
+def get_local_runtime_hash() -> str:
+    """Return the local runtime hash, or empty string."""
+    return get_local_manifest().get("runtime", "")
 
 
 # ============================================================================
@@ -206,78 +209,6 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-# ============================================================================
-# Shared data root (network / local)
-# ============================================================================
-
-MIGRATION_MARKER = ".local_install_source"
-
-
-def _is_path_reachable(path: Path) -> bool:
-    """Quick reachability test: can we list the directory?"""
-    try:
-        list(path.iterdir())
-        return True
-    except (OSError, PermissionError):
-        return False
-
-
-def get_shared_root() -> Path | None:
-    """Return the shared data root, or ``None`` for standalone.
-
-    Priority:
-
-    1. ``SISTEMAS_DATA_ROOT`` env var (set by the smart launcher).
-    2. ``.local_install_source`` marker file written during initial install.
-    3. ``None`` (standalone / dev).
-    """
-    env_root = os.environ.get("SISTEMAS_DATA_ROOT")
-    if env_root:
-        return Path(env_root)
-
-    marker = get_install_root() / MIGRATION_MARKER
-    if marker.exists():
-        try:
-            return Path(marker.read_text(encoding="utf-8").strip())
-        except Exception:
-            return None
-    return None
-
-
-def resolve_data_root(app_folder: str) -> Path:
-    """Resolve the data root directory.
-
-    * If a network pointer exists **and** is reachable → ``<pointer>/<app_folder>``.
-    * If a pointer exists but is unreachable → warn, fall back to install root.
-    * No pointer → install root (standalone, silent).
-
-    **Note:** When ``SISTEMAS_DATA_ROOT`` env var is set (by the launcher),
-    we use it directly without appending ``app_folder`` since the launcher
-    creates a folder structure where exe and data are siblings.
-    """
-    shared = get_shared_root()
-
-    if shared is not None:
-        # If shared root comes from SISTEMAS_DATA_ROOT env var, use it directly
-        # (launcher sets this to the folder containing exe, data will be sibling)
-        if os.environ.get("SISTEMAS_DATA_ROOT"):
-            return shared
-
-        network_data = shared / app_folder
-        if _is_path_reachable(shared):
-            return network_data
-        # Pointer exists but unreachable — warn and fall back
-        ErrorHandler.log(
-            f"Network data root unreachable: {shared}. "
-            f"Using local data.",
-            level=ErrorLevel.WARNING,
-            context="Updater",
-        )
-
-    return get_install_root()
-
 
 # ============================================================================
 # Directory swap primitives
@@ -634,18 +565,17 @@ def _show_update_error(error: Exception) -> None:
 
 
 class UpdateCheckWorker(QThread):
-    """Background thread that checks GitHub for a newer release.
+    """Background thread that checks januvary/andaime for updates.
 
-    Each app checks its own repo (``januvary/RAC``, ``januvary/Emissor``,
-    …) via ``/releases/latest``.  In the shared SISTEMAS dist, all apps
-    check ``januvary/andaime`` instead.
+    Uses hash-based comparison: downloads payload.zip when the runtime
+    hash differs, and app-update.zip when the local app hash differs.
 
     Signals
     -------
     update_available(str, str) : ``(tag, release_notes)``
     update_ready(str)          : ``(tag,)`` — download complete, awaiting restart
     update_failed(str)         : ``(error_message,)``
-    no_update()                — already up-to-date
+    no_update()                — all hashes match, already up to date
     """
 
     update_available = Signal(str, str)
@@ -653,15 +583,8 @@ class UpdateCheckWorker(QThread):
     update_failed = Signal(str)
     no_update = Signal()
 
-    def __init__(
-        self,
-        repo: str,
-        current_version: str,
-        parent: QWidget | None = None,
-    ) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._repo = repo
-        self._current_version = current_version
 
     def run(self) -> None:
         try:
@@ -669,6 +592,15 @@ class UpdateCheckWorker(QThread):
             staging = staging_path()
             if staging.is_dir() and (staging / UPDATE_TAG).exists():
                 return
+
+            module = _get_app_module()
+            if not module:
+                self.update_failed.emit("Cannot determine app module.")
+                return
+
+            local_manifest = get_local_manifest()
+            local_app_hash = local_manifest.get(module, "")
+            local_runtime = local_manifest.get("runtime", "")
 
             import urllib.error
             import urllib.request
@@ -678,9 +610,7 @@ class UpdateCheckWorker(QThread):
                 "User-Agent": "SISTEMAS-Updater",
                 "Accept": "application/vnd.github+json",
             }
-            api_url = (
-                f"https://api.github.com/repos/{self._repo}/releases/latest"
-            )
+            api_url = "https://api.github.com/repos/januvary/andaime/releases/latest"
             req = urllib.request.Request(api_url, headers=headers)
 
             context = ssl.create_default_context()
@@ -697,135 +627,79 @@ class UpdateCheckWorker(QThread):
                     release = json.loads(resp.read())
 
             tag = release.get("tag_name", "")
-            if not tag or not is_newer(tag, self._current_version):
+            if not tag:
                 self.no_update.emit()
                 return
 
             notes = release.get("body", "") or f"Release {tag}"
 
-            # Parse runtime hash from release notes.
-            remote_runtime = ""
-            for line in notes.splitlines():
-                low = line.strip().lower()
-                if low.startswith("runtime:"):
-                    remote_runtime = low.split(":", 1)[1].strip()
+            # Download VERSION manifest from release assets.
+            remote_manifest: dict[str, str] = {}
+            for asset in release.get("assets", []):
+                if asset.get("name", "") == VERSION_FILE:
+                    asset_url = asset.get("browser_download_url")
+                    if asset_url:
+                        try:
+                            req2 = urllib.request.Request(asset_url, headers=headers)
+                            with urllib.request.urlopen(
+                                req2, timeout=30, context=context
+                            ) as resp2:
+                                tmp_version = Path(tmp) / VERSION_FILE
+                                with open(tmp_version, "wb") as vf:
+                                    while True:
+                                        chunk = resp2.read(65536)
+                                        if not chunk:
+                                            break
+                                        vf.write(chunk)
+                                remote_manifest = read_version_manifest(tmp_version)
+                        except Exception:
+                            pass
                     break
+
+            remote_app_hash = remote_manifest.get(module, "")
+            remote_runtime = remote_manifest.get("runtime", "")
 
             # Decide which asset to download.
-            _, local_runtime = get_local_version()
-            need_full_payload = bool(
+            need_payload = bool(
                 remote_runtime and remote_runtime != local_runtime
             ) or not remote_runtime
+            need_app_update = bool(
+                remote_app_hash and remote_app_hash != local_app_hash
+            ) or not remote_app_hash
 
-            asset_url = None
-            expected_digest = None
-
-            for asset in release.get("assets", []):
-                name = asset.get("name", "").lower()
-                if need_full_payload and "payload" in name:
-                    asset_url = asset.get("browser_download_url")
-                    expected_digest = asset.get("digest")
-                    break
-                if not need_full_payload and "update" in name:
-                    asset_url = asset.get("browser_download_url")
-                    expected_digest = asset.get("digest")
-                    break
-
-            # Fallback: any .zip asset.
-            if not asset_url:
-                for asset in release.get("assets", []):
-                    if asset.get("name", "").endswith(".zip"):
-                        asset_url = asset.get("browser_download_url")
-                        expected_digest = asset.get("digest")
-                        break
-
-            if not asset_url:
-                self.update_failed.emit("No downloadable asset found.")
+            if not need_payload and not need_app_update:
+                self.no_update.emit()
                 return
 
             self.update_available.emit(tag, notes)
 
-            # ---- Download ----
+            # ---- Download assets ----
             tmp = tempfile.mkdtemp(prefix="andaime_update_")
             try:
-                zip_path = Path(tmp) / "update.zip"
-                zip_req = urllib.request.Request(asset_url, headers=headers)
-                with urllib.request.urlopen(
-                    zip_req, timeout=120, context=context
-                ) as resp:
-                    with open(zip_path, "wb") as f:
-                        while True:
-                            chunk = resp.read(65536)
-                            if not chunk:
-                                break
-                            f.write(chunk)
+                headers["User-Agent"] = "SISTEMAS-Updater"
 
-                # Checksum verification.
-                if expected_digest:
-                    algo, _, expected_hash = expected_digest.partition(":")
-                    if algo == "sha256":
-                        actual = _sha256_file(zip_path)
-                        if actual != expected_hash:
-                            self.update_failed.emit(
-                                "Checksum verification failed."
-                            )
-                            return
+                for asset in release.get("assets", []):
+                    name = asset.get("name", "")
+                    asset_url = asset.get("browser_download_url")
+                    if not asset_url:
+                        continue
 
-                # ---- Extract to staging ----
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    _verify_zip_paths(zf)
-                    staging = staging_path()
-                    if staging.is_dir():
-                        shutil.rmtree(staging)
-                    zf.extractall(staging)
+                    if need_payload and "payload" in name and name.endswith(".zip"):
+                        self._download_and_stage(
+                            asset_url, tmp, "payload.zip", headers, context
+                        )
+                        need_payload = False
+                    elif need_app_update and "app-update" in name and name.endswith(".zip"):
+                        self._download_and_stage(
+                            asset_url, tmp, "app-update.zip", headers, context
+                        )
+                        need_app_update = False
 
-                # Handle a single top-level wrapper directory in the zip.
-                top_level = [
-                    p
-                    for p in staging.iterdir()
-                    if p.name not in (".update_tag",)
-                ]
-                if (
-                    len(top_level) == 1
-                    and top_level[0].is_dir()
-                    and not (top_level[0] / VERSION_FILE).exists()
-                    and not (top_level[0] / "apps").is_dir()
-                ):
-                    wrapper = top_level[0]
-                    real_root = wrapper
-                    # Check if wrapper contains the expected structure.
-                    if (wrapper / "apps").is_dir() or (
-                        wrapper / "python"
-                    ).is_dir():
-                        for item in wrapper.iterdir():
-                            dest = staging / item.name
-                            if dest.exists():
-                                if item.is_dir():
-                                    shutil.rmtree(dest)
-                                else:
-                                    dest.unlink()
-                            shutil.move(str(item), str(dest))
-                        shutil.rmtree(wrapper)
-
-                # Detect cross-format updates early to prevent broken installs.
-                current_format = _detect_install_format(get_install_root())
-                staged_format = _detect_install_format(staging)
-                if (
-                    current_format != "unknown"
-                    and staged_format != "unknown"
-                    and current_format != staged_format
-                ):
-                    raise RuntimeError(
-                        _format_error_message(current_format, staged_format)
-                    )
+                if not staging.is_dir():
+                    self.update_failed.emit("No matching assets found in release.")
+                    return
 
                 (staging / UPDATE_TAG).write_text(tag, encoding="utf-8")
-
-                ErrorHandler.log(
-                    f"Update {tag} staged and ready for restart.",
-                    level=ErrorLevel.INFO,
-                    context="Updater",
-                )
                 self.update_ready.emit(tag)
             finally:
                 with contextlib.suppress(Exception):
@@ -833,3 +707,47 @@ class UpdateCheckWorker(QThread):
 
         except Exception as e:
             self.update_failed.emit(str(e))
+
+    def _download_and_stage(
+        self, url: str, tmp: str, filename: str, headers: dict, context: ssl.SSLContext
+    ) -> None:
+        zip_path = Path(tmp) / filename
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=120, context=context) as resp:
+            with open(zip_path, "wb") as f:
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            _verify_zip_paths(zf)
+            staging = staging_path()
+            if staging.is_dir():
+                shutil.rmtree(staging)
+            zf.extractall(staging)
+
+        # Handle a single top-level wrapper directory in the zip.
+        top_level = [
+            p
+            for p in staging.iterdir()
+            if p.name not in (".update_tag",)
+        ]
+        if (
+            len(top_level) == 1
+            and top_level[0].is_dir()
+            and not (top_level[0] / VERSION_FILE).exists()
+            and not (top_level[0] / "apps").is_dir()
+        ):
+            wrapper = top_level[0]
+            if (wrapper / "apps").is_dir() or (wrapper / "python").is_dir():
+                for item in wrapper.iterdir():
+                    dest = staging / item.name
+                    if dest.exists():
+                        if item.is_dir():
+                            shutil.rmtree(dest)
+                        else:
+                            dest.unlink()
+                    shutil.move(str(item), str(dest))
+                shutil.rmtree(wrapper)

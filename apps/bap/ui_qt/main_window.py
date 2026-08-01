@@ -512,7 +512,6 @@ class MainWindow(QMainWindow):
                     arquivo_id=a.id,
                     arquivo_original=a.arquivo_original,
                     tipo_documento=a.tipo_documento or "outro",
-                    data=self.db.get_arquivo_conteudo(a.id),
                 ))
         n = len(items)
         arquivos = "1 arquivo" if n == 1 else f"{n} arquivos"

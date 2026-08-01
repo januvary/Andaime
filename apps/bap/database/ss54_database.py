@@ -380,6 +380,15 @@ class SS54Database(BaseDatabase):
         rows = self._fetch_all_table("lotes", order_by="date DESC")
         return [Lote.from_row(r) for r in rows]
 
+    @db_op("read")
+    def get_lotes_with_counts(self) -> list[tuple[Lote, int]]:
+        rows = self._fetch_all(
+            "SELECT l.*, COUNT(p.id) AS cnt FROM lotes l "
+            "LEFT JOIN processos p ON l.id = p.lote_id "
+            "GROUP BY l.id ORDER BY l.date DESC"
+        )
+        return [(Lote.from_row(r), r["cnt"]) for r in rows]
+
     @db_op("write")
     def mark_lote_sent(self, lote_id: int) -> bool:
         """Marca a remessa como enviada (define ``sent_at`` se ainda nulo)."""
@@ -528,9 +537,14 @@ class SS54Database(BaseDatabase):
         return {r["lote_id"]: r["cnt"] for r in rows}
 
     @db_op("read")
-    def get_processos_by_lote(self, lote_id: int) -> list[Processo]:
+    def get_processos_by_lote(self, lote_id: int, exclude_status: str | None = None) -> list[Processo]:
+        conditions = ["p.lote_id = ?"]
+        params: list = [lote_id]
+        if exclude_status is not None:
+            conditions.append("p.status != ?")
+            params.append(exclude_status)
         rows = self._fetch_processos_joined(
-            "p.lote_id = ?", (lote_id,), "pac.nome COLLATE NOCASE"
+            " AND ".join(conditions), tuple(params), "pac.nome COLLATE NOCASE"
         )
         return [Processo.from_row(r) for r in rows]
 

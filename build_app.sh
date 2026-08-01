@@ -11,6 +11,7 @@
 #   ├── apps/<app>/          (app code, src→<app> renamed)
 #   ├── VERSION              (app version + runtime hash)
 #   ├── launcher.exe         (compiled with GitHub repo info)
+#   ├── <app>-v<X>.zip           (user download: <DISPLAY>/<app>.exe + data/)
 #   ├── <app>-v<X>-payload.zip   (full payload for first install)
 #   └── <app>-v<X>-update.zip    (app code only for auto-updater)
 #
@@ -97,85 +98,91 @@ echo "  prune:  $([ $NO_PRUNE -eq 1 ] && echo 'skip' || echo 'yes')"
 echo "============================================"
 
 # ============================================
-# 1. Prerequisites
+# Prerequisites
 # ============================================
 check_prerequisites "standalone" "$APP_TARGET" || exit 1
 
 # ============================================
-# 2. Sync app source
+# Sync app source
 # ============================================
-step "2" "Syncing $APP_MODULE source..."
+echo -e "\n${YELLOW}Syncing $APP_MODULE source...${NC}"
 sync_app "$APP_MODULE" || exit 1
 
 # ============================================
-# 3. Prepare Wine Python dependencies
+# Prepare Wine Python dependencies
 # ============================================
 prepare_wine_python "$SKIP_DEPS"
 
 # ============================================
-# 4. Compute runtime hash
+# Compute runtime hash
 # ============================================
-step "4" "Computing runtime hash..."
+echo -e "\n${YELLOW}Computing runtime hash...${NC}"
 RUNTIME_HASH=$(compute_runtime_hash)
 ok "Runtime hash: $RUNTIME_HASH"
 
 # ============================================
-# 5. Read app version
+# 5. Read app version + compute hashes
 # ============================================
-APP_VERSION=$(grep '__version__' "$ANDAIME_REPO/apps/$APP_MODULE/__init__.py" 2>/dev/null | head -1 | sed "s/.*['\"]\\(.*\\)['\"].*/\\1/" || echo "0.0.0")
-if [ -z "$APP_VERSION" ]; then APP_VERSION="0.0.0"; fi
-ok "Version: $APP_VERSION"
+STEP_NUM="5"
+DSTAMP=$(datestamp_version)
+ok "Datestamp: $DSTAMP"
+
+APP_HASH=$(compute_app_hash "$APP_MODULE")
+ok "App hash: $APP_HASH"
+
+RUNTIME_HASH=$(compute_runtime_hash)
+ok "Runtime hash: $RUNTIME_HASH"
 
 # ============================================
-# 6. Clean + create stage
+# Clean + create stage
 # ============================================
-step "5" "Creating stage..."
+echo -e "\n${YELLOW}Creating stage...${NC}"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/python" "$STAGE/apps"
 
-# VERSION file
-echo -e "${APP_VERSION}\nruntime: ${RUNTIME_HASH}" > "$STAGE/VERSION"
-ok "VERSION: $APP_VERSION (runtime: $RUNTIME_HASH)"
+# VERSION file: datestamp + runtime hash + app hash
+echo -e "${DSTAMP}\nruntime: ${RUNTIME_HASH}\n${APP_MODULE}: ${APP_HASH}" > "$STAGE/VERSION"
+ok "VERSION: $DSTAMP (runtime: $RUNTIME_HASH, $APP_MODULE: $APP_HASH)"
 
 # ============================================
-# 7. Copy Windows Python tree
+# Copy Windows Python tree
 # ============================================
 copy_python "$STAGE"
 
 # ============================================
-# 8. Copy andaime chassis
+# Copy andaime chassis
 # ============================================
 copy_andaime "$STAGE"
 
 # ============================================
-# 9. Stage app code
+# Stage app code
 # ============================================
-step "9" "Staging app code..."
+echo -e "\n${YELLOW}Staging app code...${NC}"
 stage_app "$APP_MODULE" "$STAGE"
 
 # ============================================
-# 10. Prune (size optimisation)
+# Prune (size optimisation)
 # ============================================
 prune_python "$STAGE" "$NO_PRUNE"
 
 # ============================================
-# 11. Compile bytecode
+# Compile bytecode
 # ============================================
 compile_bytecode "$STAGE" "$APP_MODULE"
 
 # ============================================
-# 12. Compile launcher.exe
+# Compile launcher.exe
 # ============================================
-step "12" "Compiling launcher.exe..."
+echo -e "\n${YELLOW}Compiling launcher.exe...${NC}"
 LAUNCHER_PATH="$STAGE/${APP_MODULE}.exe"
 compile_launcher "$LAUNCHER_PATH" "$APP_ICON" "standalone" "$APP_INFO"
 
 # ============================================
-# 13. Create zips
+# Create zips
 # ============================================
-step "13" "Creating archives..."
+echo -e "\n${YELLOW}Creating archives...${NC}"
 
-TAG="v${APP_VERSION}"
+TAG="$DSTAMP"
 
 # --- Payload zip (full: python/ + apps/ + VERSION) ---
 PAYLOAD_ZIP="$STAGE/${APP_MODULE}-${TAG}-payload.zip"
@@ -185,30 +192,42 @@ zip -r "$PAYLOAD_ZIP" "python/" "apps/" "VERSION" -q
 PAYLOAD_SIZE=$(du -sh "$PAYLOAD_ZIP" | cut -f1)
 ok "payload.zip: $PAYLOAD_SIZE"
 
-# --- Update zip (small: apps/<module>/ + andaime/ + VERSION) ---
-UPDATE_ZIP="$STAGE/${APP_MODULE}-${TAG}-update.zip"
-rm -f "$UPDATE_ZIP"
+# --- App update zip (app code only) ---
+APP_UPDATE_ZIP="$STAGE/${APP_MODULE}-${TAG}-app-update.zip"
+rm -f "$APP_UPDATE_ZIP"
 cd "$STAGE"
-zip -r "$UPDATE_ZIP" \
+zip -r "$APP_UPDATE_ZIP" \
     "apps/$APP_MODULE/" \
     "VERSION" -q
 # Add andaime from site-packages
 cd "$STAGE/python/Lib/site-packages"
-zip -r "$UPDATE_ZIP" "andaime/" -q
-UPDATE_SIZE=$(du -sh "$UPDATE_ZIP" | cut -f1)
-ok "update.zip: $UPDATE_SIZE"
+zip -r "$APP_UPDATE_ZIP" "andaime/" -q
+APP_UPDATE_SIZE=$(du -sh "$APP_UPDATE_ZIP" | cut -f1)
+ok "app-update.zip: $APP_UPDATE_SIZE"
+
+# --- User-facing zip (extract-and-run: <DISPLAY>/<app>.exe + data/) ---
+USER_ZIP="$STAGE/${APP_MODULE}-${TAG}.zip"
+WRAPPER="$STAGE/$APP_DISPLAY"
+rm -f "$USER_ZIP"
+rm -rf "$WRAPPER"
+mkdir -p "$WRAPPER/data"
+cp "$LAUNCHER_PATH" "$WRAPPER/${APP_MODULE}.exe"
+cd "$STAGE"
+zip -r "$USER_ZIP" "$APP_DISPLAY/" -q
+USER_SIZE=$(du -sh "$USER_ZIP" | cut -f1)
+ok "user zip: $USER_SIZE"
 
 # ============================================
-# 14. Report
+# Report
 # ============================================
-step "14" "Build complete!"
+echo -e "\n${YELLOW}Build complete!${NC}"
 echo ""
 echo "Output: $STAGE/"
 echo ""
 echo "Artifacts:"
-echo "  Launcher:     $STAGE/${APP_MODULE}.exe"
-echo "  Payload zip:  $PAYLOAD_ZIP ($PAYLOAD_SIZE)"
-echo "  Update zip:   $UPDATE_ZIP ($UPDATE_SIZE)"
+echo "  User zip:       $USER_ZIP ($USER_SIZE)"
+echo "  Payload zip:    $PAYLOAD_ZIP ($PAYLOAD_SIZE)"
+echo "  App update zip: $APP_UPDATE_ZIP ($APP_UPDATE_SIZE)"
 echo ""
 TOTAL=$(du -sh "$STAGE" | cut -f1)
 echo -e "  ${GREEN}Total stage:${NC} $TOTAL"

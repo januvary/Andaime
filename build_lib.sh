@@ -12,12 +12,12 @@ ANDAIME_REPO="$SCRIPT_DIR"
 WINE_PY_DIR="$HOME/.wine/drive_c/Python310"
 WINE_PYTHON="C:\\Python310\\python.exe"
 
-# --- App Registry (unified format: module|repo|src_path|icon_path|display_name|app_folder) ---
+# --- App Registry (unified format: module|repo|src_path|icon_path|display_name) ---
 declare -A APPS
-APPS[bap]="bap|januvary/bap|$HOME/Projects/SS 54 - Vindication|$ANDAIME_REPO/launchers/icons/bap.ico|BAP|BAP"
-APPS[emissor]="emissor|januvary/Emissor|$HOME/Projects/Emissor|$ANDAIME_REPO/launchers/icons/emissor.ico|Emissor|Emissor"
-APPS[rac]="rac|januvary/RAC|$HOME/Projects/RAC - Registros Alto Custo|$ANDAIME_REPO/launchers/icons/rac.ico|RAC|RAC"
-APPS[negativas]="negativas|januvary/negativas|$HOME/Projects/SISTEMA DE NEGATIVAS|$ANDAIME_REPO/launchers/icons/negativas.ico|Negativas|Negativas"
+APPS[bap]="bap|januvary/bap|$HOME/Projects/SS 54 - Vindication|$ANDAIME_REPO/launchers/icons/bap.ico|BAP"
+APPS[emissor]="emissor|januvary/Emissor|$HOME/Projects/Emissor|$ANDAIME_REPO/launchers/icons/emissor.ico|Emissor"
+APPS[rac]="rac|januvary/RAC|$HOME/Projects/RAC - Registros Alto Custo|$ANDAIME_REPO/launchers/icons/rac.ico|RAC"
+APPS[negativas]="negativas|januvary/negativas|$HOME/Projects/SISTEMA DE NEGATIVAS|$ANDAIME_REPO/launchers/icons/negativas.ico|Negativas"
 
 # --- Helpers ---
 app_field() { echo "$1" | cut -d'|' -f"$2"; }
@@ -31,7 +31,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m'
-step() { echo -e "\n${YELLOW}[$1]${NC} $2"; }
 ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
 err()  { echo -e "  ${RED}✗${NC} $1"; }
 
@@ -100,7 +99,7 @@ check_prerequisites() {
     local mode="$1"
     local apps_to_check="$2"
 
-    step "1" "Checking prerequisites..."
+    echo -e "\n${YELLOW}Checking prerequisites...${NC}"
 
     if ! command -v wine &>/dev/null; then
         err "Wine is not installed"
@@ -149,16 +148,39 @@ compute_runtime_hash() {
     wine "$WINE_PYTHON" -m pip freeze 2>/dev/null | sort | sha256sum | cut -c1-8
 }
 
+# --- Compute app hash ---
+# Hash of all files in apps/<module>/ sorted by path.
+# Used to detect when app source code has changed.
+compute_app_hash() {
+    local module="$1"
+    local app_dir="$ANDAIME_REPO/apps/$module"
+
+    if [ ! -d "$app_dir" ]; then
+        echo "unknown"
+        return
+    fi
+
+    find "$app_dir" -type f | sort | \
+        xargs sha256sum 2>/dev/null | \
+        sha256sum | cut -c1-8
+}
+
+# --- Datestamp version ---
+# Returns YY.MM.DD-HHMM (e.g., 26.07.31-2202).
+datestamp_version() {
+    date +"%y.%m.%d-%H%M"
+}
+
 # --- Prepare Wine Python dependencies ---
 prepare_wine_python() {
     local skip_deps="$1"
 
     if [[ "$skip_deps" -eq 1 ]]; then
-        step "2" "Skipping dependency installation (--skip-deps)"
+        echo -e "\n${YELLOW}Skipping dependency installation (--skip-deps)${NC}"
         return 0
     fi
 
-    step "2" "Preparing Wine Python dependencies..."
+    echo -e "\n${YELLOW}Preparing Wine Python dependencies...${NC}"
 
     wine "$WINE_PYTHON" -m pip install --upgrade \
         pyside6_essentials==6.7.3 pypdfium2 pypdf holidays typing_extensions \
@@ -176,7 +198,7 @@ prepare_wine_python() {
 copy_python() {
     local stage="$1"
 
-    step "3" "Copying Windows Python tree..."
+    echo -e "\n${YELLOW}Copying Windows Python tree...${NC}"
     cp -r "$WINE_PY_DIR/"* "$stage/python/"
 
     # Remove stale andaime editable install
@@ -201,7 +223,7 @@ copy_python() {
 copy_andaime() {
     local stage="$1"
 
-    step "4" "Copying andaime chassis..."
+    echo -e "\n${YELLOW}Copying andaime chassis...${NC}"
     cp -r "$ANDAIME_REPO/andaime" "$stage/python/Lib/site-packages/andaime"
     cp "$ANDAIME_REPO/LICENSE" "$stage/python/Lib/site-packages/andaime/LICENSE"
     ok "Chassis → site-packages/andaime/ (+ LICENSE)"
@@ -232,11 +254,11 @@ prune_python() {
     local stage="$1" no_prune="$2"
 
     if [[ "$no_prune" -eq 1 ]]; then
-        step "5" "Skipping prune (--no-prune)"
+        echo -e "\n${YELLOW}Skipping prune (--no-prune)${NC}"
         return 0
     fi
 
-    step "5" "Pruning for size..."
+    echo -e "\n${YELLOW}Pruning for size...${NC}"
 
     local sp="$stage/python/Lib/site-packages"
     local pyside="$sp/PySide6"
@@ -366,7 +388,7 @@ PYEOF
 compile_bytecode() {
     local stage="$1" apps="$2"
 
-    step "6" "Compiling bytecode..."
+    echo -e "\n${YELLOW}Compiling bytecode...${NC}"
     find "$stage" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
     local compile_targets=""
@@ -421,18 +443,13 @@ XML
 
     x86_64-w64-mingw32-windres "$rc_dir/app.rc" "$rc_dir/app_res.o" 2>/dev/null
 
-    local gcc_cmd="x86_64-w64-mingw32-gcc -O2 -s -o \"$output\" \"$ANDAIME_REPO/launcher.c\" \"$ANDAIME_REPO/miniz.c\" \"$ANDAIME_REPO/miniz_zip.c\" \"$ANDAIME_REPO/miniz_tdef.c\" \"$ANDAIME_REPO/miniz_tinfl.c\" \"$rc_dir/app_res.o\" -mwindows -static -lcomctl32"
+    local gcc_cmd="x86_64-w64-mingw32-gcc -O2 -s -o \"$output\" \"$ANDAIME_REPO/launcher.c\" \"$ANDAIME_REPO/miniz.c\" \"$ANDAIME_REPO/miniz_zip.c\" \"$ANDAIME_REPO/miniz_tdef.c\" \"$ANDAIME_REPO/miniz_tinfl.c\" \"$rc_dir/app_res.o\" -mwindows -static -lcomctl32 -lshlwapi"
 
     if [[ "$mode" == "standalone" ]]; then
         local repo=$(app_field "$app_info" 2)
         local module=$(app_field "$app_info" 1)
         local display=$(app_field "$app_info" 5)
         gcc_cmd="$gcc_cmd -lwininet -DAPP_REPO=\\\"$repo\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\""
-    elif [[ "$mode" == "portable" ]]; then
-        # Portable mode: use shared SISTEMAS install, extract from local dist.zip only
-        # Do NOT add APP_REPO/APP_MODULE/APP_DISPLAY or lwininet
-        # PORTABLE_MODE flag enables dist.zip fallback path in launcher
-        gcc_cmd="$gcc_cmd -DPORTABLE_MODE=1"
     fi
 
     eval "$gcc_cmd"

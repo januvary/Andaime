@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from bap.ui_qt.styles import colors, context_menu_stylesheet, get_theme
+from bap.models import Processo
 from bap.ui_qt.widgets.remessa import RemessaLabel
 from bap.constants import (
     STATUS_LABELS,
@@ -212,6 +213,7 @@ class RemessasPage(QWidget):
         # Runner assíncrono (DbAsyncRunner) injetado pela MainWindow. Quando
         # ausente (ex.: testes), ``refresh`` cai no caminho síncrono.
         self._runner = None
+        self._processo_cache: dict[int, Processo] = {}
         # Assinatura (lote_id, mostrar_incompletos) do último ``_populate``
         # bem-sucedido, usada para pular repopulação em navegação (item C).
         self._last_signature = None
@@ -438,15 +440,17 @@ class RemessasPage(QWidget):
         lote_id = lote.id
 
         def _fetch():
-            processos = self._db.get_processos_by_lote(lote_id)
-            if not show_incompletos:
-                processos = [p for p in processos if p.status != Status.INCOMPLETO]
-            return processos
+            procesos = self._db.get_processos_by_lote(
+                lote_id,
+                exclude_status=Status.INCOMPLETO if not show_incompletos else None,
+            )
+            return procesos
 
         def _apply(processos) -> None:
             # Descarta resultados obsoletos (outro refresh foi disparado).
             if token != self._refresh_token:
                 return
+            self._processo_cache.clear()
             for key in _TAB_KEYS:
                 self._populate(key, [p for p in processos if p.solicitacao == key])
             self._last_signature = signature
@@ -555,6 +559,8 @@ class RemessasPage(QWidget):
         if model is None:
             return
 
+        self._processo_cache.update({p.id: p for p in processos})
+
         processos = sorted(
             processos,
             key=lambda p: (
@@ -582,7 +588,9 @@ class RemessasPage(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet(context_menu_stylesheet())
 
-        processo = self._db.get_processo_by_id(processo_id)
+        processo = self._processo_cache.get(processo_id)
+        if processo is None:
+            return
 
         col = table.columnAt(pos.x())
         if col in (0, 5):

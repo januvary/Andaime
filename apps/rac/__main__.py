@@ -108,7 +108,7 @@ def _start_update_check(window):
     from rac.gui.widgets.labels import HeadingLabel
     from rac.gui.styles import colors
 
-    worker = UpdateCheckWorker("januvary/RAC", __version__, parent=window)
+    worker = UpdateCheckWorker(parent=window)
 
     def _on_downloaded(tag):
         dlg = QDialog(window)

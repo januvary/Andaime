@@ -12,10 +12,10 @@
 #   │   ├── emissor/      (src/ copied, imports renamed src.→emissor.)
 #   │   ├── rac/          (src/ copied, imports renamed src.→rac.)
 #   │   └── negativas/    (src/ copied, imports renamed src.→negativas.)
-#   ├── bap.exe           (launchers — try GitHub first, fallback to dist.zip)
-#   ├── emissor.exe
-#   ├── rac.exe
-#   ├── negativas.exe
+#   ├── BAP/bap.exe       (per-app folders: <DISPLAY>/<app>.exe + data/)
+#   ├── Emissor/emissor.exe
+#   ├── RAC/rac.exe
+#   ├── Negativas/negativas.exe
 #   ├── dist.zip          (payload for %LOCALAPPDATA% extraction)
 #   ├── VERSION           (version string + runtime hash)
 #   └── shortcuts.bat     (convenience shortcuts for network share)
@@ -70,7 +70,7 @@ echo "  prune: $([ $NO_PRUNE -eq 1 ] && echo 'skip' || echo 'yes')"
 echo "============================================"
 
 # ============================================
-# 1. Prerequisites
+# Prerequisites
 # ============================================
 APPS_TO_CHECK=""
 for app_key in "${!BUILD_FLAGS[@]}"; do
@@ -79,63 +79,72 @@ done
 check_prerequisites "portable" "$APPS_TO_CHECK" || exit 1
 
 # ============================================
-# 2. Sync app sources
+# Sync app sources
 # ============================================
 for app_key in "${!BUILD_FLAGS[@]}"; do
     if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        step "2x" "Syncing $app_key source -> apps/$app_key/..."
+        echo -e "\n${YELLOW}Syncing $app_key source -> apps/$app_key/${NC}"
         sync_app "$app_key" || exit 1
     fi
 done
 
 # ============================================
-# 3. Prepare Wine Python dependencies
+# Prepare Wine Python dependencies
 # ============================================
 prepare_wine_python "$SKIP_DEPS"
 
 # ============================================
-# 4. Clean + create stage
+# Clean + create stage
 # ============================================
-step "3" "Cleaning previous build..."
-rm -rf "$DIST"
+echo -e "\n${YELLOW}Cleaning previous build...${NC}"
+rm -rf "$STAGE"
 mkdir -p "$STAGE/python" "$STAGE/apps"
 
 cp "$ANDAIME_REPO/launchers/shortcuts.bat" "$STAGE/"
 ok "shortcuts.bat copied"
 
-# VERSION file - andaime version + runtime hash (not app version)
-PYPROJECT_VER=$(grep '^version = ' "$ANDAIME_REPO/pyproject.toml" 2>/dev/null | sed 's/version = "//;s/"//')
+# VERSION file - datestamp + runtime hash + per-app hashes
+DSTAMP=$(datestamp_version)
 RUNTIME_HASH=$(compute_runtime_hash)
-echo "${PYPROJECT_VER:-unknown}" > "$STAGE/VERSION"
-ok "VERSION written (${PYPROJECT_VER:-unknown})"
+echo "${DSTAMP}" > "$STAGE/VERSION"
+echo "runtime: ${RUNTIME_HASH}" >> "$STAGE/VERSION"
+ok "VERSION: $DSTAMP (runtime: $RUNTIME_HASH)"
+
+for app_key in "${!BUILD_FLAGS[@]}"; do
+    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
+        app_hash=$(compute_app_hash "$app_key")
+        echo "$app_key: $app_hash" >> "$STAGE/VERSION"
+        ok "$app_key hash: $app_hash"
+    fi
+done
 
 # ============================================
-# 5. Copy Windows Python tree
+# Copy Windows Python tree
 # ============================================
 copy_python "$STAGE"
 
 # ============================================
-# 6. Copy andaime chassis
+# Copy andaime chassis
 # ============================================
 copy_andaime "$STAGE"
 
 # ============================================
-# 7. Stage app code
+# Stage app code
 # ============================================
 for app_key in "${!BUILD_FLAGS[@]}"; do
     if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        step "7x" "Staging $app_key..."
+        echo -e "\n${YELLOW}Staging $app_key${NC}"
         stage_app "$app_key" "$STAGE"
     fi
 done
 
 # ============================================
-# 8. Prune (size optimisation)
+# Prune (size optimisation)
 # ============================================
 prune_python "$STAGE" "$NO_PRUNE"
 
 # ============================================
-# 9. Compile bytecode
+# Compile bytecode
 # ============================================
 APPS_TO_COMPILE=""
 for app_key in "${!BUILD_FLAGS[@]}"; do
@@ -146,49 +155,45 @@ done
 compile_bytecode "$STAGE" "$APPS_TO_COMPILE"
 
 # ============================================
-# 10. Compile launchers
+# Compile launchers (per-app folders)
 # ============================================
-step "10" "Compiling launchers..."
+echo -e "\n${YELLOW}Compiling launchers...${NC}"
 for app_key in "${!BUILD_FLAGS[@]}"; do
     if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
         app_info="${APPS[$app_key]}"
         module=$(app_field "$app_info" 1)
         icon=$(app_field "$app_info" 4)
+        display=$(app_field "$app_info" 5)
 
-        LAUNCHER_PATH="$STAGE/${module}.exe"
+APP_DIR="$STAGE/$display"
+mkdir -p "$APP_DIR/data"
+
+LAUNCHER_PATH="$APP_DIR/${module}.exe"
         compile_launcher "$LAUNCHER_PATH" "$icon" "portable" "$app_info"
     fi
 done
 
 # ============================================
-# 11. Create dist.zip
+# Create dist.zip
 # ============================================
-step "11" "Creating dist.zip..."
+echo -e "\n${YELLOW}Creating dist.zip...${NC}"
 
 ZIP_PATH="$STAGE/dist.zip"
 rm -f "$ZIP_PATH"
-cd "$DIST"
+cd "$STAGE"
 
-zip -r "$ZIP_PATH" SISTEMAS/ -q \
-    -x "SISTEMAS/dist.zip" \
-       "SISTEMAS/shortcuts.bat"
-
-# Remove .exe files from zip (they should remain in the share root)
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        app_info="${APPS[$app_key]}"
-        module=$(app_field "$app_info" 1)
-        zip -d "$ZIP_PATH" "SISTEMAS/${module}.exe" >/dev/null 2>&1 || true
-    fi
-done
+# Create zip with python/, apps/, VERSION at the root (no SISTEMAS/ prefix)
+zip -r "$ZIP_PATH" "python/" "apps/" "VERSION" -q \
+    -x "python/__pycache__" \
+       "apps/*/__pycache__"
 
 ZIP_SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
 ok "dist.zip: $ZIP_SIZE"
 
 # ============================================
-# 12. Report
+# Report
 # ============================================
-step "12" "Build complete!"
+echo -e "\n${YELLOW}Build complete!${NC}"
 echo ""
 echo "Output:"
 echo "  $STAGE/"
@@ -214,7 +219,8 @@ for app_key in "${!BUILD_FLAGS[@]}"; do
     if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
         app_info="${APPS[$app_key]}"
         module=$(app_field "$app_info" 1)
-        echo "  $STAGE/${module}.exe"
+        display=$(app_field "$app_info" 5)
+        echo "  $STAGE/$display/${module}.exe"
     fi
 done
 echo ""
@@ -223,5 +229,5 @@ echo -e "  ${GREEN}dist.zip:${NC} $ZIP_SIZE"
 echo ""
 
 echo -e "${GREEN}Done.${NC}"
-echo "  Network share: copy *.exe + dist.zip + VERSION + shortcuts.bat to the share root"
+echo "  Network share: copy dist.zip + VERSION + shortcuts.bat + per-app folders (BAP/, RAC/, …) to the share root"
 echo "  Standalone:    copy SISTEMAS/ folder and double-click the .exe"

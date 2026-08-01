@@ -31,7 +31,12 @@ from PySide6.QtGui import QTextCursor
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "Andaime"))
 
 from andaime.widgets import SearchableComboBox
-from andaime.qt.table import ColumnSpec, TableViewModel, configure_table_view, NoElideDelegate
+from andaime.qt.table import (
+    ColumnSpec,
+    TableViewModel,
+    configure_table_view,
+    NoElideDelegate,
+)
 
 from negativas.database.negativas_database import NegativasDatabase
 from negativas.config import NegativasConfig
@@ -54,8 +59,12 @@ class MainWindow(QMainWindow):
         self.document_builder = DocumentBuilder(self.db)
 
         self.itens_selecionados: List[ItemSelecionado] = []
+        self._item_names: set[str] = set()
         self.next_item_id = 0
         self.selected_medicamento = None
+        self._last_preview_data: NegativaData | None = None
+        self._scroll_area: QScrollArea | None = self.findChild(QScrollArea)
+        self._last_temp_path: str | None = None
 
         self._debounce_timer = QTimer(self)
         self._debounce_timer.setSingleShot(True)
@@ -66,7 +75,7 @@ class MainWindow(QMainWindow):
         self._setup_signals()
         self._load_config()
         self._atualizar_preview()
-    
+
     def _setup_table_model(self):
         """Configura o modelo da tabela de itens selecionados."""
         columns = [
@@ -95,12 +104,12 @@ class MainWindow(QMainWindow):
                 width=40,
             ),
         ]
-        
+
         self.table_model = TableViewModel(columns, id_getter=lambda item: item.id)
         self.table.setModel(self.table_model)
         self.table.setItemDelegate(NoElideDelegate())
         configure_table_view(self.table, columns)
-        
+
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(45)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -123,7 +132,7 @@ class MainWindow(QMainWindow):
                 color: #005f73;
             }
         """)
-    
+
     def _get_categoria_label(self, categoria: str) -> str:
         """Retorna o label amigável da categoria."""
         return {
@@ -149,7 +158,9 @@ class MainWindow(QMainWindow):
         scroll.setStyleSheet("QScrollArea { border: none; background: #f4f7fb; }")
 
         main_container = QWidget()
-        main_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        main_container.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         main_layout = QVBoxLayout(main_container)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(20)
@@ -161,7 +172,9 @@ class MainWindow(QMainWindow):
 
         # ── Coluna esquerda ──
         left_column = QWidget()
-        left_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        left_column.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         left_layout = QVBoxLayout(left_column)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(20)
@@ -175,7 +188,9 @@ class MainWindow(QMainWindow):
 
         # ── Coluna direita ──
         right_column = QWidget()
-        right_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        right_column.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         right_layout = QVBoxLayout(right_column)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(20)
@@ -241,7 +256,9 @@ class MainWindow(QMainWindow):
 
     def _create_divisoes(self) -> QFrame:
         frame = QFrame()
-        frame.setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;")
+        frame.setStyleSheet(
+            "background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;"
+        )
 
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(15, 15, 15, 15)
@@ -434,9 +451,15 @@ class MainWindow(QMainWindow):
 
         self.resultado_text = QTextEdit()
         self.resultado_text.setReadOnly(True)
-        self.resultado_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.resultado_text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.resultado_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.resultado_text.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.resultado_text.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.resultado_text.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         self.resultado_text.setStyleSheet("""
             QTextEdit {
                 background: white;
@@ -445,7 +468,9 @@ class MainWindow(QMainWindow):
                 line-height: 1.6;
             }
         """)
-        self.resultado_text.document().contentsChanged.connect(self._atualizar_altura_resultado)
+        self.resultado_text.document().contentsChanged.connect(
+            self._atualizar_altura_resultado
+        )
 
         layout.addWidget(self.resultado_text)
         return frame
@@ -484,19 +509,24 @@ class MainWindow(QMainWindow):
     def _adicionar_item(self):
         if self.selected_medicamento:
             medicamento = self.selected_medicamento
-            if any(item.nome == medicamento.nome for item in self.itens_selecionados):
-                QMessageBox.warning(self, "Duplicata", "Este medicamento já foi adicionado.")
+            if medicamento.nome in self._item_names:
+                QMessageBox.warning(
+                    self, "Duplicata", "Este medicamento já foi adicionado."
+                )
                 self.selected_medicamento = None
                 return
 
             self.next_item_id += 1
-            self.itens_selecionados.append(ItemSelecionado(
-                id=self.next_item_id,
-                nome=medicamento.nome,
-                categoria=medicamento.categoria,
-                em_falta=not medicamento.disponivel,
-                is_medicamento=True,
-            ))
+            self.itens_selecionados.append(
+                ItemSelecionado(
+                    id=self.next_item_id,
+                    nome=medicamento.nome,
+                    categoria=medicamento.categoria,
+                    em_falta=not medicamento.disponivel,
+                    is_medicamento=True,
+                )
+            )
+            self._item_names.add(medicamento.nome)
             self._atualizar_tabela()
             self.selected_medicamento = None
             self.search_combo.clear()
@@ -505,25 +535,28 @@ class MainWindow(QMainWindow):
             if not texto:
                 return
 
-            if any(item.nome == texto for item in self.itens_selecionados):
+            if texto in self._item_names:
                 QMessageBox.warning(self, "Duplicata", "Este item já foi adicionado.")
                 return
 
             self.next_item_id += 1
-            self.itens_selecionados.append(ItemSelecionado(
-                id=self.next_item_id,
-                nome=texto,
-                categoria="NAO_PADRONIZADO",
-                em_falta=False,
-                is_medicamento=True,
-            ))
+            self.itens_selecionados.append(
+                ItemSelecionado(
+                    id=self.next_item_id,
+                    nome=texto,
+                    categoria="NAO_PADRONIZADO",
+                    em_falta=False,
+                    is_medicamento=True,
+                )
+            )
+            self._item_names.add(texto)
             self._atualizar_tabela()
             self.search_combo.clear()
 
     def _atualizar_tabela(self):
         """Atualiza a tabela com os itens selecionados."""
         self.table_model.set_rows(list(self.itens_selecionados))
-        
+
         # Recria widgets para as colunas de opções e remover
         for row, item in enumerate(self.itens_selecionados):
             opcoes_widget = QWidget()
@@ -536,7 +569,9 @@ class MainWindow(QMainWindow):
                 cb.setChecked(item.em_falta)
                 row_idx = row  # Capture for closure
                 cb.stateChanged.connect(
-                    lambda state, r=row_idx: self._on_falta_changed(r, state == Qt.CheckState.Checked.value)
+                    lambda state, r=row_idx: self._on_falta_changed(
+                        r, state == Qt.CheckState.Checked.value
+                    )
                 )
                 ol.addWidget(cb)
             elif item.categoria == "NAO_PADRONIZADO":
@@ -544,7 +579,9 @@ class MainWindow(QMainWindow):
                 cb.setChecked(item.is_medicamento)
                 row_idx = row  # Capture for closure
                 cb.stateChanged.connect(
-                    lambda state, r=row_idx: self._on_tipo_changed(r, state == Qt.CheckState.Checked.value)
+                    lambda state, r=row_idx: self._on_tipo_changed(
+                        r, state == Qt.CheckState.Checked.value
+                    )
                 )
                 ol.addWidget(cb)
 
@@ -576,6 +613,8 @@ class MainWindow(QMainWindow):
             height = header_h + 45 + 4
         else:
             height = header_h + (rows * 45) + 4
+        if self.table.minimumHeight() == height:
+            return
         self.table.setMinimumHeight(height)
         self.table.setMaximumHeight(height)
 
@@ -583,8 +622,11 @@ class MainWindow(QMainWindow):
         doc = self.resultado_text.document()
         doc.setTextWidth(self.resultado_text.viewport().width())
         height = int(doc.size().height()) + 20
-        self.resultado_text.setMinimumHeight(max(50, height))
-        self.resultado_text.setMaximumHeight(max(50, height))
+        new_height = max(50, height)
+        if self.resultado_text.minimumHeight() == new_height:
+            return
+        self.resultado_text.setMinimumHeight(new_height)
+        self.resultado_text.setMaximumHeight(new_height)
 
     def _on_falta_changed(self, row: int, em_falta: bool):
         if row < len(self.itens_selecionados):
@@ -598,6 +640,8 @@ class MainWindow(QMainWindow):
 
     def _remover_item(self, row: int):
         if 0 <= row < len(self.itens_selecionados):
+            nome = self.itens_selecionados[row].nome
+            self._item_names.discard(nome)
             del self.itens_selecionados[row]
             self._atualizar_tabela()
 
@@ -613,10 +657,13 @@ class MainWindow(QMainWindow):
     def _atualizar_preview(self):
         """Lê o estado do formulário, gera HTML e atualiza o preview preservando o scroll."""
         data = self._coletar_dados()
+        if data == self._last_preview_data:
+            return
+        self._last_preview_data = data
+
         html = self.document_builder.build_html(data)
 
-        # Preserva posição do scroll da janela principal
-        scroll_area = self.findChild(QScrollArea)
+        scroll_area = self._scroll_area
         scroll_pos = scroll_area.verticalScrollBar().value() if scroll_area else 0
 
         self.resultado_text.setHtml(html)
@@ -628,7 +675,8 @@ class MainWindow(QMainWindow):
     def _coletar_dados(self) -> NegativaData:
         """Lê todos os campos do formulário e retorna um snapshot."""
         return NegativaData(
-            destinatario=self.destinatario_input.text().strip() or "autoridade competente",
+            destinatario=self.destinatario_input.text().strip()
+            or "autoridade competente",
             usos_daf=self.check_daf.isChecked(),
             usos_dgmi=self.check_dgmi.isChecked(),
             nome_daf=self.nome_daf_input.text().strip(),
@@ -640,6 +688,7 @@ class MainWindow(QMainWindow):
 
     def _limpar_tudo(self):
         self.itens_selecionados.clear()
+        self._item_names.clear()
         self.next_item_id = 0
         self.destinatario_input.clear()
         self.nome_daf_input.clear()
@@ -668,27 +717,34 @@ class MainWindow(QMainWindow):
 
         html_content = self.document_builder.build_html(self._coletar_dados())
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-            f.write(html_content)
-            temp_path = f.name
+        if self._last_temp_path and Path(self._last_temp_path).exists():
+            Path(self._last_temp_path).unlink(missing_ok=True)
 
-        webbrowser.open(f'file://{temp_path}')
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".html", delete=False
+        ) as f:
+            f.write(html_content)
+            self._last_temp_path = f.name
+
+        webbrowser.open(f"file://{self._last_temp_path}")
 
     def _copiar_texto(self):
         clipboard = QApplication.clipboard()
         clipboard.setText(self.resultado_text.toPlainText())
-        QMessageBox.information(self, "Sucesso", "Texto copiado para a área de transferência!")
+        QMessageBox.information(
+            self, "Sucesso", "Texto copiado para a área de transferência!"
+        )
 
     # ──────────────────────────── CONFIG ────────────────────────────
 
     def _load_config(self):
         theme = self.config.get("theme", "light")
         self._apply_theme(theme)
-        
+
         # Carrega nomes salvos
         nome_daf = self.config.get("nome_daf", "")
         nome_dgmi = self.config.get("nome_dgmi", "")
-        
+
         if nome_daf:
             self.nome_daf_input.setText(nome_daf)
         if nome_dgmi:
@@ -698,7 +754,7 @@ class MainWindow(QMainWindow):
         """Salva os nomes das divisões no config."""
         nome_daf = self.nome_daf_input.text().strip()
         nome_dgmi = self.nome_dgmi_input.text().strip()
-        
+
         self.config.set("nome_daf", nome_daf)
         self.config.set("nome_dgmi", nome_dgmi)
 
@@ -713,10 +769,12 @@ class MainWindow(QMainWindow):
             """)
         else:
             self.setStyleSheet("")
-    
+
     def closeEvent(self, event):
         """Cleanup resources when window closes."""
         self._save_nomes_config()
         self.itens_selecionados.clear()
         self._debounce_timer.stop()
+        if self._last_temp_path and Path(self._last_temp_path).exists():
+            Path(self._last_temp_path).unlink(missing_ok=True)
         event.accept()

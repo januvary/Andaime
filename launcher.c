@@ -1,5 +1,5 @@
 /*
- * launcher.c — Smart Windows launcher for SISTEMAS apps.
+ * launcher.c — Windows launcher for SISTEMAS apps.
  *
  * Two modes, selected at compile time:
  *
@@ -8,12 +8,14 @@
  *      to %LOCALAPPDATA%\SISTEMAS\<module>\.
  *      Subsequent launches skip download if local install exists.
  *
- *   2. SISTEMAS multi-app (APP_REPO NOT defined — legacy):
- *      Extracts dist.zip from the launcher's own directory
+ *   2. SISTEMAS multi-app (APP_REPO NOT defined):
+ *      Extracts dist.zip from one directory above the launcher
+ *      (the share root: <root>\<APP>\<app>.exe → <root>\dist.zip)
  *      to %LOCALAPPDATA%\SISTEMAS\ (shared across apps).
  *
  * Both modes:
- *   - Set SISTEMAS_DATA_ROOT env var to the launcher's own directory.
+ *   - Set SISTEMAS_DATA_ROOT env var to the launcher's own directory (exeDir).
+ *     The app writes data to exeDir\data\, so it works from any directory.
  *   - Launch pythonw.exe -m <appName> from the local install.
  *   - Derive module name from the .exe filename (bap.exe → "bap").
  *
@@ -23,7 +25,7 @@
  *       -DAPP_DISPLAY=\"RAC\" \
  *       -mwindows -static -lshlwapi -lcomctl32 -lwininet
  *
- * Compile (legacy SISTEMAS):
+ * Compile (SISTEMAS):
  *   x86_64-w64-mingw32-gcc -O2 -s -o rac.exe launcher.c \
  *       -mwindows -static -lshlwapi -lcomctl32
  */
@@ -35,7 +37,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <sys/stat.h>
 
 #ifdef APP_REPO
 #include <wininet.h>
@@ -109,20 +110,23 @@ log_message(const char *fmt, ...)
 
 /* Recursively create a directory tree (like mkdir -p). */
 static int
-mkdir_recursive(char *path)
+mkdir_recursive(const char *path)
 {
-    char *p = path;
-    if (p[1] == ':' && p[2] == '\\') p += 3;  /* skip C:\ */
+    char buf[MAX_PATH * 2];
+    strncpy(buf, path, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    char *p = buf;
+    if (p[1] == ':' && p[2] == '\\') p += 3;
 
     for (; *p; ++p) {
         if (*p == '\\' || *p == '/') {
             char sep = *p;
             *p = '\0';
-            CreateDirectoryA(path, NULL);
+            CreateDirectoryA(buf, NULL);
             *p = sep;
         }
     }
-    CreateDirectoryA(path, NULL);
+    CreateDirectoryA(buf, NULL);
     return 0;
 }
 
@@ -730,97 +734,12 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     log_init(lad);
     log_message("Launcher started: %s", appName);
 
-    /* --- Create folder structure on first launch ---
-     * Desired structure (matches multi-app SISTEMAS):
-     * <APP_DISPLAY>/
-     * ├── <app>.exe
-     * └── <app>/
-     *     └── data/
-     *
-     * Example: RAC/
-     *          ├── rac.exe
-     *          └── rac/
-     *              └── data/
-     *
-     * Check if exe is already in the right structure by verifying
-     * the directory name matches APP_DISPLAY.
+    /*
+     * User-facing layout (standalone zip / portable share):
+     *   <DIR>/<app>.exe   +   <DIR>/data/
+     * The exe stays wherever the user put it. Data lives next to it.
+     * Works from any directory (Downloads, Desktop, USB, network share).
      */
-
-    /* Get the directory name (the folder containing the exe) */
-    char dirName[MAX_PATH];
-    char *slash = strrchr(exeDir, '\\');
-    if (slash) {
-        /* Skip the trailing backslash */
-        if (slash > exeDir) slash--;
-        char *start = slash;
-        while (start > exeDir && start[-1] != '\\' && start[-1] != '/') start--;
-        strncpy(dirName, start, slash - start + 1);
-        dirName[slash - start + 1] = '\0';
-    } else {
-        dirName[0] = '\0';
-    }
-
-    /* Check if directory name matches APP_DISPLAY (we're in the right structure) */
-    int alreadyReorganized = (dirName[0] && _stricmp(dirName, displayName) == 0);
-
-    if (!alreadyReorganized) {
-        /* First launch: create structure and move exe */
-        char appFolder[MAX_PATH * 2];
-        snprintf(appFolder, sizeof(appFolder), "%s%s", exeDir, displayName);
-
-        char exeNewPath[MAX_PATH * 2];
-        snprintf(exeNewPath, sizeof(exeNewPath), "%s\\%s.exe", appFolder, appName);
-
-        char dataFolder[MAX_PATH * 2];
-        snprintf(dataFolder, sizeof(dataFolder), "%s\\%s", appFolder, appName);
-
-        char marker[MAX_PATH * 2];
-        snprintf(marker, sizeof(marker), "%s\\.folder_created", appFolder);
-
-        /* Check if we already created the structure but haven't relaunched yet */
-        struct _stat st;
-        if (_stat(marker, &st) != 0) {
-            log_message("First launch: creating folder structure %s", appFolder);
-            mkdir_recursive(appFolder);
-            mkdir_recursive(dataFolder);
-
-            /* Copy exe to new location (can't move running exe) */
-            if (CopyFileA(exePath, exeNewPath, FALSE)) {
-                log_message("Copied exe to %s", exeNewPath);
-                /* Create marker so we don't do this again */
-                FILE *f = fopen(marker, "w");
-                if (f) fclose(f);
-                /* Delete old exe on next reboot */
-                MoveFileExA(exePath, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
-
-                /* Relaunch from new location */
-                STARTUPINFOA si;
-                PROCESS_INFORMATION pi;
-                ZeroMemory(&si, sizeof(si));
-                si.cb = sizeof(si);
-                ZeroMemory(&pi, sizeof(pi));
-
-                if (CreateProcessA(exeNewPath, NULL, NULL, NULL, FALSE,
-                                  0, NULL, appFolder, &si, &pi)) {
-                    CloseHandle(pi.hThread);
-                    CloseHandle(pi.hProcess);
-                    log_message("Relaunched from %s", exeNewPath);
-                    ReleaseMutex(hMutex);
-                    return 0;
-                }
-            } else {
-                log_message("Failed to copy exe: %lu", GetLastError());
-            }
-        } else {
-            /* Marker exists, just delete the old exe and update exeDir */
-            log_message("Structure already created, cleaning up");
-            MoveFileExA(exePath, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
-        }
-
-        /* Update exeDir to point to the new location */
-        strncpy(exeDir, appFolder, sizeof(exeDir) - 1);
-        exeDir[sizeof(exeDir) - 1] = '\0';
-    }
 
     /* --- Local install path --- */
     char localRoot[MAX_PATH * 2];
@@ -980,9 +899,16 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
          * ============================================================ */
 
         char distZip[MAX_PATH * 2];
-        snprintf(distZip, sizeof(distZip), "%sdist.zip", exeDir);
+        /* dist.zip lives one level up from <DIR>\<app>.exe (the share root). */
+        snprintf(distZip, sizeof(distZip), "%s..\\dist.zip", exeDir);
 
         DWORD zipAttr = GetFileAttributesA(distZip);
+        if (zipAttr == INVALID_FILE_ATTRIBUTES ||
+            (zipAttr & FILE_ATTRIBUTE_DIRECTORY)) {
+            /* Legacy flat layout: dist.zip next to the exe. */
+            snprintf(distZip, sizeof(distZip), "%sdist.zip", exeDir);
+            zipAttr = GetFileAttributesA(distZip);
+        }
         if (zipAttr == INVALID_FILE_ATTRIBUTES ||
             (zipAttr & FILE_ATTRIBUTE_DIRECTORY)) {
             char msg[512];
@@ -1034,12 +960,10 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 #endif /* APP_REPO */
     }
 
-    /* --- Tell the app where the network data lives --- */
-    /* SISTEMAS_DATA_ROOT is set to the data folder (e.g., RAC/rac/).
-     * This matches the multi-app SISTEMAS format. */
-    char sharedDataFolder[MAX_PATH * 2];
-    snprintf(sharedDataFolder, sizeof(sharedDataFolder), "%s\\%s", exeDir, appName);
-    SetEnvironmentVariableA("SISTEMAS_DATA_ROOT", sharedDataFolder);
+    /* --- Tell the app where its data lives ---
+     * Data always lives next to the exe, in whatever directory it runs from.
+     * SISTEMAS_DATA_ROOT = exeDir; the app writes to exeDir\data\. */
+    SetEnvironmentVariableA("SISTEMAS_DATA_ROOT", exeDir);
 
     /* --- Launch pythonw.exe -m <appName> --- */
     char workDir[MAX_PATH * 2];

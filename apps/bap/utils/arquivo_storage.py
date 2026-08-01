@@ -14,7 +14,12 @@ def resolve_arquivos_root(config: Path | dict | None = None) -> Path:
             return config
         if isinstance(config, dict) and config.get("arquivos_root"):
             return Path(config["arquivos_root"])
-    return get_root_directory() / "REMESSAS"
+        # Handle SS54Config objects (which have to_dict() method)
+        if hasattr(config, "to_dict") and callable(getattr(config, "to_dict")):
+            config_dict = config.to_dict()
+            if config_dict.get("arquivos_root"):
+                return Path(config_dict["arquivos_root"])
+    return get_root_directory() / "SS 54" / "REMESSAS"
 
 
 def _safe_filename(name: str) -> str:
