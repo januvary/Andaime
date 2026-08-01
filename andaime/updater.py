@@ -663,7 +663,7 @@ class UpdateCheckWorker(QThread):
             need_payload = bool(
                 remote_runtime and remote_runtime != local_runtime
             ) or not remote_runtime
-            need_app_update = bool(
+            need_app_update = need_payload or bool(
                 remote_app_hash and remote_app_hash != local_app_hash
             ) or not remote_app_hash
 

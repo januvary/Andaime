@@ -42,6 +42,11 @@
 #include <wininet.h>
 #endif
 
+/* PORTABLE_MODE: shared install at %LOCALAPPDATA%\SISTEMAS,
+ * tries local dist.zip first, falls back to GitHub download.
+ * Standalone: per-app install at %LOCALAPPDATA%\SISTEMAS\<module>,
+ * always downloads from GitHub. */
+
 /* --- Helpers --- */
 
 static int
@@ -744,12 +749,12 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     /* --- Local install path --- */
     char localRoot[MAX_PATH * 2];
 
-#ifdef APP_REPO
+#ifdef PORTABLE_MODE
+    /* Portable: %LOCALAPPDATA%\SISTEMAS (shared across apps) */
+    snprintf(localRoot, sizeof(localRoot), "%s\\SISTEMAS", lad);
+#else
     /* Standalone: %LOCALAPPDATA%\SISTEMAS\<module> */
     snprintf(localRoot, sizeof(localRoot), "%s\\SISTEMAS\\%s", lad, appName);
-#else
-    /* Legacy SISTEMAS: %LOCALAPPDATA%\SISTEMAS (shared) */
-    snprintf(localRoot, sizeof(localRoot), "%s\\SISTEMAS", lad);
 #endif
 
     /* --- Check if local Python exists --- */
@@ -762,11 +767,51 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 
     /* --- Install / update --- */
     if (!pythonExists) {
+        int installed = 0;
 
-#ifdef APP_REPO
+#ifdef PORTABLE_MODE
         /* ============================================================
-         * Standalone mode: download from GitHub Releases.
+         * Portable: try local dist.zip first (offline install).
          * ============================================================ */
+        char distZip[MAX_PATH * 2];
+        snprintf(distZip, sizeof(distZip), "%s..\\dist.zip", exeDir);
+
+        DWORD zipAttr = GetFileAttributesA(distZip);
+        if (zipAttr == INVALID_FILE_ATTRIBUTES ||
+            (zipAttr & FILE_ATTRIBUTE_DIRECTORY)) {
+            snprintf(distZip, sizeof(distZip), "%sdist.zip", exeDir);
+            zipAttr = GetFileAttributesA(distZip);
+        }
+
+        if (zipAttr != INVALID_FILE_ATTRIBUTES &&
+            !(zipAttr & FILE_ATTRIBUTE_DIRECTORY)) {
+            mkdir_recursive(localRoot);
+
+            char progressTitle[256];
+            snprintf(progressTitle, sizeof(progressTitle),
+                     "SISTEMAS - Instalando...");
+            HWND hdlg = show_progress(progressTitle);
+
+            if (extract_miniz(distZip, localRoot) == 0) {
+                if (hdlg) DestroyWindow(hdlg);
+                log_message("Portable: extracted local dist.zip to %s", localRoot);
+
+                attr = GetFileAttributesA(localPython);
+                if (attr != INVALID_FILE_ATTRIBUTES &&
+                    !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                    installed = 1;
+                }
+            } else {
+                if (hdlg) DestroyWindow(hdlg);
+                log_message("Portable: local dist.zip extraction failed, falling back to GitHub");
+            }
+        }
+#endif /* PORTABLE_MODE */
+
+        if (!installed) {
+            /* ============================================================
+             * GitHub download (standalone always, portable fallback).
+             * ============================================================ */
 
         /* Create local directory (recursively, like mkdir -p). */
         mkdir_recursive(localRoot);
@@ -891,73 +936,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             ReleaseMutex(hMutex);
             return 1;
         }
-
-#else  /* !APP_REPO — Portable/Legacy SISTEMAS mode */
-        /* ============================================================
-         * Portable/Legacy mode: extract dist.zip from launcher's directory
-         * to shared %LOCALAPPDATA%\SISTEMAS location.
-         * ============================================================ */
-
-        char distZip[MAX_PATH * 2];
-        /* dist.zip lives one level up from <DIR>\<app>.exe (the share root). */
-        snprintf(distZip, sizeof(distZip), "%s..\\dist.zip", exeDir);
-
-        DWORD zipAttr = GetFileAttributesA(distZip);
-        if (zipAttr == INVALID_FILE_ATTRIBUTES ||
-            (zipAttr & FILE_ATTRIBUTE_DIRECTORY)) {
-            /* Legacy flat layout: dist.zip next to the exe. */
-            snprintf(distZip, sizeof(distZip), "%sdist.zip", exeDir);
-            zipAttr = GetFileAttributesA(distZip);
-        }
-        if (zipAttr == INVALID_FILE_ATTRIBUTES ||
-            (zipAttr & FILE_ATTRIBUTE_DIRECTORY)) {
-            char msg[512];
-            snprintf(msg, sizeof(msg),
-                     "SISTEMAS needs setup but dist.zip was not found:\n%s\n\n"
-                     "Please copy dist.zip and VERSION to the SISTEMAS folder.", distZip);
-            MessageBoxA(NULL, msg, "SISTEMAS", MB_ICONERROR | MB_OK);
-            ReleaseMutex(hMutex);
-            return 1;
-        }
-
-        /* Remove old shared installation to avoid conflicts. */
-        char delCmd[MAX_PATH * 4];
-        snprintf(delCmd, sizeof(delCmd),
-                 "cmd.exe /c rd /s /q \"%s\" 2>nul", localRoot);
-        system(delCmd);
-
-        /* Extract dist.zip to shared SISTEMAS location. */
-        char progressTitle[256];
-        snprintf(progressTitle, sizeof(progressTitle), "SISTEMAS - Instalando...");
-        HWND hdlg = show_progress(progressTitle);
-
-        if (extract_miniz(distZip, localRoot) != 0) {
-            if (hdlg) DestroyWindow(hdlg);
-            char msg[512];
-            snprintf(msg, sizeof(msg),
-                     "Installation failed.\n"
-                     "See details in: %%LOCALAPPDATA%%\\SISTEMAS\\launcher.log");
-            MessageBoxA(NULL, msg, "SISTEMAS", MB_ICONERROR | MB_OK);
-            ReleaseMutex(hMutex);
-            return 1;
-        }
-
-        if (hdlg) DestroyWindow(hdlg);
-
-        log_message("Portable mode: extracted to shared SISTEMAS at %s", localRoot);
-
-        /* Verify pythonw.exe appeared. */
-        attr = GetFileAttributesA(localPython);
-        if (attr == INVALID_FILE_ATTRIBUTES ||
-            (attr & FILE_ATTRIBUTE_DIRECTORY)) {
-            MessageBoxA(NULL,
-                        "Installation completed but pythonw.exe not found.\n"
-                        "The dist.zip may be corrupted.",
-                        "SISTEMAS", MB_ICONERROR | MB_OK);
-            ReleaseMutex(hMutex);
-            return 1;
-        }
-#endif /* APP_REPO */
+        } /* !installed */
     }
 
     /* --- Tell the app where its data lives ---

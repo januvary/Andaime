@@ -443,13 +443,16 @@ XML
 
     x86_64-w64-mingw32-windres "$rc_dir/app.rc" "$rc_dir/app_res.o" 2>/dev/null
 
-    local gcc_cmd="x86_64-w64-mingw32-gcc -O2 -s -o \"$output\" \"$ANDAIME_REPO/launcher.c\" \"$ANDAIME_REPO/miniz.c\" \"$ANDAIME_REPO/miniz_zip.c\" \"$ANDAIME_REPO/miniz_tdef.c\" \"$ANDAIME_REPO/miniz_tinfl.c\" \"$rc_dir/app_res.o\" -mwindows -static -lcomctl32 -lshlwapi"
+    local gcc_cmd="x86_64-w64-mingw32-gcc -O2 -s -o \"$output\" \"$ANDAIME_REPO/launcher.c\" \"$ANDAIME_REPO/miniz.c\" \"$ANDAIME_REPO/miniz_zip.c\" \"$ANDAIME_REPO/miniz_tdef.c\" \"$ANDAIME_REPO/miniz_tinfl.c\" \"$rc_dir/app_res.o\" -mwindows -static -lcomctl32 -lshlwapi -lwininet"
+
+    local module=$(app_field "$app_info" 1)
+    local display=$(app_field "$app_info" 5)
 
     if [[ "$mode" == "standalone" ]]; then
         local repo=$(app_field "$app_info" 2)
-        local module=$(app_field "$app_info" 1)
-        local display=$(app_field "$app_info" 5)
-        gcc_cmd="$gcc_cmd -lwininet -DAPP_REPO=\\\"$repo\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\""
+        gcc_cmd="$gcc_cmd -DAPP_REPO=\\\"$repo\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\""
+    elif [[ "$mode" == "portable" ]]; then
+        gcc_cmd="$gcc_cmd -DAPP_REPO=\\\"januvary/andaime\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\" -DPORTABLE_MODE=1"
     fi
 
     eval "$gcc_cmd"
@@ -460,6 +463,6 @@ XML
         local repo=$(app_field "$app_info" 2)
         ok "launcher.exe compiled ($repo)"
     else
-        ok "launcher.exe compiled (portable with GitHub + local fallback)"
+        ok "launcher.exe compiled (portable: dist.zip + GitHub fallback)"
     fi
 }
