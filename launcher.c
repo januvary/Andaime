@@ -676,6 +676,27 @@ json_find_asset_url(const char *json, const char *substr,
 }
 #endif /* APP_REPO */
 
+/* --- Window detection (for loading dialog) --- */
+
+static BOOL CALLBACK
+_find_visible_window(HWND hwnd, LPARAM lParam)
+{
+    DWORD *pid = (DWORD *)lParam;
+    DWORD winPid = 0;
+    GetWindowThreadProcessId(hwnd, &winPid);
+    if (winPid == *pid && IsWindowVisible(hwnd) &&
+        GetWindow(hwnd, GW_OWNER) == NULL) {
+        return FALSE;  /* found a top-level visible window */
+    }
+    return TRUE;
+}
+
+static int
+process_has_visible_window(DWORD pid)
+{
+    return !EnumWindows(_find_visible_window, (LPARAM)&pid);
+}
+
 /* --- Main --- */
 
 int WINAPI
@@ -1002,26 +1023,55 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
         return 1;
     }
 
-    log_message("Process started, pid unknown (handle=%p)", pi.hProcess);
+    log_message("Process started, pid=%lu", pi.dwProcessId);
 
-    /* Give the app a moment to start; if it exits quickly with an error,
-     * report it. Otherwise assume it is running normally. */
-    DWORD waitResult = WaitForSingleObject(pi.hProcess, 2000);
-    if (waitResult == WAIT_OBJECT_0) {
+    /* Show a loading dialog while the app initializes its GUI. */
+    HWND hLoadDlg = show_progress(displayName);
+
+    /* Poll for the app's window (up to 30 seconds). */
+    DWORD deadline = GetTickCount() + 30000;
+    int app_ready = 0;
+
+    while (GetTickCount() < deadline) {
+        DWORD rc = MsgWaitForMultipleObjects(
+            1, &pi.hProcess, FALSE, 200, QS_ALLINPUT);
+
+        if (rc == WAIT_OBJECT_0) {
+            break;  /* process exited */
+        }
+
+        /* Pump messages so the loading dialog stays responsive. */
+        MSG msg;
+        while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (!IsDialogMessageA(hLoadDlg, &msg)) {
+                TranslateMessage(&msg);
+                DispatchMessageA(&msg);
+            }
+        }
+
+        if (process_has_visible_window(pi.dwProcessId)) {
+            app_ready = 1;
+            break;
+        }
+    }
+
+    if (hLoadDlg) DestroyWindow(hLoadDlg);
+
+    if (!app_ready) {
         DWORD exitCode = 0;
         GetExitCodeProcess(pi.hProcess, &exitCode);
-        log_message("Process exited quickly with code: %lu", exitCode);
+        log_message("Process exited or timed out, code: %lu", exitCode);
 
-        if (exitCode != 0) {
+        if (exitCode != STILL_ACTIVE && exitCode != 0) {
             char msg[1024];
             snprintf(msg, sizeof(msg),
-                     "%s closed unexpectedly (exit code %lu).\n\n"
-                     "Details may be in:\n%s",
+                     "%s fechou inesperadamente (codigo %lu).\n\n"
+                     "Detalhes em:\n%s",
                      displayName, exitCode, appLogPath);
             MessageBoxA(NULL, msg, displayName, MB_ICONERROR | MB_OK);
         }
     } else {
-        log_message("Process still running after 2s, launcher exiting");
+        log_message("App window detected, launcher exiting");
     }
 
     CloseHandle(pi.hThread);
