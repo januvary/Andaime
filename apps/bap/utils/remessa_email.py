@@ -26,6 +26,7 @@ from bap.utils.arquivo_storage import (
     resolve_arquivos_root,
 )
 from bap.utils.config import SS54Config
+from bap.utils.date_utils import format_date_display
 
 
 @dataclass
@@ -176,8 +177,7 @@ def build_remessa_group(
         return None
 
     label = SOLICITACAO_LABELS.get(grupo, grupo.upper())
-    today = datetime.now().strftime("%d/%m")
-    subject = f"REMESSA {today} - {label.upper()}"
+    subject = f"REMESSA {format_date_display(lote.date)} - {label.upper()}"
 
     items: list[RemessaItem] = []
     attachments: list[tuple[str, str]] = []

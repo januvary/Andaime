@@ -170,7 +170,6 @@ def _ensure_drive_folder(creds, relpath: str) -> str:
 
     parent_id = "root"
     current = ""
-    HttpError = _get_http_error()
 
     try:
         for seg in relpath.split("/"):
@@ -185,27 +184,28 @@ def _ensure_drive_folder(creds, relpath: str) -> str:
                 "mimeType": "application/vnd.google-apps.folder",
                 "parents": [parent_id],
             }
-            try:
+            # Google Drive permite nomes duplicados no mesmo parent: não há
+            # 409. Busca a pasta existente antes de criar uma nova.
+            escaped = seg.replace("\\", "\\\\").replace("'", "\\'")
+            q = (
+                f"name = '{escaped}' and "
+                f"'{parent_id}' in parents and "
+                f"mimeType = 'application/vnd.google-apps.folder' and "
+                f"trashed = false"
+            )
+            resp = (
+                service.files()
+                .list(q=q, fields="files(id)", pageSize=1)
+                .execute()
+            )
+            files = resp.get("files") or []
+            if files:
+                folder_id = files[0].get("id", "")
+            else:
                 folder = (
                     service.files().create(body=body, fields="id").execute()
                 )
                 folder_id = folder.get("id", "")
-            except HttpError as he:
-                # 409 = já existe sob esse parent: resolve o id por nome.
-                if getattr(he, "status_code", None) == 409:
-                    q = (
-                        f"name = {json.dumps(seg)} and "
-                        f"'{parent_id}' in parents"
-                    )
-                    resp = (
-                        service.files()
-                        .list(q=q, fields="files(id)", pageSize=1)
-                        .execute()
-                    )
-                    files = resp.get("files") or []
-                    folder_id = files[0].get("id", "") if files else ""
-                else:
-                    raise
             cache[current] = folder_id
             parent_id = folder_id
     except Exception as e:  # pragma: no cover - rede
@@ -327,6 +327,44 @@ def upload_drive_file(
     return file_id, web_link
 
 
+def _list_drive_folder_files(service, parent_id: str) -> dict[str, str]:
+    """Lista ``{name: file_id}`` dos arquivos não-lixeira em ``parent_id``."""
+    q = f"'{parent_id}' in parents and trashed = false"
+    resp = (
+        service.files()
+        .list(q=q, fields="files(id,name)", pageSize=200)
+        .execute()
+    )
+    return {f["name"]: f["id"] for f in resp.get("files", [])}
+
+
+def _update_drive_file(creds, path: str, file_id: str) -> tuple[str, str]:
+    """Substitui o conteúdo de um arquivo existente no Drive."""
+    try:
+        from googleapiclient.http import MediaFileUpload
+    except ImportError as e:  # pragma: no cover
+        raise GmailError("Bibliotecas do Google não instaladas.") from e
+
+    service = drive_service_from_credentials(creds)
+    media = MediaFileUpload(path, mimetype="application/pdf", resumable=True)
+    try:
+        file = (
+            service.files()
+            .update(fileId=file_id, media_body=media, fields="id,webViewLink")
+            .execute()
+        )
+    except Exception as e:  # pragma: no cover - rede
+        _raise_if_scope_error(e)
+        raise GmailError(
+            f"Falha ao atualizar arquivo no Drive: {_http_error_message(e)}"
+        ) from e
+    file_id = file.get("id", "")
+    web_link = file.get("webViewLink") or (
+        f"https://drive.google.com/file/d/{file_id}/view?usp=drive_web"
+    )
+    return file_id, web_link
+
+
 def share_drive_file_with(creds, file_id: str, _email: str = "") -> None:
     """Compartilha o arquivo do Drive com qualquer pessoa que tenha o link."""
     service = drive_service_from_credentials(creds)
@@ -342,6 +380,27 @@ def share_drive_file_with(creds, file_id: str, _email: str = "") -> None:
         _raise_if_scope_error(e)
         raise GmailError(
             f"Falha ao compartilhar arquivo no Drive: {_http_error_message(e)}"
+        ) from e
+
+
+def share_drive_files_batch(creds, file_ids: list[str]) -> None:
+    """Compartilha vários arquivos do Drive em uma única requisição batch."""
+    service = drive_service_from_credentials(creds)
+    batch = service.new_batch_http_request()
+    permission = {"type": "anyone", "role": "reader"}
+    for fid in file_ids:
+        batch.add(service.permissions().create(
+            fileId=fid,
+            body=permission,
+            fields="id",
+            sendNotificationEmail=False,
+        ))
+    try:
+        batch.execute()
+    except Exception as e:  # pragma: no cover - rede
+        _raise_if_scope_error(e)
+        raise GmailError(
+            f"Falha ao compartilhar arquivos no Drive: {_http_error_message(e)}"
         ) from e
 
 
@@ -549,11 +608,23 @@ def create_draft(
     if drive_folder:
         parent_id = _ensure_drive_folder(creds, drive_folder)
 
+    existing = {}
+    if parent_id:
+        drive_service = drive_service_from_credentials(creds)
+        existing = _list_drive_folder_files(drive_service, parent_id)
+
     drive_attachments: list[tuple[str, str]] = []
+    uploaded_file_ids: list[str] = []
     for path, name in attachments:
-        file_id, web_link = upload_drive_file(creds, path, name, parent_id)
-        share_drive_file_with(creds, file_id, to)
+        if name in existing:
+            file_id, web_link = _update_drive_file(creds, path, existing[name])
+        else:
+            file_id, web_link = upload_drive_file(creds, path, name, parent_id)
+        uploaded_file_ids.append(file_id)
         drive_attachments.append((name, web_link))
+
+    if uploaded_file_ids:
+        share_drive_files_batch(creds, uploaded_file_ids)
 
     raw, rfc822_msgid = _build_mime(
         to, subject, html_body, drive_attachments, sender
