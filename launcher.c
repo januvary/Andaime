@@ -1025,44 +1025,14 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 
     log_message("Process started, pid=%lu", pi.dwProcessId);
 
-    /* Show a loading dialog while the app initializes its GUI. */
-    HWND hLoadDlg = show_progress(displayName);
-
-    /* Poll for the app's window (up to 30 seconds). */
-    DWORD deadline = GetTickCount() + 30000;
-    int app_ready = 0;
-
-    while (GetTickCount() < deadline) {
-        DWORD rc = MsgWaitForMultipleObjects(
-            1, &pi.hProcess, FALSE, 200, QS_ALLINPUT);
-
-        if (rc == WAIT_OBJECT_0) {
-            break;  /* process exited */
-        }
-
-        /* Pump messages so the loading dialog stays responsive. */
-        MSG msg;
-        while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
-            if (!IsDialogMessageA(hLoadDlg, &msg)) {
-                TranslateMessage(&msg);
-                DispatchMessageA(&msg);
-            }
-        }
-
-        if (process_has_visible_window(pi.dwProcessId)) {
-            app_ready = 1;
-            break;
-        }
-    }
-
-    if (hLoadDlg) DestroyWindow(hLoadDlg);
-
-    if (!app_ready) {
+    /* Wait briefly to detect immediate crashes. */
+    DWORD waitResult = WaitForSingleObject(pi.hProcess, 5000);
+    if (waitResult == WAIT_OBJECT_0) {
         DWORD exitCode = 0;
         GetExitCodeProcess(pi.hProcess, &exitCode);
-        log_message("Process exited or timed out, code: %lu", exitCode);
+        log_message("Process exited with code: %lu", exitCode);
 
-        if (exitCode != STILL_ACTIVE && exitCode != 0) {
+        if (exitCode != 0) {
             char msg[1024];
             snprintf(msg, sizeof(msg),
                      "%s fechou inesperadamente (codigo %lu).\n\n"
@@ -1071,7 +1041,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             MessageBoxA(NULL, msg, displayName, MB_ICONERROR | MB_OK);
         }
     } else {
-        log_message("App window detected, launcher exiting");
+        log_message("App running normally, launcher exiting");
     }
 
     CloseHandle(pi.hThread);

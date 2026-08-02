@@ -39,3 +39,4 @@ def get_root_directory() -> Path:
 
 
 from andaime.app import App
+from andaime.qt.splash import SplashScreen

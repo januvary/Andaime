@@ -63,7 +63,7 @@ class MainWindow(QMainWindow):
         self.next_item_id = 0
         self.selected_medicamento = None
         self._last_preview_data: NegativaData | None = None
-        self._scroll_area: QScrollArea | None = self.findChild(QScrollArea)
+        self._scroll_area: QScrollArea | None = None
         self._last_temp_path: str | None = None
 
         self._debounce_timer = QTimer(self)
@@ -73,6 +73,10 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_table_model()
         self._setup_signals()
+
+        # Find scroll area after UI is built
+        self._scroll_area = self.findChild(QScrollArea)
+
         self._load_config()
         self._atualizar_preview()
 
@@ -268,7 +272,6 @@ class MainWindow(QMainWindow):
         checks_row.setSpacing(20)
 
         self.check_daf = QCheckBox("Divisão de Assistência Farmacêutica")
-        self.check_daf.setChecked(True)
         self.check_daf.setStyleSheet("font-size: 14px;")
 
         self.check_dgmi = QCheckBox("Divisão de Gestão de Materiais e Insumos")
@@ -494,6 +497,10 @@ class MainWindow(QMainWindow):
         self.nome_daf_input.textChanged.connect(self._debounce_preview)
         self.nome_dgmi_input.textChanged.connect(self._debounce_preview)
 
+        # Initialize checkbox states after connecting signals
+        self.check_daf.setChecked(True)
+        self.check_dgmi.setChecked(False)
+
     # ──────────────────────────── SEARCH / ITEMS ────────────────────────────
 
     def _search_medicamentos(self, query: str) -> Dict[str, str]:
@@ -566,23 +573,23 @@ class MainWindow(QMainWindow):
 
             if item.categoria in ["USAFA", "CAPS II"]:
                 cb = QCheckBox("Em falta")
-                cb.setChecked(item.em_falta)
                 row_idx = row  # Capture for closure
                 cb.stateChanged.connect(
                     lambda state, r=row_idx: self._on_falta_changed(
                         r, state == Qt.CheckState.Checked.value
                     )
                 )
+                cb.setChecked(item.em_falta)
                 ol.addWidget(cb)
             elif item.categoria == "NAO_PADRONIZADO":
                 cb = QCheckBox("Medicamento")
-                cb.setChecked(item.is_medicamento)
                 row_idx = row  # Capture for closure
                 cb.stateChanged.connect(
                     lambda state, r=row_idx: self._on_tipo_changed(
                         r, state == Qt.CheckState.Checked.value
                     )
                 )
+                cb.setChecked(item.is_medicamento)
                 ol.addWidget(cb)
 
             ol.addStretch()
