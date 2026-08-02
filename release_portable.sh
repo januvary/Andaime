@@ -72,7 +72,7 @@ if [ ! -f "$SISTEMAS/dist.zip" ] || [ ! -f "$SISTEMAS/VERSION" ]; then
     exit 1
 fi
 
-echo "[3/4] Creating release assets..."
+echo "[3/5] Creating release assets..."
 
 # Rename dist.zip → {TAG}-payload.zip (updater matches "payload" in name)
 PAYLOAD_ASSET="/tmp/${TAG}-payload.zip"
@@ -84,8 +84,24 @@ cd "$SISTEMAS"
 zip -r "$APP_UPDATE_ASSET" "apps/" "VERSION" -q \
     -x "apps/*/__pycache__"
 
-echo "[4/4] Creating GitHub release on $REPO..."
+# Create portable distribution zip (launchers + empty data/ + VERSION + shortcuts)
+# Admins download this to set up a share; each exe downloads payload from GitHub on first run.
+PORTABLE_ASSET="/tmp/${TAG}.zip"
+
+# Ensure data dirs exist and are empty (remove any Wine test data)
+for app_dir in RAC Negativas Emissor BAP; do
+    mkdir -p "$SISTEMAS/$app_dir/data"
+    find "$SISTEMAS/$app_dir/data" -mindepth 1 -delete 2>/dev/null || true
+done
+
+cd "$DIST_DIR"
+zip -r "$PORTABLE_ASSET" \
+    "SISTEMAS/RAC/" "SISTEMAS/Negativas/" "SISTEMAS/Emissor/" "SISTEMAS/BAP/" \
+    "SISTEMAS/VERSION" "SISTEMAS/shortcuts.bat" -q
+
+echo "[4/5] Creating GitHub release on $REPO..."
 gh release create "$TAG" \
+    "$PORTABLE_ASSET" \
     "$PAYLOAD_ASSET" \
     "$APP_UPDATE_ASSET" \
     "$SISTEMAS/VERSION" \
