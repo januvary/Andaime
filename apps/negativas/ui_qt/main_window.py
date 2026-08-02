@@ -3,6 +3,7 @@
 import sys
 import tempfile
 import webbrowser
+import copy
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List
@@ -688,7 +689,7 @@ class MainWindow(QMainWindow):
             usos_dgmi=self.check_dgmi.isChecked(),
             nome_daf=self.nome_daf_input.text().strip(),
             nome_dgmi=self.nome_dgmi_input.text().strip(),
-            itens=list(self.itens_selecionados),
+            itens=[copy.deepcopy(item) for item in self.itens_selecionados],
         )
 
     # ──────────────────────────── ACTIONS ────────────────────────────
