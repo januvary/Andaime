@@ -25,7 +25,7 @@ def _apply_pending_update():
     apply_pending_update()
 
 
-def _show_usafa_dialog(config, parent=None):
+def _show_usafa_dialog(config, splash=None, parent=None):
     """Show dialog to configure USAFA name."""
     from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QHBoxLayout
     from rac.gui.widgets.buttons import make_button
@@ -89,13 +89,13 @@ def _show_usafa_dialog(config, parent=None):
     return None
 
 
-def _prompt_usafa_name(config):
+def _prompt_usafa_name(config, splash=None):
     """Prompt user to input USAFA name if not set."""
     usafa_name = config.get("usafa_name")
     if usafa_name and usafa_name.strip():
         return
 
-    result = _show_usafa_dialog(config)
+    result = _show_usafa_dialog(config, splash)
     if not result:
         sys.exit(0)
 
@@ -138,7 +138,10 @@ def _start_update_check(window):
         btn_row.addWidget(restart)
         layout.addLayout(btn_row)
 
-        if dlg.exec() == QDialog.DialogCode.Accepted:
+    if splash:
+        splash.finish(dlg)
+
+    if dlg.exec() == QDialog.DialogCode.Accepted:
             restart_app()
 
     def _on_failed(msg):
@@ -189,10 +192,11 @@ def main():
     apply_font(qapp, app.font)
 
     config = app.config
-    _prompt_usafa_name(config)
     theme = config.get("theme", "dark")
     set_theme(theme)
     qapp.setStyleSheet(get_stylesheet())
+
+    _prompt_usafa_name(config, splash)
 
     from rac.gui.main_window import MainWindow
 
