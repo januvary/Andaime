@@ -28,7 +28,6 @@ Update flow::
 
 from __future__ import annotations
 
-import io
 import contextlib
 import hashlib
 import json
@@ -145,30 +144,15 @@ def _get_app_module() -> str:
 def parse_manifest_text(text: str) -> dict[str, str]:
     """Parse a VERSION manifest from raw text.
 
-    The manifest is embedded in an HTML comment block so it's invisible
-    on the GitHub releases page but present in the API response::
+    Format::
 
-        Release notes here
-        <!-- manifest:start -->
+        26.07.31-2202
         runtime: d4c3b2a1
         rac: f8e7d6c5
-        <!-- manifest:end -->
-
-    Falls back to parsing the full text if no comment markers are found.
+        andaime: a1b2c3d4
     """
     manifest: dict[str, str] = {"datestamp": "", "runtime": ""}
-
-    start_marker = "<!-- manifest:start -->"
-    end_marker = "<!-- manifest:end -->"
-
-    if start_marker in text and end_marker in text:
-        start = text.index(start_marker) + len(start_marker)
-        end = text.index(end_marker)
-        manifest_text = text[start:end]
-    else:
-        manifest_text = text
-
-    for line in manifest_text.strip().splitlines():
+    for line in text.strip().splitlines():
         line = line.strip()
         if line.startswith("#") or not line:
             continue
@@ -652,7 +636,24 @@ class UpdateCheckWorker(QThread):
                 return
 
             notes = release.get("body", "") or ""
-            remote_manifest = parse_manifest_text(notes)
+
+            # Read manifest from VERSION asset.
+            remote_manifest: dict[str, str] = {}
+            for asset in release.get("assets", []):
+                if asset.get("name", "") == VERSION_FILE:
+                    asset_url = asset.get("browser_download_url")
+                    if asset_url:
+                        try:
+                            req2 = urllib.request.Request(asset_url, headers=headers)
+                            with urllib.request.urlopen(
+                                req2, timeout=30, context=context
+                            ) as resp2:
+                                remote_manifest = parse_manifest_text(
+                                    resp2.read().decode("utf-8")
+                                )
+                        except Exception:
+                            pass
+                    break
 
             remote_app_hash = remote_manifest.get(module, "")
             remote_runtime = remote_manifest.get("runtime", "")

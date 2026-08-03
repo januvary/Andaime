@@ -106,12 +106,10 @@ gh release create "$TAG" \
     "$PORTABLE_ASSET" \
     "$PAYLOAD_ASSET" \
     "$APP_UPDATE_ASSET" \
+    "$SISTEMAS/VERSION" \
     --repo "$REPO" \
     --title "$TAG" \
-    --notes "SISTEMAS ${TAG}
-<!-- manifest:start -->
-$(cat "$SISTEMAS/VERSION")
-<!-- manifest:end -->"
+    --notes "SISTEMAS ${TAG}"
 
 echo ""
 echo -e "${GREEN}Done!${NC}"

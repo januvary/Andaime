@@ -56,6 +56,12 @@ class SplashScreen:
         self._splash.finish(window)
         self._splash = None
 
+    def close(self) -> None:
+        if self._splash is None:
+            return
+        self._splash.close()
+        self._splash = None
+
     # ------------------------------------------------------------------
     def _make_pixmap(self) -> QPixmap:
         pixmap = QPixmap(_W, _H)

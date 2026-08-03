@@ -11,9 +11,7 @@
 #   ├── apps/<app>/          (app code, src→<app> renamed)
 #   ├── VERSION              (app version + runtime hash)
 #   ├── launcher.exe         (compiled with GitHub repo info)
-#   ├── <app>-v<X>.zip           (user download: <DISPLAY>/<app>.exe + data/)
-#   ├── <app>-v<X>-payload.zip   (full payload for first install)
-#   └── <app>-v<X>-update.zip    (app code only for auto-updater)
+#   └── <app>-v<X>.zip           (user download: <DISPLAY>/<app>.exe + data/)
 #
 # Usage:
 #   ./build_app.sh rac                # build RAC
@@ -187,27 +185,6 @@ echo -e "\n${YELLOW}Creating archives...${NC}"
 
 TAG="$DSTAMP"
 
-# --- Payload zip (full: python/ + apps/ + VERSION) ---
-PAYLOAD_ZIP="$STAGE/${APP_MODULE}-${TAG}-payload.zip"
-rm -f "$PAYLOAD_ZIP"
-cd "$STAGE"
-zip -r "$PAYLOAD_ZIP" "python/" "apps/" "VERSION" -q
-PAYLOAD_SIZE=$(du -sh "$PAYLOAD_ZIP" | cut -f1)
-ok "payload.zip: $PAYLOAD_SIZE"
-
-# --- App update zip (app code only) ---
-APP_UPDATE_ZIP="$STAGE/${APP_MODULE}-${TAG}-app-update.zip"
-rm -f "$APP_UPDATE_ZIP"
-cd "$STAGE"
-zip -r "$APP_UPDATE_ZIP" \
-    "apps/$APP_MODULE/" \
-    "VERSION" -q
-# Add andaime from site-packages
-cd "$STAGE/python/Lib/site-packages"
-zip -r "$APP_UPDATE_ZIP" "andaime/" -q
-APP_UPDATE_SIZE=$(du -sh "$APP_UPDATE_ZIP" | cut -f1)
-ok "app-update.zip: $APP_UPDATE_SIZE"
-
 # --- User-facing zip (extract-and-run: <DISPLAY>/<app>.exe + data/) ---
 USER_ZIP="$STAGE/${APP_MODULE}-${TAG}.zip"
 WRAPPER="$STAGE/$APP_DISPLAY"
@@ -229,8 +206,6 @@ echo "Output: $STAGE/"
 echo ""
 echo "Artifacts:"
 echo "  User zip:       $USER_ZIP ($USER_SIZE)"
-echo "  Payload zip:    $PAYLOAD_ZIP ($PAYLOAD_SIZE)"
-echo "  App update zip: $APP_UPDATE_ZIP ($APP_UPDATE_SIZE)"
 echo ""
 TOTAL=$(du -sh "$STAGE" | cut -f1)
 echo -e "  ${GREEN}Total stage:${NC} $TOTAL"

@@ -676,27 +676,6 @@ json_find_asset_url(const char *json, const char *substr,
 }
 #endif /* APP_REPO */
 
-/* --- Window detection (for loading dialog) --- */
-
-static BOOL CALLBACK
-_find_visible_window(HWND hwnd, LPARAM lParam)
-{
-    DWORD *pid = (DWORD *)lParam;
-    DWORD winPid = 0;
-    GetWindowThreadProcessId(hwnd, &winPid);
-    if (winPid == *pid && IsWindowVisible(hwnd) &&
-        GetWindow(hwnd, GW_OWNER) == NULL) {
-        return FALSE;  /* found a top-level visible window */
-    }
-    return TRUE;
-}
-
-static int
-process_has_visible_window(DWORD pid)
-{
-    return !EnumWindows(_find_visible_window, (LPARAM)&pid);
-}
-
 /* --- Main --- */
 
 int WINAPI
