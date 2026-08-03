@@ -748,16 +748,9 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
      * Works from any directory (Downloads, Desktop, USB, network share).
      */
 
-    /* --- Local install path --- */
+    /* --- Local install path (shared across all apps) --- */
     char localRoot[MAX_PATH * 2];
-
-#ifdef PORTABLE_MODE
-    /* Portable: %LOCALAPPDATA%\SISTEMAS (shared across apps) */
     snprintf(localRoot, sizeof(localRoot), "%s\\SISTEMAS", lad);
-#else
-    /* Standalone: %LOCALAPPDATA%\SISTEMAS\<module> */
-    snprintf(localRoot, sizeof(localRoot), "%s\\SISTEMAS\\%s", lad, appName);
-#endif
 
     /* --- Check if local Python exists --- */
     char localPython[MAX_PATH * 2];

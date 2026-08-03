@@ -395,7 +395,9 @@ class MainWindow(QMainWindow):
         # anterior não pode ser lido do rótulo; comparamos com o conhecido.
         prev = self._active_lote
         if self.config and lote is not None:
-            self.config.set("last_lote_id", lote.id)
+            current_last = self.config.get("last_lote_id")
+            if current_last != lote.id:
+                self.config.set("last_lote_id", lote.id)
         if lote is not None:
             self.set_status(f"Remessa ativa: {format_date_display(lote.date)}")
         self._sync_pages_remessa(lote, emit=False)
