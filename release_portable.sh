@@ -109,8 +109,9 @@ gh release create "$TAG" \
     --repo "$REPO" \
     --title "$TAG" \
     --notes "SISTEMAS ${TAG}
----
-$(cat "$SISTEMAS/VERSION")"
+<!-- manifest:start -->
+$(cat "$SISTEMAS/VERSION")
+<!-- manifest:end -->"
 
 echo ""
 echo -e "${GREEN}Done!${NC}"

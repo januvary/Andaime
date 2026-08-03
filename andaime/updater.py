@@ -145,22 +145,28 @@ def _get_app_module() -> str:
 def parse_manifest_text(text: str) -> dict[str, str]:
     """Parse a VERSION manifest from raw text.
 
-    If the text contains ``---``, only the section after the last ``---``
-    is parsed. This allows human-readable release notes above the manifest.
-
-    Format::
+    The manifest is embedded in an HTML comment block so it's invisible
+    on the GitHub releases page but present in the API response::
 
         Release notes here
-        ---
-        26.07.31-2202
+        <!-- manifest:start -->
         runtime: d4c3b2a1
         rac: f8e7d6c5
+        <!-- manifest:end -->
+
+    Falls back to parsing the full text if no comment markers are found.
     """
     manifest: dict[str, str] = {"datestamp": "", "runtime": ""}
 
-    manifest_text = text
-    if "---" in text:
-        manifest_text = text.rsplit("---", 1)[-1]
+    start_marker = "<!-- manifest:start -->"
+    end_marker = "<!-- manifest:end -->"
+
+    if start_marker in text and end_marker in text:
+        start = text.index(start_marker) + len(start_marker)
+        end = text.index(end_marker)
+        manifest_text = text[start:end]
+    else:
+        manifest_text = text
 
     for line in manifest_text.strip().splitlines():
         line = line.strip()
