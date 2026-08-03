@@ -191,7 +191,7 @@ class StatsPage(BasePage):
         self._total_registros_card = _TipoCard("__total_reg", "0", label="Total Registros")
         self._total_registros_card.set_on_click(self._open_all_registros)
         totals_row.addWidget(self._total_registros_card)
-        self._total_pacientes_card = _TipoCard("__total_pac", "0", label="Total Pacientes")
+        self._total_pacientes_card = _TipoCard("__total_pac", "0", label="Pacientes com Registros")
         self._total_pacientes_card.set_on_click(
             lambda: self._mw.navigate_to("pacientes", return_to="stats")
         )
@@ -217,12 +217,12 @@ class StatsPage(BasePage):
         )
 
     def _build_medications_table(self, layout: QVBoxLayout):
-        layout.addSpacing(2)
+        layout.addSpacing(20)
 
         self._meds_search = QLineEdit()
         self._meds_search.setPlaceholderText("Buscar medicamento...")
         layout.addWidget(self._meds_search)
-        layout.addSpacing(12)
+        layout.addSpacing(8)
 
         self._meds_table = QTableWidget(0, 3)
         self._meds_table.setHorizontalHeaderLabels(["Medicamento", "Registros", "%"])

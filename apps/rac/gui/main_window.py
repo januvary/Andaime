@@ -7,7 +7,6 @@ Main Window — QStackedWidget page navigation
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget, QVBoxLayout, QSizePolicy
 
 from PySide6.QtCore import Qt, Signal, QTimer
-
 from rac.database.rac_database import RACDatabase
 from rac.state.rac_state_manager import RACStateManager
 from andaime.config import ConfigManager
@@ -34,6 +33,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("RAC - Registros de Apoio ao CEAF")
         self.setMinimumSize(750, 600)
         self.resize(900, 700)
+        self.setAcceptDrops(True)
 
         central = QWidget()
         central.setObjectName("central")
@@ -326,3 +326,27 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.shutdown_backend()
         super().closeEvent(event)
+
+    _XLSX_SUFFIXES = (".xlsx", ".xlsm")
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                path = url.toLocalFile()
+                if path.lower().endswith(self._XLSX_SUFFIXES):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        page = self._current_page()
+        if not isinstance(page, StartPage):
+            event.ignore()
+            return
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if path.lower().endswith(self._XLSX_SUFFIXES):
+                page.open_import_dialog(path)
+                event.acceptProposedAction()
+                return
+        event.ignore()

@@ -130,6 +130,9 @@ ok "Datestamp: $DSTAMP"
 APP_HASH=$(compute_app_hash "$APP_MODULE")
 ok "App hash: $APP_HASH"
 
+ANDAIME_HASH=$(compute_andaime_hash)
+ok "Andaime hash: $ANDAIME_HASH"
+
 RUNTIME_HASH=$(compute_runtime_hash)
 ok "Runtime hash: $RUNTIME_HASH"
 
@@ -141,8 +144,8 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE/python" "$STAGE/apps"
 
 # VERSION file: datestamp + runtime hash + app hash
-echo -e "${DSTAMP}\nruntime: ${RUNTIME_HASH}\n${APP_MODULE}: ${APP_HASH}" > "$STAGE/VERSION"
-ok "VERSION: $DSTAMP (runtime: $RUNTIME_HASH, $APP_MODULE: $APP_HASH)"
+echo -e "${DSTAMP}\nruntime: ${RUNTIME_HASH}\n${APP_MODULE}: ${APP_HASH}\nandaime: ${ANDAIME_HASH}" > "$STAGE/VERSION"
+ok "VERSION: $DSTAMP (runtime: $RUNTIME_HASH, $APP_MODULE: $APP_HASH, andaime: $ANDAIME_HASH)"
 
 # ============================================
 # Copy Windows Python tree

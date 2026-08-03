@@ -35,14 +35,37 @@ def data_por_extenso() -> str:
 
 
 _svg_cache: str | None = None
+_current_svg_color: str | None = None
 
 
 def svg_base64() -> str:
-    """Retorna o SVG do brasão em base64 (com cache)."""
-    global _svg_cache
-    if _svg_cache is None:
+    """Retorna o SVG do brasão em base64 (com cache e cor de tema)."""
+    global _svg_cache, _current_svg_color
+    
+    # Get current theme color
+    try:
+        from negativas.ui_qt.theme import colors
+        theme_color = colors().get("text", "#000000")
+    except ImportError:
+        theme_color = "#000000"
+    
+    # Check if we need to regenerate the SVG
+    if _svg_cache is None or _current_svg_color != theme_color:
         try:
-            _svg_cache = base64.b64encode(BRASAO_SVG_PATH.read_bytes()).decode()
+            svg_content = BRASAO_SVG_PATH.read_text(encoding='utf-8')
+            # Replace hardcoded fill color with theme color
+            svg_colored = svg_content.replace('fill="#000000"', f'fill="{theme_color}"')
+            _svg_cache = base64.b64encode(svg_colored.encode('utf-8')).decode()
+            _current_svg_color = theme_color
         except Exception:
             _svg_cache = ""
+            _current_svg_color = None
+    
     return _svg_cache
+
+
+def clear_svg_cache():
+    """Limpa o cache do SVG para forçar regeneração com nova cor de tema."""
+    global _svg_cache, _current_svg_color
+    _svg_cache = None
+    _current_svg_color = None

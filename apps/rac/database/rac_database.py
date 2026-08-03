@@ -30,7 +30,7 @@ from rac.models import (
 
 
 class RACDatabase(BaseDatabase):
-    SCHEMA_VERSION = 7
+    SCHEMA_VERSION = 8
 
     def __init__(self, db_path: Optional[str] = None) -> None:
         if db_path is None:
@@ -62,6 +62,13 @@ class RACDatabase(BaseDatabase):
                 if "quantidade" not in columns:
                     cur.execute("ALTER TABLE registro_items ADD COLUMN quantidade INTEGER NOT NULL DEFAULT 0")
             self._commit()
+        if current_version < 8:
+            with self._cursor() as cur:
+                cur.execute("PRAGMA table_info(items_catalog)")
+                columns = {row["name"] for row in cur.fetchall()}
+                if "quantidade" not in columns:
+                    cur.execute("ALTER TABLE items_catalog ADD COLUMN quantidade INTEGER NOT NULL DEFAULT 0")
+            self._commit()
 
     def _create_fresh_schema(self) -> None:
         with self._cursor() as cur:
@@ -80,6 +87,7 @@ class RACDatabase(BaseDatabase):
                 CREATE TABLE IF NOT EXISTS items_catalog (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE,
+                    quantidade INTEGER NOT NULL DEFAULT 0,
                     unidade TEXT NOT NULL DEFAULT 'un',
                     cids TEXT NOT NULL DEFAULT ''
                 );
@@ -252,6 +260,33 @@ class RACDatabase(BaseDatabase):
     @db_op("write")
     def delete_paciente(self, paciente_id: int) -> bool:
         return self._delete_row("pacientes", paciente_id, guards=[("registros", "paciente_id")])
+
+    @db_op("write")
+    def import_pacientes(self, names: list[str]) -> tuple[int, int]:
+        """Insert patient names, skipping those that already exist.
+
+        Returns (new_count, existing_count). Runs in a single transaction.
+        Names are normalized via to_upper_normalized to match existing rows.
+        """
+        new = 0
+        existing = 0
+        with self._cursor() as cur:
+            for raw in names:
+                normalized = to_upper_normalized(raw.strip())
+                if not normalized:
+                    continue
+                cur.execute(
+                    "SELECT 1 FROM pacientes WHERE name = ?", (normalized,)
+                )
+                if cur.fetchone():
+                    existing += 1
+                else:
+                    cur.execute(
+                        "INSERT INTO pacientes (name) VALUES (?)", (normalized,)
+                    )
+                    new += 1
+        self._commit()
+        return new, existing
 
     # ========== REGISTRO ==========
 
@@ -454,7 +489,7 @@ class RACDatabase(BaseDatabase):
     @db_op("read")
     def get_items_by_paciente(self, paciente_id: int) -> list[ItemCatalog]:
         return [ItemCatalog.from_row(r) for r in self._fetch_all(
-            "SELECT DISTINCT ri.item_id as id, ic.name, ic.unidade, ic.cids "
+            "SELECT DISTINCT ri.item_id as id, ic.name, ic.quantidade, ic.unidade, ic.cids "
             "FROM registro_items ri "
             "JOIN registros r ON ri.registro_id = r.id "
             "JOIN items_catalog ic ON ri.item_id = ic.id "
@@ -582,10 +617,10 @@ class RACDatabase(BaseDatabase):
         )]
 
     @db_op("write")
-    def create_item(self, name: str, unidade: str = "un", cids: str = "") -> ItemCatalog:
+    def create_item(self, name: str, unidade: str = "un", quantidade: int = 0, cids: str = "") -> ItemCatalog:
         normalized = to_upper_normalized(name.strip())
-        iid = self._insert_row("items_catalog", name=normalized, unidade=unidade, cids=cids)
-        return ItemCatalog(id=iid, name=normalized, unidade=unidade, cids=cids)
+        iid = self._insert_row("items_catalog", name=normalized, unidade=unidade, quantidade=quantidade, cids=cids)
+        return ItemCatalog(id=iid, name=normalized, quantidade=quantidade, unidade=unidade, cids=cids)
 
     @db_op("write")
     def update_item(self, item_id: int, name: str) -> bool:
@@ -596,6 +631,14 @@ class RACDatabase(BaseDatabase):
     @db_op("write")
     def update_item_cids(self, item_id: int, cids: str) -> bool:
         return self._update_row("items_catalog", item_id, cids=cids)
+
+    @db_op("write")
+    def update_item_quantidade(self, item_id: int, quantidade: int) -> bool:
+        return self._update_row("items_catalog", item_id, quantidade=quantidade)
+
+    @db_op("write")
+    def update_item_unidade(self, item_id: int, unidade: str) -> bool:
+        return self._update_row("items_catalog", item_id, unidade=unidade)
 
     @db_op("write")
     def delete_item(self, item_id: int) -> bool:

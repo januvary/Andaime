@@ -6,6 +6,13 @@ from negativas.models import ItemSelecionado, Medicamento, NegativaData
 from negativas.constants import BRASAO_HEIGHT
 from negativas.utils import data_por_extenso, svg_base64
 
+try:
+    from negativas.ui_qt.theme import colors
+except ImportError:
+    # Fallback for non-Qt contexts
+    def colors():
+        return {"text": "#000000"}
+
 
 class DocumentBuilder:
     """Builds HTML documents from form data."""
@@ -46,6 +53,10 @@ class DocumentBuilder:
 
     def _build_html_header(self, destinatario: str, div_texto: str) -> str:
         """Constrói o cabeçalho HTML."""
+        c = colors()
+        text_color = c.get("text", "#000000")
+        border_color = c.get("panel_border", "#000000")
+
         return f"""
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -53,20 +64,20 @@ class DocumentBuilder:
   <meta charset="utf-8">
   <title>Negativa - {destinatario}</title>
   <style>
-    body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; line-height: 1.6; color: #000000; }}
-    h1 {{ text-align: center; text-decoration: underline; font-size: 17px; margin-bottom: 2px; color: #000000; }}
-    h2 {{ text-align: center; font-size: 14px; margin: 2px 0; color: #000000; }}
-    h3 {{ text-align: center; font-size: 14px; margin: 0; color: #000000; }}
-    p {{ color: #000000; }}
-    b {{ color: #000000; }}
+    body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; line-height: 1.6; color: {text_color}; }}
+    h1 {{ text-align: center; text-decoration: underline; font-size: 17px; margin-bottom: 2px; color: {text_color}; }}
+    h2 {{ text-align: center; font-size: 14px; margin: 2px 0; color: {text_color}; }}
+    h3 {{ text-align: center; font-size: 14px; margin: 0; color: {text_color}; }}
+    p {{ color: {text_color}; }}
+    b {{ color: {text_color}; }}
     .content {{ margin: 30px 0; }}
     .assinaturas {{ display: flex; justify-content: center; align-items: flex-start; margin-top: 50px; gap: 60px; }}
     .assinatura {{ text-align: center; flex: 1; }}
-    .assinatura strong {{ font-size: 11pt; color: #000000; }}
-    .assinatura span {{ font-size: 10pt; font-weight: bold; color: #000000; }}
+    .assinatura strong {{ font-size: 11pt; color: {text_color}; }}
+    .assinatura span {{ font-size: 10pt; font-weight: bold; color: {text_color}; }}
     .header {{ display: flex; align-items: center; justify-content: center; gap: 50px; margin-bottom: 10px; }}
-    .header-title {{ text-align: center; text-decoration: underline; font-size: 17px; margin: 0; color: #000000; }}
-    .divider {{ border-top: 1px solid #000000; margin: 20px 0; }}
+    .header-title {{ text-align: center; text-decoration: underline; font-size: 17px; margin: 0; color: {text_color}; }}
+    .divider {{ border-top: 1px solid {border_color}; margin: 20px 0; }}
     .brasao {{ display: block; height: {BRASAO_HEIGHT}px; }}
     @media print {{ body {{ margin: 0; }} }}
   </style>

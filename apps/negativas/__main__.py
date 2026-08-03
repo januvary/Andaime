@@ -40,10 +40,6 @@ def _start_update_check(window) -> None:
     from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QHBoxLayout, QPushButton
 
     from andaime.updater import UpdateCheckWorker, restart_app
-    from negativas.constants import UPDATE_REPO
-
-    if not UPDATE_REPO:
-        return
 
     worker = UpdateCheckWorker(parent=window)
 
@@ -103,15 +99,20 @@ def main() -> None:
     # Configura o Qt
     qt_app = QApplication(sys.argv)
 
-    # Ícone da aplicação (taskbar + alt-tab)
     icon_path = _get_app_icon_path()
+    splash = andaime.SplashScreen("Negativas", icon_path)
+    splash.show()
+
+    # Apply andaime theme
+    from negativas.ui_qt.theme import set_theme, get_stylesheet, qpalette, get_palette
+    theme = andaime_instance.config.get("theme", "dark")
+    set_theme(theme)
+    palette = get_palette(theme == "dark")
+    qt_app.setStyleSheet(get_stylesheet(theme))
+    qt_app.setPalette(qpalette(palette))
+
     if icon_path.exists():
         qt_app.setWindowIcon(QIcon(str(icon_path)))
-
-    # Fonte padrão
-    font = QFont("Segoe UI", 11)
-    font.setStyleHint(QFont.StyleHint.SansSerif)
-    qt_app.setFont(font)
 
     # Dev: Ctrl+Alt+I abre o código-fonte do widget sob o cursor (var. DEV_INSPECTOR).
     from andaime.qt.dev_inspector import enable_if_env
@@ -124,6 +125,7 @@ def main() -> None:
         window.setWindowIcon(QIcon(str(icon_path)))
 
     window.show()
+    splash.finish(window)
 
     _start_update_check(window)
 

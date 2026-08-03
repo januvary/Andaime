@@ -78,11 +78,13 @@ echo "[3/5] Creating release assets..."
 PAYLOAD_ASSET="/tmp/${TAG}-payload.zip"
 cp "$SISTEMAS/dist.zip" "$PAYLOAD_ASSET"
 
-# Create app-update.zip (apps/ + VERSION only, no python/)
+# Create app-update.zip (apps/ + andaime/ + VERSION, no python/)
 APP_UPDATE_ASSET="/tmp/${TAG}-app-update.zip"
 cd "$SISTEMAS"
 zip -r "$APP_UPDATE_ASSET" "apps/" "VERSION" -q \
     -x "apps/*/__pycache__"
+cd "$SISTEMAS/python/Lib/site-packages"
+zip -r "$APP_UPDATE_ASSET" "andaime/" -q
 
 # Create portable distribution zip (launchers + empty data/ + VERSION + shortcuts)
 # Admins download this to set up a share; each exe downloads payload from GitHub on first run.
@@ -104,10 +106,9 @@ gh release create "$TAG" \
     "$PORTABLE_ASSET" \
     "$PAYLOAD_ASSET" \
     "$APP_UPDATE_ASSET" \
-    "$SISTEMAS/VERSION" \
     --repo "$REPO" \
     --title "$TAG" \
-    --notes "Portable SISTEMAS release"
+    --notes "$(cat "$SISTEMAS/VERSION")"
 
 echo ""
 echo -e "${GREEN}Done!${NC}"

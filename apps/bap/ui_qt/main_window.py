@@ -454,7 +454,7 @@ class MainWindow(QMainWindow):
         self._header.set_ciclo(1)
         self._sync_grid()
 
-    def _sync_grid(self) -> None:
+    def _sync_grid(self, processo: Processo | None = None) -> None:
         # Durante o carregamento programático de um processo (open_processo),
         # os setters do cabeçalho emitem sinais que disparariam syncs parciais
         # (com contexto incompleto) e trocas de remessa indevidas. Suprimimos
@@ -466,7 +466,8 @@ class MainWindow(QMainWindow):
             if self._header.solicitacao == "renovacao"
             else set()
         )
-        processo = self._current_processo()
+        if processo is None:
+            processo = self._current_processo()
         if processo is None:
             # Regra única: só limpa a grade quando o sync anterior mostrava um
             # processo (processo -> nenhum). Se já não havia processo (nenhum ->
@@ -886,7 +887,7 @@ class MainWindow(QMainWindow):
         # das novas tiles; sem isso o Qt só repinta ao final e a grade antiga
         # "pisca" até a nova ficar pronta.
         QApplication.processEvents()
-        self._sync_grid()
+        self._sync_grid(processo)
 
     def shutdown_backend(self):
         active = self._remessa_label.active()

@@ -383,10 +383,37 @@ class StartPage(BasePage):
     def _on_usafa_click(self, event):
         """Handle click on USAFA name to edit it."""
         from main import _show_usafa_dialog
-        
+
         new_name = _show_usafa_dialog(self._mw.config, parent=self.window())
         if new_name:
             self._usafa_label.setText(new_name)
+
+    def open_import_dialog(self, path: str):
+        """Open the import-planilha dialog for a dropped .xlsx file."""
+        from rac.gui.widgets.import_dialog import ImportPlanilhaDialog
+        from rac.importers.excel_importer import ExcelImporter
+
+        try:
+            importer = ExcelImporter(path)
+        except Exception as e:
+            from andaime.error_handler import ErrorHandler, ErrorContext
+
+            ErrorHandler.handle_error(
+                e, context=ErrorContext.EXPORT, show_dialog=False
+            )
+            self._toast(f"Erro ao abrir planilha: {e}", "negative")
+            return
+
+        existing = {p.name for p in self._mw.db.get_all_pacientes()}
+
+        def _do_import(names: list[str]):
+            new, dup = self._mw.db.import_pacientes(names)
+            self._toast(
+                f"{new} paciente(s) importado(s) · {dup} já existiam", "positive"
+            )
+
+        dlg = ImportPlanilhaDialog(self.window(), importer, existing, _do_import)
+        dlg.exec()
 
     def set_shortcuts_visible(self, show: bool):
         super().set_shortcuts_visible(show)

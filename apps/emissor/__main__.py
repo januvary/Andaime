@@ -62,12 +62,13 @@ def main() -> None:
 
     app = QApplication(sys.argv)
 
+    icon_path = Path(__file__).resolve().parent / "icon.ico"
+    splash = andaime.SplashScreen("Emissor", icon_path)
+    splash.show()
+
     apply_font(app, andaime_instance.font)
 
-    # Window icon (taskbar + alt-tab)
     from PySide6.QtGui import QIcon
-
-    icon_path = Path(__file__).resolve().parent / "icon.ico"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
@@ -85,6 +86,7 @@ def main() -> None:
     if icon_path.exists():
         window.setWindowIcon(QIcon(str(icon_path)))
     window.show()
+    splash.finish(window)
 
     sys.exit(app.exec())
 

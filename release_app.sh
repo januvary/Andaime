@@ -174,8 +174,8 @@ fi
 bash "$BUILD_APP" "$APP_MODULE"
 echo ""
 
-if [ ! -f "$PAYLOAD_ZIP" ] || [ ! -f "$APP_UPDATE_ZIP" ] || [ ! -f "$USER_ZIP" ]; then
-    echo -e "${RED}[ERROR]${NC} Build failed — zips not found."
+if [ ! -f "$USER_ZIP" ]; then
+    echo -e "${RED}[ERROR]${NC} Build failed — user zip not found."
     exit 1
 fi
 
@@ -227,11 +227,10 @@ git push origin "$TAG" 2>/dev/null || echo -e "  ${YELLOW}Warning: could not pus
 echo ""
 
 # ============================================
-# 7. Create GitHub releases
+# Create GitHub release (app repo only)
 # ============================================
-echo "Creating GitHub releases..."
+echo "Creating GitHub release..."
 
-# --- App repo release (user-facing zip only) ---
 USER_SIZE=$(du -sh "$USER_ZIP" | cut -f1)
 
 gh release create "$TAG" \
@@ -239,21 +238,7 @@ gh release create "$TAG" \
     --repo "$APP_REPO" \
     --title "$TAG" \
     --notes "Baixe e extraia \`$(basename "$USER_ZIP")\`"
-echo -e "  ${GREEN}App release:${NC} $USER_SIZE → $APP_REPO"
-
-# --- Andaime repo release (distribution assets) ---
-PAYLOAD_SIZE=$(du -sh "$PAYLOAD_ZIP" | cut -f1)
-APP_UPDATE_SIZE=$(du -sh "$APP_UPDATE_ZIP" | cut -f1)
-
-gh release create "$TAG" \
-    "$PAYLOAD_ZIP" \
-    "$APP_UPDATE_ZIP" \
-    "$VERSION_FILE" \
-    --repo "januvary/andaime" \
-    --title "$TAG" \
-    --notes "Runtime: ${RUNTIME_HASH} | ${APP_MODULE}: ${APP_HASH}"
-echo -e "  ${GREEN}Andaime release:${NC} → januvary/andaime"
+echo -e "  ${GREEN}Done!${NC} $USER_SIZE → $APP_REPO"
+echo "  https://github.com/$APP_REPO/releases/tag/$TAG"
 echo ""
-echo -e "${GREEN}Done!${NC}"
-echo "  App release:  https://github.com/$APP_REPO/releases/tag/$TAG"
-echo "  Andaime release: https://github.com/januvary/andaime/releases/tag/$TAG"
+echo "  Run release_portable.sh to publish the andaime release (payload + updates)."

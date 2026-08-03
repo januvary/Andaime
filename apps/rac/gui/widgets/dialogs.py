@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QDialog,
     QPushButton,
+    QComboBox,
 )
 from typing import Callable, Optional
 
@@ -67,6 +68,38 @@ def confirm_delete_dialog(
     layout.addLayout(btn_row)
 
     return dlg.exec() == QDialog.DialogCode.Accepted
+
+
+def open_select_dialog(
+    parent: QWidget,
+    title: str,
+    placeholder: str,
+    options: list[str],
+    initial: str | None = None,
+    confirm_label: str = "Confirmar",
+) -> str | None:
+    dlg, layout = scaffold_dialog(parent, title, spacing=16)
+    layout.addSpacing(4)
+
+    input_field = QComboBox()
+    input_field.addItems(options)
+    if initial:
+        idx = input_field.findText(initial)
+        if idx >= 0:
+            input_field.setCurrentIndex(idx)
+    layout.addWidget(input_field)
+
+    btn_row, [cancel, confirm] = make_dialog_button_row([
+        ("Cancelar", "flat"),
+        (confirm_label, "primary"),
+    ])
+    cancel.clicked.connect(dlg.reject)
+    layout.addLayout(btn_row)
+
+    if dlg.exec() != QDialog.DialogCode.Accepted:
+        return None
+    selected = input_field.currentText().strip()
+    return selected.split(" - ")[0] if " - " in selected else selected
 
 
 def open_input_dialog(

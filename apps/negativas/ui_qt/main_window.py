@@ -29,8 +29,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QTextCursor
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "Andaime"))
-
 from andaime.widgets import SearchableComboBox
 from andaime.qt.table import (
     ColumnSpec,
@@ -38,6 +36,17 @@ from andaime.qt.table import (
     configure_table_view,
     NoElideDelegate,
 )
+from negativas.ui_qt.theme import (
+    get_stylesheet,
+    qpalette,
+    make_button,
+    get_palette,
+    set_theme,
+    get_theme,
+    ThemeToggleButton,
+    colors,
+)
+from negativas.utils import svg_base64, clear_svg_cache
 
 from negativas.database.negativas_database import NegativasDatabase
 from negativas.config import NegativasConfig
@@ -66,6 +75,7 @@ class MainWindow(QMainWindow):
         self._last_preview_data: NegativaData | None = None
         self._scroll_area: QScrollArea | None = None
         self._last_temp_path: str | None = None
+        self._styled_widgets: list = []  # Track widgets that need theme updates
 
         self._debounce_timer = QTimer(self)
         self._debounce_timer.setSingleShot(True)
@@ -119,24 +129,6 @@ class MainWindow(QMainWindow):
         self.table.verticalHeader().setDefaultSectionSize(45)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.table.setStyleSheet("""
-            QTableView {
-                background: white;
-                border: 1px solid #e2e8f0;
-                border-radius: 10px;
-                gridline-color: #f1f5f9;
-            }
-            QHeaderView::section {
-                background: #f8fafc;
-                padding: 12px 8px;
-                border: none;
-                border-bottom: 2px solid #e2e8f0;
-                font-weight: 700;
-                font-size: 11px;
-                text-transform: uppercase;
-                color: #005f73;
-            }
-        """)
 
     def _get_categoria_label(self, categoria: str) -> str:
         """Retorna o label amigável da categoria."""
@@ -160,7 +152,7 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setStyleSheet("QScrollArea { border: none; background: #f4f7fb; }")
+        scroll.setObjectName("mainScroll")
 
         main_container = QWidget()
         main_container.setSizePolicy(
@@ -217,22 +209,20 @@ class MainWindow(QMainWindow):
 
     def _create_header(self) -> QFrame:
         frame = QFrame()
-        frame.setStyleSheet("""
-            QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #005f73, stop:1 #0a9396);
-                border-radius: 12px;
-            }
-            QLabel {
-                color: white;
-                font-size: 18px;
-                font-weight: 600;
-                text-transform: uppercase;
-            }
-        """)
+        frame.setProperty("class", "panel")
+        frame.setObjectName("header_frame")
         layout = QHBoxLayout(frame)
         layout.setContentsMargins(20, 15, 20, 15)
         layout.addWidget(QLabel(APP_DISPLAY_NAME))
+        layout.addStretch()
+
+        # Theme toggle button
+        self.theme_toggle = ThemeToggleButton()
+        self.theme_toggle.theme_toggled.connect(self._on_theme_toggled)
+        layout.addWidget(self.theme_toggle)
+
+        self._update_header_style()
+        self._styled_widgets.append(("header", frame))
         return frame
 
     def _create_destinatario(self) -> QFrame:
@@ -242,28 +232,17 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         label = QLabel("Destinatário:")
-        label.setStyleSheet("font-size: 14px; font-weight: 600; color: #64748b;")
+        label.setProperty("heading", "section")
         layout.addWidget(label)
 
         self.destinatario_input = QLineEdit()
         self.destinatario_input.setPlaceholderText("Ex: À Autoridade Judiciária")
-        self.destinatario_input.setStyleSheet("""
-            QLineEdit {
-                padding: 12px;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                font-size: 14px;
-                background: white;
-            }
-        """)
         layout.addWidget(self.destinatario_input)
         return frame
 
     def _create_divisoes(self) -> QFrame:
         frame = QFrame()
-        frame.setStyleSheet(
-            "background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;"
-        )
+        frame.setObjectName("divisoes_frame")
 
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(15, 15, 15, 15)
@@ -273,10 +252,8 @@ class MainWindow(QMainWindow):
         checks_row.setSpacing(20)
 
         self.check_daf = QCheckBox("Divisão de Assistência Farmacêutica")
-        self.check_daf.setStyleSheet("font-size: 14px;")
 
         self.check_dgmi = QCheckBox("Divisão de Gestão de Materiais e Insumos")
-        self.check_dgmi.setStyleSheet("font-size: 14px;")
 
         checks_row.addWidget(self.check_daf)
         checks_row.addWidget(self.check_dgmi)
@@ -288,27 +265,9 @@ class MainWindow(QMainWindow):
 
         self.nome_daf_input = QLineEdit()
         self.nome_daf_input.setPlaceholderText("Nome do responsável DAF")
-        self.nome_daf_input.setStyleSheet("""
-            QLineEdit {
-                padding: 8px;
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
-                font-size: 13px;
-                background: white;
-            }
-        """)
 
         self.nome_dgmi_input = QLineEdit()
         self.nome_dgmi_input.setPlaceholderText("Nome do responsável DGMI")
-        self.nome_dgmi_input.setStyleSheet("""
-            QLineEdit {
-                padding: 8px;
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
-                font-size: 13px;
-                background: white;
-            }
-        """)
 
         self.nome_daf_container = QWidget()
         QHBoxLayout(self.nome_daf_container).addWidget(self.nome_daf_input)
@@ -325,6 +284,8 @@ class MainWindow(QMainWindow):
         self.check_daf.toggled.connect(self.nome_daf_container.setVisible)
         self.check_dgmi.toggled.connect(self.nome_dgmi_container.setVisible)
 
+        self._update_divisoes_frame_style()
+        self._styled_widgets.append(("divisoes", frame))
         return frame
 
     def _create_search_and_items(self) -> QFrame:
@@ -347,38 +308,17 @@ class MainWindow(QMainWindow):
             self._search_medicamentos,
             placeholder="Digite o nome do medicamento...",
         )
-        self.search_combo.line_edit.setStyleSheet("""
-            QLineEdit {
-                padding: 12px;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                font-size: 14px;
-                background: white;
-            }
-            QLineEdit:focus {
-                border: 1px solid #0a9396;
-            }
-        """)
 
-        self.add_btn = QPushButton("+")
+        self.add_btn = make_button("+", role="primary")
         self.add_btn.setFixedSize(50, 40)
-        self.add_btn.setStyleSheet("""
-            QPushButton {
-                background: #0a9396;
-                color: white;
-                border-radius: 8px;
-                font-size: 18px;
-                font-weight: 600;
-            }
-            QPushButton:hover { background: #008b9e; }
-        """)
+        self.add_btn.setProperty("class", "primary")
 
         scl.addWidget(self.search_combo, 1)
         scl.addWidget(self.add_btn)
         layout.addWidget(search_container)
 
         table_label = QLabel("Itens selecionados:")
-        table_label.setStyleSheet("font-size: 14px; font-weight: 600; color: #64748b;")
+        table_label.setProperty("heading", "section")
         layout.addWidget(table_label)
 
         self.table = QTableView()
@@ -393,46 +333,9 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
         layout.addStretch()
 
-        self.limpar_btn = QPushButton("Limpar Tudo")
-        self.limpar_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                color: #005f73;
-                padding: 12px 24px;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: 600;
-                border: 1px solid #005f73;
-            }
-            QPushButton:hover { background: #f0f9ff; }
-        """)
-
-        self.imprimir_btn = QPushButton("Imprimir / Salvar PDF")
-        self.imprimir_btn.setStyleSheet("""
-            QPushButton {
-                background: #0a9396;
-                color: white;
-                padding: 12px 24px;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            QPushButton:hover { background: #008b9e; }
-        """)
-
-        self.copiar_btn = QPushButton("Copiar Texto")
-        self.copiar_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                color: #005f73;
-                padding: 12px 24px;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: 600;
-                border: 1px solid #005f73;
-            }
-            QPushButton:hover { background: #f0f9ff; }
-        """)
+        self.limpar_btn = make_button("Limpar Tudo", role="flat")
+        self.imprimir_btn = make_button("Imprimir / Salvar PDF", role="primary")
+        self.copiar_btn = make_button("Copiar Texto", role="flat")
 
         layout.addWidget(self.imprimir_btn)
         layout.addWidget(self.copiar_btn)
@@ -441,13 +344,8 @@ class MainWindow(QMainWindow):
 
     def _create_resultado(self) -> QFrame:
         frame = QFrame()
-        frame.setStyleSheet("""
-            QFrame {
-                background: white;
-                border: 1px dashed #005f73;
-                border-radius: 10px;
-            }
-        """)
+        frame.setProperty("class", "box")
+        frame.setObjectName("result_frame")
 
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(25, 25, 25, 25)
@@ -464,19 +362,14 @@ class MainWindow(QMainWindow):
         self.resultado_text.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        self.resultado_text.setStyleSheet("""
-            QTextEdit {
-                background: white;
-                border: none;
-                font-size: 14px;
-                line-height: 1.6;
-            }
-        """)
         self.resultado_text.document().contentsChanged.connect(
             self._atualizar_altura_resultado
         )
 
         layout.addWidget(self.resultado_text)
+
+        self._update_result_frame_style()
+        self._styled_widgets.append(("result", frame))
         return frame
 
     # ──────────────────────────── SIGNALS ────────────────────────────
@@ -596,18 +489,10 @@ class MainWindow(QMainWindow):
             ol.addStretch()
             self.table.setIndexWidget(self.table_model.index(row, 2), opcoes_widget)
 
-            remover_btn = QPushButton("×")
+            remover_btn = make_button("×", role="icon")
             remover_btn.setFixedSize(30, 30)
-            remover_btn.setStyleSheet("""
-                QPushButton {
-                    background: #fee2e2;
-                    color: #dc2626;
-                    border-radius: 4px;
-                    font-size: 18px;
-                    font-weight: 600;
-                }
-                QPushButton:hover { background: #fecaca; }
-            """)
+            remover_btn.setObjectName(f"remove_btn_{row}")
+            self._update_remove_button_style(remover_btn)
             remover_btn.clicked.connect(lambda _, r=row: self._remover_item(r))
             self.table.setIndexWidget(self.table_model.index(row, 3), remover_btn)
 
@@ -743,11 +628,119 @@ class MainWindow(QMainWindow):
             self, "Sucesso", "Texto copiado para a área de transferência!"
         )
 
+    def _on_theme_toggled(self, dark_mode: bool):
+        """Handle theme toggle from the header button."""
+        theme = "dark" if dark_mode else "light"
+        set_theme(theme)
+        palette = get_palette(dark_mode)
+
+        qapp = QApplication.instance()
+        if isinstance(qapp, QApplication):
+            qapp.setPalette(qpalette(palette))
+            qapp.setStyleSheet(get_stylesheet(theme))
+
+        self.config.set("theme", theme)
+        self._update_theme_dependent_styles()
+        
+        # Clear SVG cache to regenerate with new theme color
+        clear_svg_cache()
+
+        # Clear preview cache to force regeneration with new theme colors
+        self._last_preview_data = None
+        # Delay preview update slightly to avoid height calculation issues
+        QTimer.singleShot(10, self._atualizar_preview_imediato)
+
+    def _update_header_style(self):
+        """Update header frame styling based on current theme."""
+        c = colors()
+        header_frame = self.findChild(QFrame, "header_frame")
+        if header_frame:
+            header_frame.setStyleSheet(f"""
+                QFrame {{
+                    background: {c["btn_primary"]};
+                    border-radius: 12px;
+                }}
+                QLabel {{
+                    color: {c["text"]};
+                    font-size: 18px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                }}
+            """)
+
+    def _update_result_frame_style(self):
+        """Update result frame styling based on current theme."""
+        c = colors()
+        result_frame = self.findChild(QFrame, "result_frame")
+        if result_frame:
+            result_frame.setStyleSheet(f"""
+                QFrame {{
+                    background: {c["input_bg"]};
+                    border: 1px dashed {c["panel_border"]};
+                    border-radius: 10px;
+                }}
+            """)
+
+    def _update_divisoes_frame_style(self):
+        """Update divisões frame styling based on current theme."""
+        c = colors()
+        divisoes_frame = self.findChild(QFrame, "divisoes_frame")
+        if divisoes_frame:
+            divisoes_frame.setStyleSheet(f"""
+                QFrame {{
+                    background: {c["panel_bg"]};
+                    border: 1px solid {c["panel_border"]};
+                    border-radius: 10px;
+                }}
+            """)
+
+    def _update_remove_button_style(self, button):
+        """Update remove button styling based on current theme."""
+        c = colors()
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background: {c["status_error"]};
+                color: {c["box_bg"]};
+                border-radius: 4px;
+                font-size: 18px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{ background: {c["status_error"]}; }}
+        """)
+
+    def _update_theme_dependent_styles(self):
+        """Update all widgets that have theme-dependent inline styles."""
+        self._update_header_style()
+        self._update_result_frame_style()
+        self._update_divisoes_frame_style()
+
+        # Update remove buttons in table
+        for row in range(self.table_model.rowCount()):
+            remove_btn = self.table.indexWidget(self.table_model.index(row, 3))
+            if remove_btn and isinstance(remove_btn, QPushButton):
+                self._update_remove_button_style(remove_btn)
+
     # ──────────────────────────── CONFIG ────────────────────────────
 
     def _load_config(self):
-        theme = self.config.get("theme", "light")
-        self._apply_theme(theme)
+        # Load theme preference and sync toggle button
+        theme = self.config.get("theme", "dark")
+        set_theme(theme)
+
+        # Sync theme toggle button state
+        if hasattr(self, 'theme_toggle'):
+            is_dark = get_theme() == "dark"
+            self.theme_toggle._dark = is_dark
+            self.theme_toggle._update_icon()
+
+        # Clear SVG cache to ensure it uses correct theme color
+        clear_svg_cache()
+        
+        # Update theme-dependent styles
+        self._update_theme_dependent_styles()
+
+        # Clear preview cache to ensure theme colors are applied on initial load
+        self._last_preview_data = None
 
         # Carrega nomes salvos
         nome_daf = self.config.get("nome_daf", "")
@@ -765,18 +758,6 @@ class MainWindow(QMainWindow):
 
         self.config.set("nome_daf", nome_daf)
         self.config.set("nome_dgmi", nome_dgmi)
-
-    def _apply_theme(self, theme: str):
-        if theme == "dark":
-            self.setStyleSheet("""
-                QMainWindow { background: #1e293b; }
-                QLabel { color: #e2e8f0; }
-                QTextEdit { background: #0f172a; color: #e2e8f0; }
-                QTableView { background: #1e293b; color: #e2e8f0; }
-                QHeaderView::section { background: #334155; color: #e2e8f0; }
-            """)
-        else:
-            self.setStyleSheet("")
 
     def closeEvent(self, event):
         """Cleanup resources when window closes."""

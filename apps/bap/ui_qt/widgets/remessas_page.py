@@ -18,7 +18,6 @@ from bap.utils.date_utils import format_date_display
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox,
     QApplication,
     QDialog,
     QLabel,
@@ -34,7 +33,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QVBoxLayout,
     QWidget,
-    QHBoxLayout,
 )
 
 from bap.ui_qt.styles import colors, context_menu_stylesheet, get_theme
@@ -243,10 +241,6 @@ class RemessasPage(QWidget):
         self._status_line = StatusLine(self)
         self._content_layout.addWidget(self._status_line)
 
-        self._show_incompletos = QCheckBox("Mostrar incompletos")
-        self._show_incompletos.setChecked(True)
-        self._show_incompletos.toggled.connect(lambda _checked: self.refresh())
-
         self.remessa_label = RemessaLabel(self)
         self.remessa_label.remessa_changed.connect(self.remessa_changed.emit)
         self.remessa_label.remessa_changed.connect(self._on_remessa_changed)
@@ -293,12 +287,6 @@ class RemessasPage(QWidget):
         self._tabs.setMinimumHeight(400)
         self._tabs.setStyleSheet(_tabs_style())
         self._tabs.currentChanged.connect(lambda _i: None)
-
-        corner = QWidget()
-        corner_layout = QHBoxLayout(corner)
-        corner_layout.setContentsMargins(0, 0, 6, 9)
-        corner_layout.addWidget(self._show_incompletos)
-        self._tabs.setCornerWidget(corner, Qt.Corner.TopRightCorner)
 
         self._content_layout.addWidget(self._tabs, stretch=1)
 
@@ -408,8 +396,8 @@ class RemessasPage(QWidget):
         Sem runner, cai no caminho síncrono.
 
         ``force=False`` (usado na navegação) pula a repopulação quando a
-        assinatura ``(lote_id, mostrar_incompletos)`` não mudou desde o
-        último ``_populate`` — evita reconstruir tabelas idênticas.
+        assinatura ``lote_id`` não mudou desde o último ``_populate`` —
+        evita reconstruir tabelas idênticas.
         """
         if self._db is None:
             return
@@ -422,8 +410,7 @@ class RemessasPage(QWidget):
             self._last_signature = None
             return
 
-        show_incompletos = self._show_incompletos.isChecked()
-        signature = (lote.id, show_incompletos)
+        signature = lote.id
         if not force and signature == self._last_signature:
             return
 
@@ -440,11 +427,7 @@ class RemessasPage(QWidget):
         lote_id = lote.id
 
         def _fetch():
-            procesos = self._db.get_processos_by_lote(
-                lote_id,
-                exclude_status=Status.INCOMPLETO if not show_incompletos else None,
-            )
-            return procesos
+            return self._db.get_processos_by_lote(lote_id)
 
         def _apply(processos) -> None:
             # Descarta resultados obsoletos (outro refresh foi disparado).
@@ -510,24 +493,12 @@ class RemessasPage(QWidget):
                 self.set_remessa_active(lote, emit=True)
                 remessa_changed = True
 
-        # A busca retorna processos "incompleto" mesmo quando o filtro em
-        # massa ("Mostrar incompletos") está desmarcado. Ao selecionar um
-        # explicitamente, revela-os para que a navegação até ele funcione
-        # (caso contrário a linha não existe na tabela e a seleção anterior
-        # permanece).
-        # Importante: fazer isso após trocar a remessa, pois setChecked
-        # pode trigger refresh() que precisará ter o lote correto.
-        checkbox_changed = False
-        if processo.status == Status.INCOMPLETO and not self._show_incompletos.isChecked():
-            self._show_incompletos.setChecked(True)
-            checkbox_changed = True
-
         # Troca a aba correspondente (solicitação/renovação).
         if processo.solicitacao in _TAB_KEYS:
             self._tabs.setCurrentIndex(_TAB_KEYS.index(processo.solicitacao))
 
         # Se vai houver refresh assíncrono, agenda o highlight para depois
-        if remessa_changed or checkbox_changed:
+        if remessa_changed:
             self._pending_highlight = (processo.solicitacao, processo_id)
         else:
             self._highlight_processo(processo.solicitacao, processo_id)

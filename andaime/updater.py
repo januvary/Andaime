@@ -142,35 +142,40 @@ def _get_app_module() -> str:
 # ============================================================================
 
 
-def read_version_manifest(path: Path | None = None) -> dict[str, str]:
-    """Parse a VERSION file, returning a manifest dict.
+def parse_manifest_text(text: str) -> dict[str, str]:
+    """Parse a VERSION manifest from raw text.
 
-    Expected format::
+    Format::
 
         26.07.31-2202
         runtime: d4c3b2a1
         rac: f8e7d6c5
 
     Returns ``{"datestamp": ..., "runtime": ..., "<module>": ...}``.
-    If the file is absent, all values are empty strings.
     """
     manifest: dict[str, str] = {"datestamp": "", "runtime": ""}
+    for line in text.strip().splitlines():
+        line = line.strip()
+        if line.startswith("#") or not line or line.startswith("---"):
+            continue
+        if ":" in line:
+            key, _, value = line.partition(":")
+            manifest[key.strip()] = value.strip()
+        else:
+            manifest["datestamp"] = line
+    return manifest
+
+
+def read_version_manifest(path: Path | None = None) -> dict[str, str]:
+    """Return the manifest from a VERSION file on disk."""
     if path is None:
         path = get_install_root() / VERSION_FILE
     if path.exists():
         try:
-            for line in path.read_text(encoding="utf-8").strip().splitlines():
-                line = line.strip()
-                if line.startswith("#") or not line:
-                    continue
-                if ":" in line:
-                    key, _, value = line.partition(":")
-                    manifest[key.strip()] = value.strip()
-                else:
-                    manifest["datestamp"] = line
+            return parse_manifest_text(path.read_text(encoding="utf-8"))
         except OSError:
             pass
-    return manifest
+    return {"datestamp": "", "runtime": ""}
 
 
 def get_local_manifest() -> dict[str, str]:
@@ -372,12 +377,13 @@ def apply_pending_update() -> bool:
     swaps: list[tuple[Path, Path]] = []
 
     try:
-        # 1. Swap apps/<module>/
-        new_app = staging / "apps" / app_module
-        if new_app.is_dir():
-            swaps.extend(
-                _swap_directory(root / "apps" / app_module, new_app)
-            )
+        # 1. Swap all apps found in staging (covers multi-app portable installs)
+        new_apps = staging / "apps"
+        if new_apps.is_dir():
+            for app_dir in new_apps.iterdir():
+                if app_dir.is_dir():
+                    target = root / "apps" / app_dir.name
+                    swaps.extend(_swap_directory(target, app_dir))
 
         # 2. Swap andaime/ (in site-packages)
         new_andaime = staging / "andaime"
@@ -631,41 +637,26 @@ class UpdateCheckWorker(QThread):
                 self.no_update.emit()
                 return
 
-            notes = release.get("body", "") or f"Release {tag}"
-
-            # Download VERSION manifest from release assets.
-            remote_manifest: dict[str, str] = {}
-            for asset in release.get("assets", []):
-                if asset.get("name", "") == VERSION_FILE:
-                    asset_url = asset.get("browser_download_url")
-                    if asset_url:
-                        try:
-                            req2 = urllib.request.Request(asset_url, headers=headers)
-                            with urllib.request.urlopen(
-                                req2, timeout=30, context=context
-                            ) as resp2:
-                                tmp_version = Path(tmp) / VERSION_FILE
-                                with open(tmp_version, "wb") as vf:
-                                    while True:
-                                        chunk = resp2.read(65536)
-                                        if not chunk:
-                                            break
-                                        vf.write(chunk)
-                                remote_manifest = read_version_manifest(tmp_version)
-                        except Exception:
-                            pass
-                    break
+            notes = release.get("body", "") or ""
+            remote_manifest = parse_manifest_text(notes)
 
             remote_app_hash = remote_manifest.get(module, "")
             remote_runtime = remote_manifest.get("runtime", "")
+            remote_andaime = remote_manifest.get("andaime", "")
+
+            local_andaime = local_manifest.get("andaime", "")
 
             # Decide which asset to download.
             need_payload = bool(
                 remote_runtime and remote_runtime != local_runtime
             ) or not remote_runtime
-            need_app_update = need_payload or bool(
-                remote_app_hash and remote_app_hash != local_app_hash
-            ) or not remote_app_hash
+            need_app_update = (
+                need_payload
+                or bool(remote_app_hash and remote_app_hash != local_app_hash)
+                or not remote_app_hash
+                or bool(remote_andaime and remote_andaime != local_andaime)
+                or not remote_andaime
+            )
 
             if not need_payload and not need_app_update:
                 self.no_update.emit()
@@ -676,7 +667,9 @@ class UpdateCheckWorker(QThread):
             # ---- Download assets ----
             tmp = tempfile.mkdtemp(prefix="andaime_update_")
             try:
-                headers["User-Agent"] = "SISTEMAS-Updater"
+                staging = staging_path()
+                if staging.is_dir():
+                    shutil.rmtree(staging)
 
                 for asset in release.get("assets", []):
                     name = asset.get("name", "")
@@ -721,33 +714,8 @@ class UpdateCheckWorker(QThread):
                         break
                     f.write(chunk)
 
+        staging = staging_path()
+        staging.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zf:
             _verify_zip_paths(zf)
-            staging = staging_path()
-            if staging.is_dir():
-                shutil.rmtree(staging)
             zf.extractall(staging)
-
-        # Handle a single top-level wrapper directory in the zip.
-        top_level = [
-            p
-            for p in staging.iterdir()
-            if p.name not in (".update_tag",)
-        ]
-        if (
-            len(top_level) == 1
-            and top_level[0].is_dir()
-            and not (top_level[0] / VERSION_FILE).exists()
-            and not (top_level[0] / "apps").is_dir()
-        ):
-            wrapper = top_level[0]
-            if (wrapper / "apps").is_dir() or (wrapper / "python").is_dir():
-                for item in wrapper.iterdir():
-                    dest = staging / item.name
-                    if dest.exists():
-                        if item.is_dir():
-                            shutil.rmtree(dest)
-                        else:
-                            dest.unlink()
-                    shutil.move(str(item), str(dest))
-                shutil.rmtree(wrapper)

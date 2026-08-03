@@ -3,11 +3,11 @@
 """
 Definitive Catalog
 Pre-loaded items seed data for the items_catalog table
-Each entry: (name, unidade, cids_json)
+Each entry: (name, quantidade, cids_json)
 """
 
-DEFINITIVE_CATALOG: list[tuple[str, str, str]] = [
-    ("abatacepte 125 mg inj.", "un", '["M05.0", "M05.1", "M05.2", "M05.3", "M05.8", "M06.0", "M06.8", "M08.0", "M08.1", "M08.2", "M08.3", "M08.4", "M08.8", "M08.9"]'),
+DEFINITIVE_CATALOG: list[tuple[str, int, str]] = [
+    ("abatacepte 125 mg inj.", 0, '["M05.0", "M05.1", "M05.2", "M05.3", "M05.8", "M06.0", "M06.8", "M08.0", "M08.1", "M08.2", "M08.3", "M08.4", "M08.8", "M08.9"]'),
     ("abatacepte 250 mg inj.", "un", '["M05.0", "M05.1", "M05.2", "M05.3", "M05.8", "M06.0", "M06.8", "M08.0", "M08.1", "M08.2", "M08.3", "M08.4", "M08.8", "M08.9"]'),
     ("acetazolamida 250 mg", "un", '["H40.1", "H40.2", "H40.3", "H40.4", "H40.5", "H40.6", "H40.8", "Q15.0"]'),
     ("acido nicotinico", "un", '[]'),

@@ -7,7 +7,7 @@ Medicamentos Page — manage the medication (item catalog) list
 import json
 
 from rac.gui.widgets import (
-    BasePage, CrudList, HeadingLabel, export_with_fallback, open_input_dialog,
+    BasePage, CrudList, HeadingLabel, export_with_fallback, open_input_dialog, open_select_dialog,
 )
 from rac.export.excel_exporter import ExcelExporter
 
@@ -57,11 +57,17 @@ class MedicamentosPage(BasePage):
             db_delete=self._mw.services.item_catalog.delete,
             delete_in_use_msg="Não é possível excluir: medicamento em uso",
             count_label=self._heading,
+            tertiary_header="Estoque",
+            tertiary_value=lambda item: str(item.quantidade),
+            quaternary_header="Unid.",
+            quaternary_value=lambda item: item.unidade,
             secondary_header="CIDs",
             secondary_value=_format_cids,
             secondary_tooltip=_full_cids,
             extra_context_items=[
                 ("Editar CIDs", self._edit_cids),
+                ("Editar Estoque", self._edit_estoque),
+                ("Editar Unidade", self._edit_unidade),
             ],
         )
         layout.addWidget(self._crud.widget, 1)
@@ -105,3 +111,52 @@ class MedicamentosPage(BasePage):
             lambda: exporter.export_catalog(),
             "Nenhum medicamento para exportar",
         )
+
+    def _edit_estoque(self, item_id: int):
+        items = self._mw.services.item_catalog.all()
+        item = next((i for i in items if i.id == item_id), None)
+        if not item:
+            return
+        initial = str(item.quantidade)
+        result = open_input_dialog(
+            self, "Editar Estoque",
+            "Quantidade em estoque",
+            initial=initial,
+        )
+        if result is None:
+            return
+        try:
+            quantidade = int(result)
+            self._mw.services.item_catalog.update_quantidade(item_id, quantidade)
+            self._crud.load()
+            self._toast("Estoque atualizado", "positive")
+        except ValueError:
+            self._toast("Quantidade inválida", "warning")
+        except Exception as e:
+            self._handle_error(e)
+
+    def _edit_unidade(self, item_id: int):
+        items = self._mw.services.item_catalog.all()
+        item = next((i for i in items if i.id == item_id), None)
+        if not item:
+            return
+        options = ["un - unidade", "comp - comprimido", "frs - frasco"]
+        initial_option = next((opt for opt in options if opt.startswith(item.unidade)), None)
+        result = open_select_dialog(
+            self, "Editar Unidade",
+            "Unidade de medida",
+            options,
+            initial=initial_option,
+        )
+        if result is None:
+            return
+        unidade = result.strip()
+        if not unidade:
+            self._toast("Unidade inválida", "warning")
+            return
+        try:
+            self._mw.services.item_catalog.update_unidade(item_id, unidade)
+            self._crud.load()
+            self._toast("Unidade atualizada", "positive")
+        except Exception as e:
+            self._handle_error(e)

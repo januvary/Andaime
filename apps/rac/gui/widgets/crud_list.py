@@ -53,6 +53,10 @@ class CrudList:
                  secondary_header: str | None = None,
                  secondary_value: Callable[[object], str] | None = None,
                  secondary_sort_key: Callable[[object], object] | None = None,
+                 tertiary_header: str | None = None,
+                 tertiary_value: Callable[[object], str] | None = None,
+                 quaternary_header: str | None = None,
+                 quaternary_value: Callable[[object], str] | None = None,
                  sortable: bool = True,
                  on_activate: Callable[[object], None] | None = None,
                  extra_context_items: list[tuple[str, Callable[[int], None]]] | None = None,
@@ -70,6 +74,10 @@ class CrudList:
         self._secondary_header = secondary_header
         self._secondary_value = secondary_value
         self._secondary_sort_key = secondary_sort_key
+        self._tertiary_header = tertiary_header
+        self._tertiary_value = tertiary_value
+        self._quaternary_header = quaternary_header
+        self._quaternary_value = quaternary_value
         self._sortable = sortable
         self._on_activate = on_activate
         self._extra_context_items = extra_context_items or []
@@ -101,11 +109,18 @@ class CrudList:
         tab_layout.addLayout(search_row)
 
         has_secondary = self._secondary_value is not None
-        n_cols = 2 if has_secondary else 1
+        has_tertiary = self._tertiary_value is not None
+        has_quaternary = self._quaternary_value is not None
+        n_cols = 1 + (1 if has_secondary else 0) + (1 if has_tertiary else 0) + (1 if has_quaternary else 0)
         self.list_widget = QTableWidget(0, n_cols)
-        self.list_widget.setHorizontalHeaderLabels(
-            ["Nome", self._secondary_header] if has_secondary else ["Nome"]
-        )
+        headers = ["Nome"]
+        if has_tertiary:
+            headers.append(self._tertiary_header)
+        if has_quaternary:
+            headers.append(self._quaternary_header)
+        if has_secondary:
+            headers.append(self._secondary_header)
+        self.list_widget.setHorizontalHeaderLabels(headers)
         header = self.list_widget.horizontalHeader()
         self.list_widget.verticalHeader().setVisible(False)
         self.list_widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -117,9 +132,20 @@ class CrudList:
         self.list_widget.setStyleSheet(
             data_view_style_qss(include_selected=True, include_hover=True)
         )
-        if has_secondary:
+        if n_cols > 1:
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            if has_tertiary:
+                header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+                if has_quaternary:
+                    header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+                    if has_secondary:
+                        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+            elif has_quaternary:
+                header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+                if has_secondary:
+                    header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            elif has_secondary:
+                header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
             header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             header.setVisible(True)
             if name_hdr := self.list_widget.horizontalHeaderItem(0):
@@ -162,6 +188,27 @@ class CrudList:
                 name_item.setData(Qt.ItemDataRole.UserRole, item.id)
                 table.setItem(row, 0, name_item)
 
+                col = 1
+                if self._tertiary_value is not None:
+                    display = self._tertiary_value(item)
+                    tertiary_item = SortableTableWidgetItem(display, display)
+                    tertiary_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    tertiary_item.setFlags(
+                        tertiary_item.flags() & ~Qt.ItemFlag.ItemIsEditable
+                    )
+                    table.setItem(row, col, tertiary_item)
+                    col += 1
+
+                if self._quaternary_value is not None:
+                    display = self._quaternary_value(item)
+                    quaternary_item = SortableTableWidgetItem(display, display)
+                    quaternary_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    quaternary_item.setFlags(
+                        quaternary_item.flags() & ~Qt.ItemFlag.ItemIsEditable
+                    )
+                    table.setItem(row, col, quaternary_item)
+                    col += 1
+
                 if self._secondary_value is not None:
                     display = self._secondary_value(item)
                     sort_key = (
@@ -176,7 +223,7 @@ class CrudList:
                     )
                     if self._secondary_tooltip is not None:
                         sec_item.setToolTip(self._secondary_tooltip(item))
-                    table.setItem(row, 1, sec_item)
+                    table.setItem(row, col, sec_item)
 
         if self._sortable and not table.isSortingEnabled():
             table.setSortingEnabled(True)

@@ -40,6 +40,7 @@ class Paciente:
 class ItemCatalog:
     id: int | None = None
     name: str = ""
+    quantidade: int = 0
     unidade: str = "un"
     cids: str = ""
 
@@ -48,6 +49,7 @@ class ItemCatalog:
         return cls(
             id=row.get("id"),
             name=row.get("name", ""),
+            quantidade=row.get("quantidade", 0),
             unidade=row.get("unidade", "un"),
             cids=row.get("cids", ""),
         )

@@ -7,6 +7,7 @@ Generates .xlsx spreadsheet from malote registros
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Optional
 from datetime import datetime
 from pathlib import Path
@@ -352,6 +353,15 @@ class ExcelExporter:
         if not items:
             return None
 
+        def _format_cids_json(cids_str: str) -> str:
+            if not cids_str:
+                return ""
+            try:
+                cids = json.loads(cids_str)
+                return ", ".join(cids[:3]) + ("…" if len(cids) > 3 else "")
+            except (json.JSONDecodeError, TypeError):
+                return ""
+
         wb = openpyxl.Workbook()
         ws = wb.active
         if ws is not None:
@@ -360,13 +370,19 @@ class ExcelExporter:
         styles = _make_excel_styles()
 
         ws["A1"] = "Catálogo de Medicamentos"
+        ws.merge_cells("A1:D1")
         ws["A2"] = f"Total: {len(items)}"
+        ws.merge_cells("A2:D2")
 
-        ws.append(["Medicamento"])
+        ws.append(["Medicamento", "Estoque", "Unid.", "CIDs"])
         for it in items:
-            ws.append([it.name])
+            cids_str = _format_cids_json(it.cids)
+            ws.append([it.name, it.quantidade, it.unidade, cids_str])
 
         ws.column_dimensions["A"].width = 45
+        ws.column_dimensions["B"].width = 6
+        ws.column_dimensions["C"].width = 6
+        ws.column_dimensions["D"].width = 40
 
         _style_title_row(ws, 1, styles)
         _style_title_row(ws, 2, styles, "title2_font", 26, styles["fill_odd"])

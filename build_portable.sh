@@ -118,6 +118,10 @@ for app_key in "${!BUILD_FLAGS[@]}"; do
     fi
 done
 
+ANDAIME_HASH=$(compute_andaime_hash)
+echo "andaime: ${ANDAIME_HASH}" >> "$STAGE/VERSION"
+ok "andaime hash: $ANDAIME_HASH"
+
 # ============================================
 # Copy Windows Python tree
 # ============================================

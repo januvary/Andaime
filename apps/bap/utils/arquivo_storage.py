@@ -8,6 +8,16 @@ from andaime.paths import get_root_directory
 from andaime.dates import parse_date
 
 
+def _find_ss54_dir() -> Path | None:
+    current = Path.cwd()
+    for _ in range(3):
+        candidate = current / "SS 54"
+        if candidate.is_dir():
+            return candidate
+        current = current.parent
+    return None
+
+
 def resolve_arquivos_root(config: Path | dict | None = None) -> Path:
     if config is not None:
         if isinstance(config, Path):
@@ -19,6 +29,9 @@ def resolve_arquivos_root(config: Path | dict | None = None) -> Path:
             config_dict = config.to_dict()
             if config_dict.get("arquivos_root"):
                 return Path(config_dict["arquivos_root"])
+    ss54 = _find_ss54_dir()
+    if ss54 is not None:
+        return ss54 / "REMESSAS"
     return get_root_directory() / "SS 54" / "REMESSAS"
 
 

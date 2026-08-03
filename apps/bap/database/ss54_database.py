@@ -537,14 +537,9 @@ class SS54Database(BaseDatabase):
         return {r["lote_id"]: r["cnt"] for r in rows}
 
     @db_op("read")
-    def get_processos_by_lote(self, lote_id: int, exclude_status: str | None = None) -> list[Processo]:
-        conditions = ["p.lote_id = ?"]
-        params: list = [lote_id]
-        if exclude_status is not None:
-            conditions.append("p.status != ?")
-            params.append(exclude_status)
+    def get_processos_by_lote(self, lote_id: int) -> list[Processo]:
         rows = self._fetch_processos_joined(
-            " AND ".join(conditions), tuple(params), "pac.nome COLLATE NOCASE"
+            "p.lote_id = ?", (lote_id,), "pac.nome COLLATE NOCASE"
         )
         return [Processo.from_row(r) for r in rows]
 

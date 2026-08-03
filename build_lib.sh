@@ -165,6 +165,21 @@ compute_app_hash() {
         sha256sum | cut -c1-8
 }
 
+# --- Compute andaime hash ---
+# Hash of all files in the andaime/ chassis directory.
+compute_andaime_hash() {
+    local chassis_dir="$ANDAIME_REPO/andaime"
+
+    if [ ! -d "$chassis_dir" ]; then
+        echo "unknown"
+        return
+    fi
+
+    find "$chassis_dir" -type f | sort | \
+        xargs sha256sum 2>/dev/null | \
+        sha256sum | cut -c1-8
+}
+
 # --- Datestamp version ---
 # Returns YY.MM.DD-HHMM (e.g., 26.07.31-2202).
 datestamp_version() {
@@ -449,8 +464,7 @@ XML
     local display=$(app_field "$app_info" 5)
 
     if [[ "$mode" == "standalone" ]]; then
-        local repo=$(app_field "$app_info" 2)
-        gcc_cmd="$gcc_cmd -DAPP_REPO=\\\"$repo\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\""
+        gcc_cmd="$gcc_cmd -DAPP_REPO=\\\"januvary/andaime\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\""
     elif [[ "$mode" == "portable" ]]; then
         gcc_cmd="$gcc_cmd -DAPP_REPO=\\\"januvary/andaime\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\" -DPORTABLE_MODE=1"
     fi
@@ -460,8 +474,7 @@ XML
     rm -rf "$rc_dir"
 
     if [[ "$mode" == "standalone" ]]; then
-        local repo=$(app_field "$app_info" 2)
-        ok "launcher.exe compiled ($repo)"
+        ok "launcher.exe compiled ($module → januvary/andaime)"
     else
         ok "launcher.exe compiled (portable: dist.zip + GitHub fallback)"
     fi

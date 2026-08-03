@@ -174,12 +174,15 @@ def main():
 
     qapp = QApplication(sys.argv)
 
+    icon_path = _get_app_icon_path()
+    splash = andaime.SplashScreen("RAC", icon_path)
+    splash.show()
+
     # Dev: Ctrl+Shift+I abre o código-fonte do widget sob o cursor (var. DEV_INSPECTOR).
     from andaime.qt.dev_inspector import enable_if_env
 
     enable_if_env(qapp)
 
-    icon_path = _get_app_icon_path()
     if icon_path.exists():
         qapp.setWindowIcon(QIcon(str(icon_path)))
 
@@ -199,6 +202,7 @@ def main():
     window.init_backend()
     window.navigate_to("start")
     window.show()
+    splash.finish(window)
 
     _start_update_check(window)
 

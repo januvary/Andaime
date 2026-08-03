@@ -3,9 +3,6 @@ from pathlib import Path
 import os
 
 
-# Repositório GitHub que hospeda os releases (zip) para o autoatualizador.
-UPDATE_REPO = "januvary/BAP"
-
 
 def _apply_pending_update():
     from andaime.updater import apply_pending_update
@@ -19,10 +16,9 @@ def _start_update_check(window):
 
     from andaime.updater import UpdateCheckWorker, restart_app
     from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
-    from bap import __version__
     from bap.ui_qt.widgets.dialogs import confirm_dialog
 
-    worker = UpdateCheckWorker(UPDATE_REPO, __version__, parent=window)
+    worker = UpdateCheckWorker(parent=window)
 
     def _on_downloaded(tag):
         if confirm_dialog(
@@ -108,10 +104,12 @@ def main():
 
     qt_app = QApplication(sys.argv)
 
+    icon_path = Path(__file__).resolve().parent / "icon.ico"
+    splash = andaime.SplashScreen("BAP", icon_path)
+    splash.show()
+
     apply_font(qt_app, app.font)
 
-    # Window icon (taskbar + alt-tab)
-    icon_path = Path(__file__).resolve().parent / "icon.ico"
     if icon_path.exists():
         qt_app.setWindowIcon(QIcon(str(icon_path)))
 
@@ -130,6 +128,7 @@ def main():
     if icon_path.exists():
         window.setWindowIcon(QIcon(str(icon_path)))
     window.show()
+    splash.finish(window)
     QTimer.singleShot(0, window.init_backend)
 
     sys.exit(qt_app.exec())
