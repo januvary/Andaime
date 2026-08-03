@@ -110,6 +110,29 @@ gh release create "$TAG" \
     --repo "$REPO" \
     --title "$TAG" \
     --notes "SISTEMAS ${TAG}"
+echo ""
+
+# ============================================
+# Commit + squash + push andaime repo
+# ============================================
+echo "Committing + squashing andaime repo..."
+cd "$SCRIPT_DIR"
+
+git add -A
+if ! git diff --cached --quiet; then
+    git commit -m "Release ${TAG}" >/dev/null
+fi
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+SQUASH_BRANCH="__release_sync"
+git branch -D "$SQUASH_BRANCH" 2>/dev/null || true
+git checkout -b "$SQUASH_BRANCH"
+git reset --soft "$(git rev-list --max-parents=0 HEAD)"
+git commit -m "SISTEMAS ${TAG}" >/dev/null
+git push origin "$SQUASH_BRANCH:$CURRENT_BRANCH" --force
+git checkout "$CURRENT_BRANCH"
+git branch -D "$SQUASH_BRANCH" 2>/dev/null || true
+echo -e "  ${GREEN}$CURRENT_BRANCH squashed to ${TAG}${NC}"
 
 echo ""
 echo -e "${GREEN}Done!${NC}"

@@ -138,9 +138,6 @@ def _start_update_check(window):
         btn_row.addWidget(restart)
         layout.addLayout(btn_row)
 
-    if splash:
-        splash.finish(dlg)
-
     if dlg.exec() == QDialog.DialogCode.Accepted:
             restart_app()
 
