@@ -108,7 +108,9 @@ gh release create "$TAG" \
     "$APP_UPDATE_ASSET" \
     --repo "$REPO" \
     --title "$TAG" \
-    --notes "$(cat "$SISTEMAS/VERSION")"
+    --notes "SISTEMAS ${TAG}
+---
+$(cat "$SISTEMAS/VERSION")"
 
 echo ""
 echo -e "${GREEN}Done!${NC}"

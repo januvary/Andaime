@@ -145,18 +145,26 @@ def _get_app_module() -> str:
 def parse_manifest_text(text: str) -> dict[str, str]:
     """Parse a VERSION manifest from raw text.
 
+    If the text contains ``---``, only the section after the last ``---``
+    is parsed. This allows human-readable release notes above the manifest.
+
     Format::
 
+        Release notes here
+        ---
         26.07.31-2202
         runtime: d4c3b2a1
         rac: f8e7d6c5
-
-    Returns ``{"datestamp": ..., "runtime": ..., "<module>": ...}``.
     """
     manifest: dict[str, str] = {"datestamp": "", "runtime": ""}
-    for line in text.strip().splitlines():
+
+    manifest_text = text
+    if "---" in text:
+        manifest_text = text.rsplit("---", 1)[-1]
+
+    for line in manifest_text.strip().splitlines():
         line = line.strip()
-        if line.startswith("#") or not line or line.startswith("---"):
+        if line.startswith("#") or not line:
             continue
         if ":" in line:
             key, _, value = line.partition(":")
