@@ -66,4 +66,5 @@ class NegativaData:
     usos_dgmi: bool = False
     nome_daf: str = ""
     nome_dgmi: str = ""
+    data_hoje: str = ""
     itens: List[ItemSelecionado] = field(default_factory=list)

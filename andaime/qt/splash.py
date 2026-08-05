@@ -46,7 +46,6 @@ class SplashScreen:
         if self._splash is not None:
             return
         self._splash = QSplashScreen(self._make_pixmap())
-        self._splash.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
         self._splash.show()
         QApplication.processEvents()
 

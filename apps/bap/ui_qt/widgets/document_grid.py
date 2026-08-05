@@ -394,6 +394,9 @@ def _iter_zip_files(path: str):
             yield base, zf.read(info)
 
 
+IMAGE_EXT = frozenset({".jpg", ".jpeg", ".png", ".tif", ".tiff", ".jp2"})
+
+
 def _archive_to_items(path: str) -> list[GridItem]:
     """Expande um ZIP em itens de grade (Option B: tudo em memória).
 
@@ -402,7 +405,6 @@ def _archive_to_items(path: str) -> list[GridItem]:
     original da entrada é preservado em ``arquivo_original``. Entradas que não
     podem ser decodificadas são silenciosamente ignoradas.
     """
-    from bap.utils.archive_migrate import IMAGE_EXT
     from bap.models import image_to_pdf_bytes
     from andaime.pdf import split_pages
 

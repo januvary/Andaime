@@ -752,16 +752,38 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     char localRoot[MAX_PATH * 2];
     snprintf(localRoot, sizeof(localRoot), "%s\\SISTEMAS", lad);
 
-    /* --- Check if local Python exists --- */
+    /* --- Check if local install is valid ---
+     * Both python.exe AND VERSION must exist. If either is missing,
+     * the previous extraction was interrupted or corrupted — wipe and
+     * re-download from scratch. */
+
     char localPython[MAX_PATH * 2];
     snprintf(localPython, sizeof(localPython),
-             "%s\\python\\pythonw.exe", localRoot);
+             "%s\\python\\python.exe", localRoot);
     DWORD attr = GetFileAttributesA(localPython);
     int pythonExists = (attr != INVALID_FILE_ATTRIBUTES &&
                         !(attr & FILE_ATTRIBUTE_DIRECTORY));
 
+    char versionPath[MAX_PATH * 2];
+    snprintf(versionPath, sizeof(versionPath),
+             "%s\\VERSION", localRoot);
+    int versionExists = (GetFileAttributesA(versionPath) !=
+                         INVALID_FILE_ATTRIBUTES);
+
+    int installValid = pythonExists && versionExists;
+
+    if (!installValid && (pythonExists || versionExists)) {
+        /* Partial install detected — wipe before re-downloading. */
+        log_message("Incomplete install detected (python=%d version=%d), wiping",
+                    pythonExists, versionExists);
+        char wipeCmd[MAX_PATH * 4];
+        snprintf(wipeCmd, sizeof(wipeCmd),
+                 "cmd.exe /c rd /s /q \"%s\" 2>nul", localRoot);
+        system(wipeCmd);
+    }
+
     /* --- Install / update --- */
-    if (!pythonExists) {
+    if (!installValid) {
         int installed = 0;
 
 #ifdef PORTABLE_MODE
@@ -920,12 +942,12 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
                  "cmd.exe /c rd /s /q \"%s\" 2>nul", tempDir);
         system(cleanupCmd);
 
-        /* Verify pythonw.exe appeared. */
+        /* Verify python.exe appeared. */
         attr = GetFileAttributesA(localPython);
         if (attr == INVALID_FILE_ATTRIBUTES ||
             (attr & FILE_ATTRIBUTE_DIRECTORY)) {
             MessageBoxA(NULL,
-                        "Installation completed but pythonw.exe not found.\n"
+                        "Installation completed but python.exe not found.\n"
                         "The payload.zip may be corrupted.",
                         displayName, MB_ICONERROR | MB_OK);
             ReleaseMutex(hMutex);
@@ -939,7 +961,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
      * SISTEMAS_DATA_ROOT = exeDir; the app writes to exeDir\data\. */
     SetEnvironmentVariableA("SISTEMAS_DATA_ROOT", exeDir);
 
-    /* --- Launch pythonw.exe -m <appName> --- */
+    /* --- Launch python.exe -m <appName> (CREATE_NO_WINDOW = no console) --- */
     char workDir[MAX_PATH * 2];
     snprintf(workDir, sizeof(workDir), "%s\\apps", localRoot);
 
@@ -953,8 +975,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 
     log_message("Launching: %s cwd=%s", cmdLine, workDir);
 
-    /* Capture stdout/stderr to a log file so pythonw.exe crashes are visible.
-     * pythonw.exe is windowless, so without this any startup error is lost. */
+    /* Capture stdout/stderr to a log file so python.exe crashes are visible. */
     char appLogPath[MAX_PATH * 2];
     snprintf(appLogPath, sizeof(appLogPath), "%s\\app.log", localRoot);
     HANDLE hAppLog = CreateFileA(appLogPath,
@@ -982,7 +1003,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     ZeroMemory(&pi, sizeof(pi));
 
     if (!CreateProcessA(localPython, cmdLine, NULL, NULL, TRUE,
-                          0, NULL, workDir, &si, &pi)) {
+                          CREATE_NO_WINDOW, NULL, workDir, &si, &pi)) {
         log_message("CreateProcessA failed: %lu", GetLastError());
         char msg[512];
         snprintf(msg, sizeof(msg),
@@ -1008,9 +1029,27 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             char msg[1024];
             snprintf(msg, sizeof(msg),
                      "%s fechou inesperadamente (codigo %lu).\n\n"
-                     "Detalhes em:\n%s",
-                     displayName, exitCode, appLogPath);
-            MessageBoxA(NULL, msg, displayName, MB_ICONERROR | MB_OK);
+                     "Reinstalar pode resolver o problema.",
+                     displayName, exitCode);
+            if (MessageBoxA(NULL, msg, displayName,
+                            MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                log_message("User chose to reinstall after crash");
+                char wipeCmd[MAX_PATH * 4];
+                snprintf(wipeCmd, sizeof(wipeCmd),
+                         "cmd.exe /c rd /s /q \"%s\" 2>nul", localRoot);
+                system(wipeCmd);
+
+                /* Re-launch self (triggers fresh download). */
+                STARTUPINFOA rsi;
+                PROCESS_INFORMATION rpi;
+                ZeroMemory(&rsi, sizeof(rsi));
+                rsi.cb = sizeof(rsi);
+                ZeroMemory(&rpi, sizeof(rpi));
+                CreateProcessA(exePath, NULL, NULL, NULL, FALSE,
+                               0, NULL, NULL, &rsi, &rpi);
+                CloseHandle(rpi.hThread);
+                CloseHandle(rpi.hProcess);
+            }
         }
     } else {
         log_message("App running normally, launcher exiting");

@@ -27,7 +27,6 @@ from bap.constants import (
     status_display_label,
 )
 from bap.utils.config import bap_data_dir
-from bap.utils.archive_migrate import delete_arquivos_before
 from bap.utils.date_utils import format_date_display
 from bap.utils.arquivo_storage import resolve_arquivos_root
 
@@ -202,7 +201,6 @@ class MainWindow(QMainWindow):
             self,
             current,
             self._export_planilha,
-            self._revert_archive_migration,
         )
         if dialog.exec() and dialog.result_data is not None:
             self.config.set("arquivos_root", dialog.result_data["arquivos_root"])
@@ -247,59 +245,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "BAP", f"Falha ao exportar planilha:\n{e}")
 
         self._run_async(_work, on_done=_done, on_error=_error)
-
-    def _revert_archive_migration(self, parent) -> None:
-        """Remove os arquivos migrados de remessas anteriores a 15/07/2026.
-
-        Equivale a "reverter" a migração do arquivo histórico: apaga os
-        arquivos (metadados + BLOBs do banco) de todos os processos em lotes com data
-        anterior a 2026-07-15. Operação idempotente.
-        """
-        if self.db is None or self._db_runner is None:
-            return
-
-        cutoff = "2026-07-15"
-        ans = QMessageBox.question(
-            parent,
-            "Reverter Migração",
-            "Isso removerá TODOS os arquivos dos processos em remessas "
-            f"anteriores a {cutoff} (metadados + BLOBs do banco).\n\n"
-            "Esta ação não pode ser desfeita. Continuar?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if ans != QMessageBox.StandardButton.Yes:
-            return
-
-        progress = QProgressDialog(
-            "Revertendo migração...", "Cancelar", 0, 0, parent
-        )
-        progress.setWindowTitle("Revertendo Migração")
-        progress.setWindowModality(
-            Qt.WindowModality.WindowModal
-        )
-        progress.show()
-
-        def _do_revert():
-            return delete_arquivos_before(self.db, cutoff)
-
-        def _on_done(report):
-            progress.close()
-            msg = (
-                f"Revertido.\n\n"
-                f"Processos afetados: {report.get('processos_afetados', 0)}\n"
-                f"Arquivos removidos: {report.get('arquivos_removidos', 0)}\n"
-                f"Erros: {report.get('erros', 0)}"
-            )
-            if report.get("error_detail"):
-                msg += "\n\nDetalhes:\n" + "\n".join(report["error_detail"][:20])
-            QMessageBox.information(parent, "BAP", msg)
-            self.set_status("Migração do arquivo histórico revertida.", "status_success")
-
-        def _on_error(exc):
-            progress.close()
-            QMessageBox.warning(parent, "BAP", f"Falha ao reverter migração:\n{exc}")
-
-        self._db_runner.run(_do_revert, on_done=_on_done, on_error=_on_error)
 
     def _on_theme_toggled(self, dark_mode: bool):
         theme = "dark" if dark_mode else "light"

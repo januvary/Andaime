@@ -138,7 +138,7 @@ def _start_update_check(window):
         btn_row.addWidget(restart)
         layout.addLayout(btn_row)
 
-    if dlg.exec() == QDialog.DialogCode.Accepted:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             restart_app()
 
     def _on_failed(msg):

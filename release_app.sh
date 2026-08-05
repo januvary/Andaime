@@ -50,19 +50,13 @@ if [ -z "$APP_TARGET" ] || [ -z "${APPS[$APP_TARGET]+x}" ]; then
         exit 1
     fi
 
-    # Prompt for shared version/notes once (used for single app or all apps).
-    read -rp "Version (e.g. 1.0.0): " VERSION
-    if [ -z "$VERSION" ]; then
-        echo -e "${RED}[ERROR]${NC} Version is required."
-        exit 1
-    fi
     read -rp "Notes [optional]: " NOTES
-    NOTES="${NOTES:-Release v${VERSION}}"
+    NOTES="${NOTES:-}"
 
     if [[ "$choice" == "0" ]]; then
         echo ""
         for key in "${APP_KEYS[@]}"; do
-            bash "$0" "$key" "$VERSION" "$NOTES"
+            bash "$0" "$key" "$NOTES"
         done
         exit 0
     fi

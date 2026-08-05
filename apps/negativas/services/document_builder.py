@@ -25,7 +25,7 @@ class DocumentBuilder:
     def build_html(self, data: NegativaData) -> str:
         """Gera HTML completo a partir dos dados do formulário."""
         div_texto = self._get_divisao_texto(data)
-        data_hoje = data_por_extenso()
+        data_hoje = data.data_hoje or data_por_extenso()
         nome_daf = data.nome_daf if data.nome_daf else "____________________"
         nome_dgmi = data.nome_dgmi if data.nome_dgmi else "____________________"
 

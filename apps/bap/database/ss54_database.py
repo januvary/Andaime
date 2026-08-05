@@ -619,13 +619,17 @@ class SS54Database(BaseDatabase):
     @db_op("write")
     def delete_conteudos_for_processo(self, processo_id: int) -> int:
         """Remove os BLOBs de todos os arquivos de um processo (idempotente)."""
-        with self._cursor() as cur:
+        with self.cursor() as cur:
             cur.execute(
                 f"DELETE FROM {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
                 "WHERE arquivo_id IN (SELECT id FROM arquivos WHERE processo_id = ?)",
                 (processo_id,),
             )
-            return cur.rowcount
+            count = cur.rowcount
+            if count > 0:
+                self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
+                self._execute_write("VACUUM")
+            return count
 
     @db_op("write")
     def reassign_processo_lote(
@@ -672,7 +676,11 @@ class SS54Database(BaseDatabase):
                     f"WHERE arquivo_id IN ({placeholders})",
                     tuple(ids),
                 )
-            return self._delete_row("processos", processo_id)
+            deleted = self._delete_row("processos", processo_id)
+            if deleted:
+                self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
+                self._execute_write("VACUUM")
+            return deleted
 
     @db_op("read")
     def search_processos(
@@ -870,7 +878,11 @@ class SS54Database(BaseDatabase):
                 "WHERE arquivo_id = ?",
                 (arquivo_id,),
             )
-            return self._delete_row("arquivos", arquivo_id)
+            deleted = self._delete_row("arquivos", arquivo_id)
+            if deleted:
+                self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
+                self._execute_write("VACUUM")
+            return deleted
 
     # ========== STATS ==========
 

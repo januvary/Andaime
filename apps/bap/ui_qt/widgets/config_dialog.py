@@ -41,7 +41,6 @@ class QtConfigDialog(QDialog):
         parent: QWidget,
         config: dict[str, Any],
         export_callback: Callable | None = None,
-        revert_callback: Callable | None = None,
     ) -> None:
         """
         Inicializa o diálogo.
@@ -50,7 +49,6 @@ class QtConfigDialog(QDialog):
             parent: Janela pai
             config: Configuração atual (``arquivos_root`` e ``default_root``)
             export_callback: Callback do botão Exportar Planilha
-            revert_callback: Callback do botão Reverter Migração
         """
         super().__init__(parent)
         self.setWindowTitle("Configurações")
@@ -58,7 +56,6 @@ class QtConfigDialog(QDialog):
         self.result_data: dict[str, Any] | None = None
         self._config = config
         self._export = export_callback
-        self._revert = revert_callback
 
         self._location_edit: QLineEdit | None = None
 
@@ -111,11 +108,6 @@ class QtConfigDialog(QDialog):
             export_btn.clicked.connect(self._export_planilha)
         btn_row.addWidget(export_btn)
 
-        if self._revert is not None:
-            revert_btn = make_button("Reverter Migração", "flat-fill", self)
-            revert_btn.clicked.connect(self._revert_archive)
-            btn_row.addWidget(revert_btn)
-
         btn_row.addStretch(1)
 
         save_btn = make_button("Salvar", "primary", self)
@@ -125,11 +117,6 @@ class QtConfigDialog(QDialog):
         layout.addLayout(btn_row)
 
     # ========== Handlers ==========
-
-    def _revert_archive(self) -> None:
-        """Delega a reversão da migração ao callback fornecido."""
-        if self._revert is not None:
-            self._revert(self)
 
     def _export_planilha(self) -> None:
         """Delega a exportação da planilha ao callback fornecido."""

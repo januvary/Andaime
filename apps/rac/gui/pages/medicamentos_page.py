@@ -59,16 +59,14 @@ class MedicamentosPage(BasePage):
             count_label=self._heading,
             tertiary_header="Estoque",
             tertiary_value=lambda item: str(item.quantidade),
+            tertiary_edit_callback=self._edit_estoque,
             quaternary_header="Unid.",
             quaternary_value=lambda item: item.unidade,
+            quaternary_edit_callback=self._edit_unidade,
             secondary_header="CIDs",
             secondary_value=_format_cids,
+            secondary_edit_callback=self._edit_cids,
             secondary_tooltip=_full_cids,
-            extra_context_items=[
-                ("Editar CIDs", self._edit_cids),
-                ("Editar Estoque", self._edit_estoque),
-                ("Editar Unidade", self._edit_unidade),
-            ],
         )
         layout.addWidget(self._crud.widget, 1)
         layout.addSpacing(12)

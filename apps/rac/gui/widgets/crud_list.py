@@ -53,10 +53,13 @@ class CrudList:
                  secondary_header: str | None = None,
                  secondary_value: Callable[[object], str] | None = None,
                  secondary_sort_key: Callable[[object], object] | None = None,
+                 secondary_edit_callback: Callable[[int], None] | None = None,
                  tertiary_header: str | None = None,
                  tertiary_value: Callable[[object], str] | None = None,
+                 tertiary_edit_callback: Callable[[int], None] | None = None,
                  quaternary_header: str | None = None,
                  quaternary_value: Callable[[object], str] | None = None,
+                 quaternary_edit_callback: Callable[[int], None] | None = None,
                  sortable: bool = True,
                  on_activate: Callable[[object], None] | None = None,
                  extra_context_items: list[tuple[str, Callable[[int], None]]] | None = None,
@@ -74,10 +77,13 @@ class CrudList:
         self._secondary_header = secondary_header
         self._secondary_value = secondary_value
         self._secondary_sort_key = secondary_sort_key
+        self._secondary_edit_callback = secondary_edit_callback
         self._tertiary_header = tertiary_header
         self._tertiary_value = tertiary_value
+        self._tertiary_edit_callback = tertiary_edit_callback
         self._quaternary_header = quaternary_header
         self._quaternary_value = quaternary_value
+        self._quaternary_edit_callback = quaternary_edit_callback
         self._sortable = sortable
         self._on_activate = on_activate
         self._extra_context_items = extra_context_items or []
@@ -122,6 +128,7 @@ class CrudList:
             headers.append(self._secondary_header)
         self.list_widget.setHorizontalHeaderLabels(headers)
         header = self.list_widget.horizontalHeader()
+        header.setResizeContentsPrecision(0)
         self.list_widget.verticalHeader().setVisible(False)
         self.list_widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.list_widget.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -135,13 +142,16 @@ class CrudList:
         if n_cols > 1:
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
             if has_tertiary:
-                header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-                if has_quaternary:
-                    header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+                    header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+                    self.list_widget.setColumnWidth(1, 48)
+                    if has_quaternary:
+                        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+                        self.list_widget.setColumnWidth(2, 48)
                     if has_secondary:
                         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
             elif has_quaternary:
-                header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+                header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+                self.list_widget.setColumnWidth(1, 48)
                 if has_secondary:
                     header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
             elif has_secondary:
@@ -157,7 +167,7 @@ class CrudList:
             header.setStretchLastSection(True)
 
         self.list_widget.cellDoubleClicked.connect(
-            lambda row, _col: self._activate_row(row)
+            lambda row, col: self._activate_row(row, col)
         )
         self._page.register_keyboard_nav(
             self.list_widget, self.search, lambda _: self._activate_current()
@@ -254,12 +264,30 @@ class CrudList:
         if item is not None:
             self._edit_item(item)
 
-    def _activate_row(self, row: int):
+    def _activate_row(self, row: int, col: int):
         item = self.list_widget.item(row, 0)
         if item is None:
             return
-        if self._on_activate is not None:
-            item_id = item.data(Qt.ItemDataRole.UserRole)
+        item_id = item.data(Qt.ItemDataRole.UserRole)
+
+        has_tertiary = self._tertiary_value is not None
+        has_quaternary = self._quaternary_value is not None
+        has_secondary = self._secondary_value is not None
+
+        if has_tertiary and col == 1 and self._tertiary_edit_callback is not None:
+            self._tertiary_edit_callback(item_id)
+        elif has_quaternary and (
+            (col == 1 and not has_tertiary) or (col == 2 and has_tertiary)
+        ) and self._quaternary_edit_callback is not None:
+            self._quaternary_edit_callback(item_id)
+        elif has_secondary and self._secondary_edit_callback is not None:
+            if col == 1 and not has_tertiary and not has_quaternary:
+                self._secondary_edit_callback(item_id)
+            elif col == 2 and ((has_tertiary and not has_quaternary) or (not has_tertiary and has_quaternary)):
+                self._secondary_edit_callback(item_id)
+            elif col == 3 and has_tertiary and has_quaternary:
+                self._secondary_edit_callback(item_id)
+        elif self._on_activate is not None:
             on_activate = self._on_activate
             # Defer navigation so the trailing mouse events of a double-click
             # are consumed by this list before the new page is shown — otherwise

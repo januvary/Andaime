@@ -8,7 +8,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QDate, QBuffer, QIODevice, QUrl
+from PySide6.QtGui import QTextCursor, QImage, QPixmap, QTextDocument, QPainter
+from PySide6.QtSvgWidgets import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -26,8 +28,8 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QMessageBox,
     QSizePolicy,
+    QDateEdit,
 )
-from PySide6.QtGui import QTextCursor
 
 from andaime.widgets import SearchableComboBox
 from andaime.qt.table import (
@@ -331,6 +333,13 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
+
+        self.data_edit = QDateEdit()
+        self.data_edit.setDisplayFormat("dd/MM/yyyy")
+        self.data_edit.setDate(QDate.currentDate())
+        self.data_edit.setCalendarPopup(True)
+        layout.addWidget(self.data_edit)
+
         layout.addStretch()
 
         self.limpar_btn = make_button("Limpar Tudo", role="flat")
@@ -555,15 +564,7 @@ class MainWindow(QMainWindow):
         self._last_preview_data = data
 
         html = self.document_builder.build_html(data)
-
-        scroll_area = self._scroll_area
-        scroll_pos = scroll_area.verticalScrollBar().value() if scroll_area else 0
-
-        self.resultado_text.setHtml(html)
-        self._atualizar_altura_resultado()
-
-        if scroll_area:
-            scroll_area.verticalScrollBar().setValue(scroll_pos)
+        self._atualizar_preview_com_svg(html)
 
     def _coletar_dados(self) -> NegativaData:
         """Lê todos os campos do formulário e retorna um snapshot."""
@@ -574,6 +575,7 @@ class MainWindow(QMainWindow):
             usos_dgmi=self.check_dgmi.isChecked(),
             nome_daf=self.nome_daf_input.text().strip(),
             nome_dgmi=self.nome_dgmi_input.text().strip(),
+            data_hoje=self.data_edit.text().strip(),
             itens=[copy.deepcopy(item) for item in self.itens_selecionados],
         )
 
@@ -586,6 +588,7 @@ class MainWindow(QMainWindow):
         self.destinatario_input.clear()
         self.nome_daf_input.clear()
         self.nome_dgmi_input.clear()
+        self.data_edit.setDate(QDate.currentDate())
         self.check_daf.setChecked(True)
         self.check_dgmi.setChecked(False)
         self._atualizar_tabela()
@@ -745,19 +748,81 @@ class MainWindow(QMainWindow):
         # Carrega nomes salvos
         nome_daf = self.config.get("nome_daf", "")
         nome_dgmi = self.config.get("nome_dgmi", "")
+        data_hoje = self.config.get("data_hoje", "")
 
         if nome_daf:
             self.nome_daf_input.setText(nome_daf)
         if nome_dgmi:
             self.nome_dgmi_input.setText(nome_dgmi)
+        if data_hoje:
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(data_hoje, "%d/%m/%Y")
+                self.data_edit.setDate(QDate(dt.year, dt.month, dt.day))
+            except ValueError:
+                pass
+
+    def _render_svg_pixmap(self, width: int, height: int) -> QPixmap:
+        """Renderiza o SVG como QPixmap com a cor do tema."""
+        import base64
+
+        svg_data = svg_base64()
+        if not svg_data:
+            return QPixmap()
+
+        svg_bytes = base64.b64decode(svg_data)
+        svg_renderer = QSvgRenderer(svg_bytes)
+
+        pixmap = QPixmap(width, height)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        svg_renderer.render(painter)
+        painter.end()
+
+        return pixmap
+
+    def _atualizar_preview_com_svg(self, html: str):
+        """Atualiza o preview adicionando o SVG como recurso Qt."""
+        scroll_area = self._scroll_area
+        scroll_pos = scroll_area.verticalScrollBar().value() if scroll_area else 0
+
+        # Render SVG as QPixmap
+        pixmap = self._render_svg_pixmap(200, BRASAO_HEIGHT * 2)
+        if pixmap.isNull():
+            self.resultado_text.setHtml(html)
+            self._atualizar_altura_resultado()
+            if scroll_area:
+                scroll_area.verticalScrollBar().setValue(scroll_pos)
+            return
+
+        # Replace data URI with resource URL
+        html_com_svg = html.replace(
+            'src="data:image/svg+xml;base64,' + svg_base64() + '"',
+            'src="brasao://brasao"'
+        )
+
+        # Set HTML first
+        self.resultado_text.setHtml(html_com_svg)
+
+        # Add image resource to document
+        doc = self.resultado_text.document()
+        resource_url = QUrl("brasao://brasao")
+        doc.addResource(QTextDocument.ResourceType.ImageResource, resource_url, pixmap)
+
+        self._atualizar_altura_resultado()
+
+        if scroll_area:
+            scroll_area.verticalScrollBar().setValue(scroll_pos)
 
     def _save_nomes_config(self):
         """Salva os nomes das divisões no config."""
         nome_daf = self.nome_daf_input.text().strip()
         nome_dgmi = self.nome_dgmi_input.text().strip()
+        data_hoje = self.data_edit.text().strip()
 
         self.config.set("nome_daf", nome_daf)
         self.config.set("nome_dgmi", nome_dgmi)
+        self.config.set("data_hoje", data_hoje)
 
     def closeEvent(self, event):
         """Cleanup resources when window closes."""

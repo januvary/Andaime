@@ -387,8 +387,8 @@ PYEOF
     rm -rf "$stage/python/Lib/venv" "$stage/python/Lib/msilib"
     rm -rf "$stage/python/Lib/include" "$stage/python/Lib/libs" "$stage/python/Scripts"
 
-    # Remove standalone python.exe (not needed for -m launches)
-    rm -f "$stage/python/python.exe"
+    # Keep python.exe — launched with CREATE_NO_WINDOW for reliable
+    # stdout/stderr capture (pythonw.exe doesn't support redirection in Wine).
     rm -f "$stage/python/NEWS.txt"
 
     # python3.dll is required by PySide6/Shiboken6 .pyd extensions - keep it

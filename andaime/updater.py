@@ -429,8 +429,8 @@ def _get_python_exe() -> Path:
     """Return the Python executable for (re)launching."""
     root = get_install_root()
     candidates = [
-        root / "python" / "pythonw.exe",
         root / "python" / "python.exe",
+        root / "python" / "pythonw.exe",
     ]
     for c in candidates:
         if c.exists():
@@ -458,6 +458,7 @@ def _launch_with_monitoring(
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
 
     success_marker = temp_dir / SUCCESS_FILE
@@ -500,6 +501,7 @@ def _launch_with_monitoring(
     subprocess.Popen(
         [str(python_exe), "-m", app_module],
         start_new_session=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     os._exit(1)
 
@@ -533,9 +535,14 @@ def restart_app() -> None:
         subprocess.Popen(
             [str(python_exe), "-m", app_module],
             start_new_session=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
     else:
-        subprocess.Popen([sys.executable], start_new_session=True)
+        subprocess.Popen(
+            [sys.executable],
+            start_new_session=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
     os._exit(0)
 
 
