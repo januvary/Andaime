@@ -10,37 +10,42 @@ The app provides a dataclass with:
 
 from __future__ import annotations
 
-import copy
 import json
 from dataclasses import fields, replace
-from pathlib import Path
-from typing import Any, Optional, Type
+from typing import Any, Protocol, cast
 
 from andaime.paths import get_config_path
 from andaime.error_handler import ErrorHandler, ErrorLevel
 
 
-class ConfigManager:
-    _instance: Optional["ConfigManager"] = None
-    _config: Any = None
-    _config_cls: Optional[Type] = None
+class _ConfigSchema(Protocol):
+    @classmethod
+    def get_defaults(cls) -> Any: ...
 
-    def __new__(cls) -> "ConfigManager":
+    def to_dict(self) -> dict[str, Any]: ...
+
+
+class ConfigManager:
+    _instance: ConfigManager | None = None
+    _config: Any = None
+    _config_cls: type[_ConfigSchema] | None = None
+
+    def __new__(cls) -> ConfigManager:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
     @classmethod
-    def init(cls, config_cls: Type) -> None:
+    def init(cls, config_cls: type[_ConfigSchema]) -> None:
         cls._config_cls = config_cls
 
     def __init__(self) -> None:
-        if self._config is None:
-            self._load()
+        if type(self)._config is None:
+            type(self)._load()
 
-    @staticmethod
-    def _load() -> Any:
-        config_cls = ConfigManager._config_cls
+    @classmethod
+    def _load(cls) -> Any:
+        config_cls = cls._config_cls
         if config_cls is None:
             raise RuntimeError("ConfigManager.init(config_cls) must be called first")
 
@@ -61,7 +66,7 @@ class ConfigManager:
                     level=ErrorLevel.INFO,
                     context="Configuration",
                 )
-                ConfigManager._config = config
+                cls._config = config
                 return config
 
             except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
@@ -70,17 +75,17 @@ class ConfigManager:
                     level=ErrorLevel.WARNING,
                     context="Configuration",
                 )
-                ConfigManager._config = config_cls.get_defaults()
-                ConfigManager._save_to_file(ConfigManager._config)
-                return ConfigManager._config
+                cls._config = config_cls.get_defaults()
+                cls._save_to_file(cls._config)
+                return cls._config
         else:
             config = config_cls.get_defaults()
-            ConfigManager._save_to_file(config)
-            ConfigManager._config = config
+            cls._save_to_file(config)
+            cls._config = config
             return config
 
-    @staticmethod
-    def _save_to_file(config: Any) -> None:
+    @classmethod
+    def _save_to_file(cls, config: Any) -> None:
         try:
             config_file = get_config_path()
             config_file.parent.mkdir(parents=True, exist_ok=True)
@@ -102,30 +107,30 @@ class ConfigManager:
             )
 
     def get(self, key: str, default: Any = None) -> Any:
-        if self._config is None:
-            self._config = self._load()
+        if type(self)._config is None:
+            type(self)._load()
 
         try:
-            return getattr(self._config, key)
+            return getattr(type(self)._config, key)
         except AttributeError:
             return default
 
     def set(self, key: str, value: Any) -> bool:
-        if self._config is None:
-            self._config = self._load()
+        if type(self)._config is None:
+            type(self)._load()
 
-        config_cls = self._config_cls
+        config_cls = type(self)._config_cls
         if config_cls is None:
             return False
 
-        valid_fields = {f.name for f in fields(config_cls)}
+        valid_fields = {f.name for f in fields(cast(Any, config_cls))}
         if key not in valid_fields:
             return False
 
         try:
-            candidate = replace(self._config, **{key: value})
-            self._config = candidate
-            self._save_to_file(self._config)
+            candidate = replace(type(self)._config, **{key: value})
+            type(self)._config = candidate
+            type(self)._save_to_file(type(self)._config)
             return True
         except (ValueError, TypeError):
             return False
@@ -138,20 +143,20 @@ class ConfigManager:
             return False
 
     def get_all(self) -> Any:
-        if self._config is None:
-            self._config = self._load()
-        return self._config
+        if type(self)._config is None:
+            type(self)._load()
+        return type(self)._config
 
     def reload(self) -> None:
-        self._config = None
-        self._load()
+        type(self)._config = None
+        type(self)._load()
 
     def reset_to_defaults(self) -> None:
-        config_cls = self._config_cls
+        config_cls = type(self)._config_cls
         if config_cls is None:
             return
-        self._config = config_cls.get_defaults()
-        self._save_to_file(self._config)
+        type(self)._config = config_cls.get_defaults()
+        type(self)._save_to_file(type(self)._config)
 
     @classmethod
     def _reset(cls) -> None:
