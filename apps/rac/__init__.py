@@ -3,4 +3,4 @@ RAC - Registros de Apoio ao CEAF
 Sistema de gerenciamento de registros do Alto Custo
 """
 
-__version__ = "26.08.03-1155"
+__version__ = "26.08.05-0611"
