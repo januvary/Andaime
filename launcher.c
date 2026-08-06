@@ -73,6 +73,39 @@ write_file(const char *path, const char *content)
     return 0;
 }
 
+/* Read a key:value pair from a VERSION manifest file.
+ * e.g., read_version_key(path, "runtime", buf, sizeof(buf)) → "98839a5a" */
+static int
+read_version_key(const char *path, const char *key, char *out, size_t outSize)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) { out[0] = '\0'; return -1; }
+
+    char prefix[128];
+    snprintf(prefix, sizeof(prefix), "%s:", key);
+    size_t prefixLen = strlen(prefix);
+
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, prefix, prefixLen) == 0) {
+            p += prefixLen;
+            while (*p == ' ' || *p == '\t') p++;
+            size_t i = 0;
+            while (*p && *p != '\n' && *p != '\r' &&
+                   *p != ' ' && *p != '\t' && i < outSize - 1)
+                out[i++] = *p++;
+            out[i] = '\0';
+            fclose(f);
+            return 0;
+        }
+    }
+    fclose(f);
+    out[0] = '\0';
+    return -1;
+}
+
 /* Debug logging. Writes to %LOCALAPPDATA%\SISTEMAS\launcher.log so we can
  * diagnose failures on real Windows machines without a debugger. */
 static char _log_path[MAX_PATH * 2] = "";
@@ -676,6 +709,187 @@ json_find_asset_url(const char *json, const char *substr,
 }
 #endif /* APP_REPO */
 
+/* --- Launcher-side update check (throttled, once/day) --- */
+
+static void
+launcher_update_check(const char *localRoot, const char *appName,
+                      const char *displayName)
+{
+    /* Skip if Python updater already staged something. */
+    char updateTagPath[MAX_PATH * 2];
+    snprintf(updateTagPath, sizeof(updateTagPath),
+             "%s\\_update_staging\\.update_tag", localRoot);
+    if (GetFileAttributesA(updateTagPath) != INVALID_FILE_ATTRIBUTES) {
+        log_message("Pending staging detected, skipping launcher check");
+        return;
+    }
+
+    /* Throttle: once per day. */
+    char lastCheckPath[MAX_PATH * 2];
+    snprintf(lastCheckPath, sizeof(lastCheckPath),
+             "%s\\.last_check", localRoot);
+
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char today[16];
+    snprintf(today, sizeof(today), "%04d-%02d-%02d",
+             st.wYear, st.wMonth, st.wDay);
+
+    char lastDate[16] = "";
+    read_version_file(lastCheckPath, lastDate, sizeof(lastDate));
+    if (strcmp(today, lastDate) == 0) return;
+    write_file(lastCheckPath, today);
+
+    /* Read local hashes. */
+    char versionPath[MAX_PATH * 2];
+    snprintf(versionPath, sizeof(versionPath), "%s\\VERSION", localRoot);
+
+    char localRuntime[16] = "";
+    char localApp[16] = "";
+    char localAndaime[16] = "";
+    read_version_key(versionPath, "runtime", localRuntime, sizeof(localRuntime));
+    read_version_key(versionPath, appName, localApp, sizeof(localApp));
+    read_version_key(versionPath, "andaime", localAndaime, sizeof(localAndaime));
+
+    /* Query GitHub API. */
+    char tempDir[MAX_PATH * 2];
+    snprintf(tempDir, sizeof(tempDir), "%s\\_download", localRoot);
+    mkdir_recursive(tempDir);
+
+    char jsonPath[MAX_PATH * 2];
+    snprintf(jsonPath, sizeof(jsonPath), "%s\\release.json", tempDir);
+
+    char apiUrl[512];
+    snprintf(apiUrl, sizeof(apiUrl),
+             "https://api.github.com/repos/%s/releases/latest", APP_REPO);
+
+    if (http_download(apiUrl, jsonPath, NULL) != 0) {
+        log_message("Update check: API failed, skipping");
+        return;
+    }
+
+    DWORD jsonSize = 0;
+    char *json = read_file_to_buffer(jsonPath, &jsonSize);
+    if (!json) return;
+
+    char tag[64] = "";
+    json_find_string(json, "tag_name", tag, sizeof(tag));
+
+    /* Find + download remote VERSION. */
+    char versionUrl[1024] = "";
+    json_find_asset_url(json, "VERSION", versionUrl, sizeof(versionUrl));
+    if (!versionUrl[0]) {
+        free(json);
+        log_message("Update check: no VERSION asset");
+        return;
+    }
+
+    char remoteVersionPath[MAX_PATH * 2];
+    snprintf(remoteVersionPath, sizeof(remoteVersionPath),
+             "%s\\remote_version", tempDir);
+
+    if (http_download(versionUrl, remoteVersionPath, NULL) != 0) {
+        free(json);
+        log_message("Update check: VERSION download failed");
+        return;
+    }
+
+    char remoteRuntime[16] = "";
+    char remoteApp[16] = "";
+    char remoteAndaime[16] = "";
+    read_version_key(remoteVersionPath, "runtime", remoteRuntime, sizeof(remoteRuntime));
+    read_version_key(remoteVersionPath, appName, remoteApp, sizeof(remoteApp));
+    read_version_key(remoteVersionPath, "andaime", remoteAndaime, sizeof(remoteAndaime));
+
+    /* Compare. */
+    int needPayload = (remoteRuntime[0] && strcmp(remoteRuntime, localRuntime) != 0);
+    int needAppUpdate = needPayload ||
+                        (remoteApp[0] && strcmp(remoteApp, localApp) != 0) ||
+                        (remoteAndaime[0] && strcmp(remoteAndaime, localAndaime) != 0);
+
+    if (!needPayload && !needAppUpdate) {
+        free(json);
+        log_message("Update check: up to date");
+        char cmd[MAX_PATH * 4];
+        snprintf(cmd, sizeof(cmd), "cmd.exe /c rd /s /q \"%s\" 2>nul", tempDir);
+        system(cmd);
+        return;
+    }
+
+    /* A shared mutex across ALL apps protects _update_staging/ from being
+     * written by two instances at once (each launch has its own per-app
+     * mutex, so they'd otherwise race on the same staging folder). Try-lock:
+     * if another app is already staging, skip and launch normally — it will
+     * apply the update this or next launch. */
+    HANDLE hUpdateMutex = CreateMutexA(NULL, TRUE,
+                                       "SISTEMAS_Update_Staging");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(hUpdateMutex);
+        free(json);
+        log_message("Another app is staging; skipping launcher staging");
+        return;
+    }
+
+    log_message("Update available: %s (payload=%d app-update=%d)",
+                tag, needPayload, needAppUpdate);
+
+    /* Download + extract to staging. */
+    char stagingPath[MAX_PATH * 2];
+    snprintf(stagingPath, sizeof(stagingPath),
+             "%s\\_update_staging", localRoot);
+
+    char delCmd[MAX_PATH * 4];
+    snprintf(delCmd, sizeof(delCmd),
+             "cmd.exe /c rd /s /q \"%s\" 2>nul", stagingPath);
+    system(delCmd);
+    mkdir_recursive(stagingPath);
+
+    HWND hdlg = show_progress(displayName);
+
+    if (needPayload) {
+        char url[1024] = "";
+        json_find_asset_url(json, "payload", url, sizeof(url));
+        if (url[0]) {
+            char zipPath[MAX_PATH * 2];
+            snprintf(zipPath, sizeof(zipPath), "%s\\payload.zip", tempDir);
+            SetWindowTextW(hdlg, L"Baixando atualização...");
+            if (http_download(url, zipPath, hdlg) == 0)
+                extract_miniz(zipPath, stagingPath);
+        }
+    }
+
+    if (needAppUpdate) {
+        char url[1024] = "";
+        json_find_asset_url(json, "app-update", url, sizeof(url));
+        if (url[0]) {
+            char zipPath[MAX_PATH * 2];
+            snprintf(zipPath, sizeof(zipPath), "%s\\app-update.zip", tempDir);
+            SetWindowTextW(hdlg, L"Baixando atualização...");
+            if (http_download(url, zipPath, hdlg) == 0)
+                extract_miniz(zipPath, stagingPath);
+        }
+    }
+
+    free(json);
+    if (hdlg) DestroyWindow(hdlg);
+
+    /* Write .update_tag so apply_pending_update picks it up. */
+    char tagFilePath[MAX_PATH * 2];
+    snprintf(tagFilePath, sizeof(tagFilePath),
+             "%s\\.update_tag", stagingPath);
+    write_file(tagFilePath, tag);
+
+    /* Clean up temp. */
+    char cleanupCmd[MAX_PATH * 4];
+    snprintf(cleanupCmd, sizeof(cleanupCmd),
+             "cmd.exe /c rd /s /q \"%s\" 2>nul", tempDir);
+    system(cleanupCmd);
+
+    ReleaseMutex(hUpdateMutex);
+    CloseHandle(hUpdateMutex);
+    log_message("Update staged: %s", tag);
+}
+
 /* --- Main --- */
 
 int WINAPI
@@ -955,6 +1169,9 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
         }
         } /* !installed */
     }
+
+    /* --- Launcher-side update check (throttled, once/day) --- */
+    launcher_update_check(localRoot, appName, displayName);
 
     /* --- Tell the app where its data lives ---
      * Data always lives next to the exe, in whatever directory it runs from.

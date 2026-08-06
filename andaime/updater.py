@@ -260,10 +260,14 @@ def _cleanup_old_dirs(root: Path) -> None:
                 if item.name.endswith(".old"):
                     with contextlib.suppress(Exception):
                         shutil.rmtree(item)
-    # Also clean .old files (legacy frozen artifacts)
+    # Also clean .old files (legacy frozen artifacts) and any top-level
+    # .old directories (e.g. python.old left by a payload swap).
     for stale in root.glob("*.old"):
         with contextlib.suppress(Exception):
-            stale.unlink()
+            if stale.is_dir():
+                shutil.rmtree(stale)
+            else:
+                stale.unlink()
 
 
 # ============================================================================
@@ -308,6 +312,40 @@ def _format_error_message(current_format: str, staged_format: str) -> str:
 # ============================================================================
 
 
+def _acquire_lock(lock_path: Path) -> object | None:
+    """Exclusively acquire a lockfile, or return ``None`` if held.
+
+    Uses ``O_CREAT | O_EXCL`` so only one process can create it.  Stale
+    lockfiles (left by a killed process) are broken after a grace period.
+    """
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        return fd
+    except FileExistsError:
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+        except OSError:
+            return None
+        if age > 60:
+            try:
+                lock_path.unlink()
+            except OSError:
+                return None
+            return _acquire_lock(lock_path)
+        return None
+    except OSError:
+        return None
+
+
+def _release_lock(lock_path: Path, lock_handle: object | None) -> None:
+    if lock_handle is not None:
+        with contextlib.suppress(OSError):
+            os.close(lock_handle)
+    with contextlib.suppress(OSError):
+        lock_path.unlink()
+
+
 def apply_pending_update() -> bool:
     """Apply a staged update if one is waiting.
 
@@ -320,13 +358,32 @@ def apply_pending_update() -> bool:
     replaced and should not continue initialisation).
     """
     root = get_install_root()
-    staging = staging_path()
 
     # Always clean up stale rollback artifacts first.
     _cleanup_old_dirs(root)
 
-    if not staging.is_dir():
+    if not staging_path().is_dir():
         return False
+
+    # Guard against two apps applying to the shared install concurrently.
+    # Use an exclusive lockfile; if another process holds it, skip and let
+    # that process apply the update on its own relaunch.
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / "update.lock"
+    lock_handle = _acquire_lock(lock_path)
+    if lock_handle is None:
+        return False
+
+    try:
+        return _apply_pending_update_locked()
+    finally:
+        _release_lock(lock_path, lock_handle)
+
+
+def _apply_pending_update_locked() -> bool:
+    """Apply a staged update. Caller must hold the update lock."""
+    root = get_install_root()
+    staging = staging_path()
 
     tag_file = staging / UPDATE_TAG
     if not tag_file.exists():
