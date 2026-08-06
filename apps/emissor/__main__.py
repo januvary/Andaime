@@ -27,6 +27,45 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from emissor.ui_qt.theme import get_palette, qpalette, stylesheet  # noqa: E402
 
 
+def _apply_pending_update() -> None:
+    from andaime.updater import apply_pending_update
+
+    apply_pending_update()
+
+
+def _start_update_check(window) -> None:
+    from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QHBoxLayout, QPushButton
+
+    from andaime.updater import UpdateCheckWorker, restart_app
+
+    worker = UpdateCheckWorker(parent=window)
+
+    def _on_downloaded(tag: str) -> None:
+        dlg = QDialog(window)
+        dlg.setWindowTitle("Atualização disponível")
+        dlg.setMinimumWidth(360)
+
+        layout = QVBoxLayout(dlg)
+        layout.addWidget(QLabel(f"Atualização {tag} disponível."))
+        layout.addWidget(QLabel("Reinicie o aplicativo para aplicar."))
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        later = QPushButton("Mais tarde")
+        later.clicked.connect(dlg.reject)
+        btn_row.addWidget(later)
+        restart = QPushButton("Reiniciar")
+        restart.clicked.connect(dlg.accept)
+        btn_row.addWidget(restart)
+        layout.addLayout(btn_row)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            restart_app()
+
+    worker.update_ready.connect(_on_downloaded)
+    worker.start()
+
+
 def main() -> None:
     """Ponto de entrada da UI Qt."""
     from pathlib import Path
@@ -37,6 +76,8 @@ def main() -> None:
     register_taskbar_identity(
         "SISTEMAS.Emissor", "Emissor", Path(__file__).resolve().parent / "icon.ico"
     )
+
+    _apply_pending_update()
 
     andaime_instance = andaime.App(
         "Emissor",
@@ -87,6 +128,8 @@ def main() -> None:
         window.setWindowIcon(QIcon(str(icon_path)))
     window.show()
     splash.finish(window)
+
+    _start_update_check(window)
 
     sys.exit(app.exec())
 

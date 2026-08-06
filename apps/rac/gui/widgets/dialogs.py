@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -132,6 +133,92 @@ def open_input_dialog(
     if dlg.exec() != QDialog.DialogCode.Accepted:
         return None
     return input_field.text().strip() or None
+
+
+def open_estoque_dialog(
+    parent: QWidget,
+    title: str,
+    initial_value: int,
+) -> int | None:
+    dlg, layout = scaffold_dialog(parent, title, spacing=16)
+    layout.addSpacing(4)
+
+    input_row = QHBoxLayout()
+    input_row.setSpacing(4)
+    input_row.addStretch()
+
+    minus_60_btn = QPushButton("-60")
+    minus_60_btn.setFixedSize(48, 48)
+    minus_60_btn.setStyleSheet("padding: 0;")
+    input_row.addWidget(minus_60_btn)
+
+    minus_30_btn = QPushButton("-30")
+    minus_30_btn.setFixedSize(48, 48)
+    minus_30_btn.setStyleSheet("padding: 0;")
+    input_row.addWidget(minus_30_btn)
+
+    minus_btn = QPushButton("-1")
+    minus_btn.setFixedSize(48, 48)
+    minus_btn.setStyleSheet("padding: 0;")
+    input_row.addWidget(minus_btn)
+
+    input_field = QLineEdit()
+    input_field.setFixedSize(100, 48)
+    input_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    input_field.setText(str(initial_value))
+    input_field.selectAll()
+    input_row.addWidget(input_field)
+
+    plus_1_btn = QPushButton("+1")
+    plus_1_btn.setFixedSize(48, 48)
+    plus_1_btn.setStyleSheet("padding: 0;")
+    input_row.addWidget(plus_1_btn)
+
+    plus_30_btn = QPushButton("+30")
+    plus_30_btn.setFixedSize(48, 48)
+    plus_30_btn.setStyleSheet("padding: 0;")
+    input_row.addWidget(plus_30_btn)
+
+    plus_60_btn = QPushButton("+60")
+    plus_60_btn.setFixedSize(48, 48)
+    plus_60_btn.setStyleSheet("padding: 0;")
+    input_row.addWidget(plus_60_btn)
+
+    input_row.addStretch()
+    layout.addLayout(input_row)
+
+    btn_row, [cancel, confirm] = make_dialog_button_row([
+        ("Cancelar", "flat"),
+        ("Confirmar", "primary"),
+    ])
+    cancel.clicked.connect(dlg.reject)
+    layout.addLayout(btn_row)
+
+    def update_delta(delta: int):
+        try:
+            current = int(input_field.text())
+            new_val = max(0, current + delta)
+            input_field.setText(str(new_val))
+            input_field.selectAll()
+        except ValueError:
+            pass
+
+    minus_60_btn.clicked.connect(lambda: update_delta(-60))
+    minus_30_btn.clicked.connect(lambda: update_delta(-30))
+    minus_btn.clicked.connect(lambda: update_delta(-1))
+    plus_1_btn.clicked.connect(lambda: update_delta(1))
+    plus_30_btn.clicked.connect(lambda: update_delta(30))
+    plus_60_btn.clicked.connect(lambda: update_delta(60))
+
+    input_field.returnPressed.connect(dlg.accept)
+    confirm.clicked.connect(dlg.accept)
+
+    if dlg.exec() != QDialog.DialogCode.Accepted:
+        return None
+    try:
+        return int(input_field.text().strip())
+    except ValueError:
+        return None
 
 
 def confirm_past_malote(

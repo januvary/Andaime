@@ -52,6 +52,9 @@ class PacientesPage(BasePage):
             secondary_value=_format_last_registro,
             secondary_sort_key=lambda p: p.last_registro_date or "",
             on_activate=lambda pid: self._mw.navigate_to("patient", paciente_id=pid, return_to="pacientes"),
+            extra_context_items=[
+                ("Ver paciente", self._view_paciente),
+            ],
         )
         layout.addWidget(self._crud.widget, 1)
         layout.addSpacing(12)
@@ -68,3 +71,6 @@ class PacientesPage(BasePage):
             lambda: exporter.export_pacientes(),
             "Nenhum paciente para exportar",
         )
+
+    def _view_paciente(self, paciente_id: int):
+        self._mw.navigate_to("patient", paciente_id=paciente_id, return_to="pacientes")

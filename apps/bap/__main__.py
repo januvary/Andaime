@@ -60,6 +60,8 @@ def main():
         "SISTEMAS.BAP", "BAP", Path(__file__).resolve().parent / "icon.ico"
     )
 
+    _apply_pending_update()
+
     import andaime
     import PySide6
     from PySide6.QtWidgets import QApplication
@@ -130,6 +132,8 @@ def main():
     window.show()
     splash.finish(window)
     QTimer.singleShot(0, window.init_backend)
+
+    _start_update_check(window)
 
     sys.exit(qt_app.exec())
 

@@ -7,7 +7,7 @@ Medicamentos Page — manage the medication (item catalog) list
 import json
 
 from rac.gui.widgets import (
-    BasePage, CrudList, HeadingLabel, export_with_fallback, open_input_dialog, open_select_dialog,
+    BasePage, CrudList, HeadingLabel, export_with_fallback, open_input_dialog, open_select_dialog, open_estoque_dialog,
 )
 from rac.export.excel_exporter import ExcelExporter
 
@@ -67,6 +67,11 @@ class MedicamentosPage(BasePage):
             secondary_value=_format_cids,
             secondary_edit_callback=self._edit_cids,
             secondary_tooltip=_full_cids,
+            extra_context_items=[
+                ("Editar CIDs", self._edit_cids),
+                ("Editar Estoque", self._edit_estoque),
+                ("Editar Unidade", self._edit_unidade),
+            ],
         )
         layout.addWidget(self._crud.widget, 1)
         layout.addSpacing(12)
@@ -115,17 +120,15 @@ class MedicamentosPage(BasePage):
         item = next((i for i in items if i.id == item_id), None)
         if not item:
             return
-        initial = str(item.quantidade)
-        result = open_input_dialog(
+        initial = item.quantidade
+        result = open_estoque_dialog(
             self, "Editar Estoque",
-            "Quantidade em estoque",
-            initial=initial,
+            initial,
         )
         if result is None:
             return
         try:
-            quantidade = int(result)
-            self._mw.services.item_catalog.update_quantidade(item_id, quantidade)
+            self._mw.services.item_catalog.update_quantidade(item_id, result)
             self._crud.load()
             self._toast("Estoque atualizado", "positive")
         except ValueError:

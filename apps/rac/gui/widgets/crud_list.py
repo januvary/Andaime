@@ -128,7 +128,6 @@ class CrudList:
             headers.append(self._secondary_header)
         self.list_widget.setHorizontalHeaderLabels(headers)
         header = self.list_widget.horizontalHeader()
-        header.setResizeContentsPrecision(0)
         self.list_widget.verticalHeader().setVisible(False)
         self.list_widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.list_widget.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -142,16 +141,15 @@ class CrudList:
         if n_cols > 1:
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
             if has_tertiary:
-                    header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-                    self.list_widget.setColumnWidth(1, 48)
+                    header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
                     if has_quaternary:
-                        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-                        self.list_widget.setColumnWidth(2, 48)
-                    if has_secondary:
-                        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+                        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+                        if has_secondary:
+                            header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+                    elif has_secondary:
+                        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
             elif has_quaternary:
-                header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-                self.list_widget.setColumnWidth(1, 48)
+                header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
                 if has_secondary:
                     header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
             elif has_secondary:
@@ -196,6 +194,7 @@ class CrudList:
             for row, item in enumerate(items):
                 name_item = SortableTableWidgetItem(item.name)
                 name_item.setData(Qt.ItemDataRole.UserRole, item.id)
+                name_item.setToolTip(item.name)
                 table.setItem(row, 0, name_item)
 
                 col = 1
@@ -274,7 +273,9 @@ class CrudList:
         has_quaternary = self._quaternary_value is not None
         has_secondary = self._secondary_value is not None
 
-        if has_tertiary and col == 1 and self._tertiary_edit_callback is not None:
+        if col == 0:
+            self._edit_item(item)
+        elif has_tertiary and col == 1 and self._tertiary_edit_callback is not None:
             self._tertiary_edit_callback(item_id)
         elif has_quaternary and (
             (col == 1 and not has_tertiary) or (col == 2 and has_tertiary)
@@ -294,13 +295,11 @@ class CrudList:
             # they can land on the destination page (e.g. its history table,
             # which would re-fire its own double-click handler).
             QTimer.singleShot(0, lambda: on_activate(item_id))
-        else:
-            self._edit_item(item)
 
     def _activate_current(self):
         row = self.list_widget.currentRow()
         if row >= 0:
-            self._activate_row(row)
+            self._activate_row(row, 0)
 
     def _show_context_menu(self, pos):
         row = self.list_widget.rowAt(pos.y())
