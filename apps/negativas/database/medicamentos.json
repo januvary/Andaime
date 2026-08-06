@@ -1,0 +1,3343 @@
+{
+  "medicamentos": [
+    {
+      "nome": "Insulina Análoga de Ação Prolongada",
+      "categoria": "CEAF",
+      "cids": [
+        "E10.0",
+        "E10.1",
+        "E10.2",
+        "E10.3",
+        "E10.4",
+        "E10.5",
+        "E10.6",
+        "E10.7",
+        "E10.8",
+        "E10.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "Insulina Análoga de Ação Rápida",
+      "categoria": "CEAF",
+      "cids": [
+        "E10.0",
+        "E10.1",
+        "E10.2",
+        "E10.3",
+        "E10.4",
+        "E10.5",
+        "E10.6",
+        "E10.7",
+        "E10.8",
+        "E10.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "abatacepte",
+      "categoria": "CEAF",
+      "cids": [
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "acetazolamida",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "acido acetil salicilico 100mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "acido fólico 5mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "acitretina",
+      "categoria": "CEAF",
+      "cids": [
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8",
+        "Q80.0",
+        "Q80.1",
+        "Q80.2",
+        "Q80.3",
+        "Q80.8",
+        "Q82.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "adalimumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "H15.0",
+        "H20.1",
+        "H30.1",
+        "H30.2",
+        "H30.8",
+        "K50.0",
+        "K50.1",
+        "K50.8",
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8",
+        "L73.2",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "albendazol 400 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "albendazol 40mg/ml S O 10 ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "alendronato de Sódio 70mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "alentuzumabe",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "alfa-alglicosidase",
+      "categoria": "CEAF",
+      "cids": [
+        "E74.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alfadornase",
+      "categoria": "CEAF",
+      "cids": [
+        "E84.0",
+        "E84.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alfaelosulfase",
+      "categoria": "CEAF",
+      "cids": [
+        "E76.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alfaepoetina",
+      "categoria": "CEAF",
+      "cids": [
+        "B17.1",
+        "B18.2",
+        "D46.0",
+        "D46.1",
+        "D46.4",
+        "D46.7",
+        "D57.0",
+        "D57.1",
+        "D57.2",
+        "N18.0",
+        "N18.8",
+        "Z94.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alfagalsidase",
+      "categoria": "CEAF",
+      "cids": [
+        "E75.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alfainterferona 2b",
+      "categoria": "CEAF",
+      "cids": [
+        "D18.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alfataliglicerase",
+      "categoria": "CEAF",
+      "cids": [
+        "E75.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alfavelaglicerase",
+      "categoria": "CEAF",
+      "cids": [
+        "E75.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alfavestronidase",
+      "categoria": "CEAF",
+      "cids": [
+        "E76.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "alopurinol 100mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "amantadina",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "ambrisentana",
+      "categoria": "CEAF",
+      "cids": [
+        "I27.0",
+        "I27.2",
+        "I27.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "aminofilina 100 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "amiodarona, cloridrato 200mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "amoxicilina 250mg/5ml 150 ml S.O.",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "amoxicilina 500 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "atenolol 50 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "atorvastatina",
+      "categoria": "CEAF",
+      "cids": [
+        "E78.0",
+        "E78.1",
+        "E78.2",
+        "E78.3",
+        "E78.4",
+        "E78.5",
+        "E78.6",
+        "E78.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "azatioprina",
+      "categoria": "CEAF",
+      "cids": [
+        "D61.0",
+        "D69.3",
+        "G70.0",
+        "H15.0",
+        "H20.1",
+        "H30.1",
+        "H30.2",
+        "H30.8",
+        "K50.0",
+        "K50.1",
+        "K50.8",
+        "K51.0",
+        "K51.1",
+        "K51.2",
+        "K51.3",
+        "K51.4",
+        "K51.5",
+        "K51.8",
+        "K75.4",
+        "L93.0",
+        "L93.1",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M32.1",
+        "M32.8",
+        "M33.0",
+        "M33.1",
+        "M33.2",
+        "M34.0",
+        "M34.1",
+        "M34.8",
+        "T86.1",
+        "T86.2",
+        "T86.4",
+        "Z94.0",
+        "Z94.1",
+        "Z94.3",
+        "Z94.4",
+        "Z94.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "azitromicina 200mg/5ml pó para S.O\n600mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "azitromicina 500 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "baricitinibe",
+      "categoria": "CEAF",
+      "cids": [
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "betainterferona",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "bezafibrato",
+      "categoria": "CEAF",
+      "cids": [
+        "E78.0",
+        "E78.1",
+        "E78.2",
+        "E78.3",
+        "E78.4",
+        "E78.5",
+        "E78.6",
+        "E78.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "bimatoprosta",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "biotina",
+      "categoria": "CEAF",
+      "cids": [
+        "E88.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "biperideno 2 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "bosentana",
+      "categoria": "CEAF",
+      "cids": [
+        "I27.0",
+        "I27.2",
+        "I27.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "brimonidina",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "brinzolamida",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "bromazepan 2 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "budesonida",
+      "categoria": "CEAF",
+      "cids": [
+        "J44.0",
+        "J44.1",
+        "J44.8",
+        "J45.0",
+        "J45.1",
+        "J45.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "burosumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "E55.0",
+        "E55.9",
+        "E64.3",
+        "E83.3",
+        "M83.0",
+        "M83.1",
+        "M83.2",
+        "M83.3",
+        "M83.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "butilbrometo de escopolamina 10mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "cabergolina",
+      "categoria": "CEAF",
+      "cids": [
+        "E22.0",
+        "E22.1"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "calcipotriol",
+      "categoria": "CEAF",
+      "cids": [
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "calcitonina",
+      "categoria": "CEAF",
+      "cids": [
+        "M80.0",
+        "M80.1",
+        "M80.2",
+        "M80.3",
+        "M80.4",
+        "M80.5",
+        "M80.8",
+        "M81.0",
+        "M81.1",
+        "M81.2",
+        "M81.3",
+        "M81.4",
+        "M81.5",
+        "M81.6",
+        "M81.8",
+        "M82.0",
+        "M82.1",
+        "M82.8",
+        "M88.0",
+        "M88.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "calcitriol",
+      "categoria": "CEAF",
+      "cids": [
+        "E20.0",
+        "E20.1",
+        "E20.8",
+        "E55.0",
+        "E55.9",
+        "E64.3",
+        "E83.3",
+        "E89.2",
+        "M80.0",
+        "M80.1",
+        "M80.2",
+        "M80.3",
+        "M80.4",
+        "M80.5",
+        "M80.8",
+        "M81.0",
+        "M81.1",
+        "M81.2",
+        "M81.3",
+        "M81.4",
+        "M81.5",
+        "M81.6",
+        "M81.8",
+        "M82.0",
+        "M82.1",
+        "M82.8",
+        "M83.0",
+        "M83.1",
+        "M83.2",
+        "M83.3",
+        "M83.8",
+        "N18.2",
+        "N18.3",
+        "N18.4",
+        "N18.5",
+        "N25.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "carbamazepina 2% 100mL – solução oral",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "carbamazepina 200 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "carbonato de Cálcio 1250mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "carbonato de lítio 300 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "cefalexina 5% pó p/ S.O.",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "cefalexina 500mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "certolizumabe pegol",
+      "categoria": "CEAF",
+      "cids": [
+        "K50.0",
+        "K50.1",
+        "K50.8",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ciclofosfamida",
+      "categoria": "CEAF",
+      "cids": [
+        "D59.0",
+        "D59.1",
+        "D60.0",
+        "D60.1",
+        "D60.8",
+        "D69.3",
+        "L93.0",
+        "L93.1",
+        "M32.1",
+        "M32.8",
+        "M34.0",
+        "M34.1",
+        "M34.8",
+        "N04.0",
+        "N04.1",
+        "N04.2",
+        "N04.3",
+        "N04.4",
+        "N04.5",
+        "N04.6",
+        "N04.7",
+        "N04.8",
+        "N04.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ciclosporina",
+      "categoria": "CEAF",
+      "cids": [
+        "D59.0",
+        "D59.1",
+        "D60.0",
+        "D60.1",
+        "D60.8",
+        "D61.0",
+        "D61.1",
+        "D61.2",
+        "D61.3",
+        "D61.8",
+        "G70.0",
+        "H15.0",
+        "H20.1",
+        "H30.1",
+        "H30.2",
+        "H30.8",
+        "K51.0",
+        "K51.1",
+        "K51.2",
+        "K51.3",
+        "K51.4",
+        "K51.5",
+        "K51.8",
+        "L20.0",
+        "L20.8",
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8",
+        "L93.0",
+        "L93.1",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M32.1",
+        "M32.8",
+        "M33.0",
+        "M33.1",
+        "M33.2",
+        "N04.0",
+        "N04.1",
+        "N04.2",
+        "N04.3",
+        "N04.4",
+        "N04.5",
+        "N04.6",
+        "N04.7",
+        "N04.8",
+        "N04.9",
+        "T86.1",
+        "T86.2",
+        "T86.4",
+        "Z94.0",
+        "Z94.1",
+        "Z94.2",
+        "Z94.3",
+        "Z94.4",
+        "Z94.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "cinacalcete",
+      "categoria": "CEAF",
+      "cids": [
+        "N18.2",
+        "N18.3",
+        "N18.4",
+        "N18.5",
+        "N25.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "cinarizina 75mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "ciprofibrato",
+      "categoria": "CEAF",
+      "cids": [
+        "E78.0",
+        "E78.1",
+        "E78.2",
+        "E78.3",
+        "E78.4",
+        "E78.5",
+        "E78.6",
+        "E78.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ciprofloxacina 500mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "ciproterona",
+      "categoria": "CEAF",
+      "cids": [
+        "E22.8",
+        "E28.0",
+        "E28.2",
+        "L68.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "citalopram 20 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "cladribina",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "clobazam",
+      "categoria": "CEAF",
+      "cids": [
+        "G40.0",
+        "G40.1",
+        "G40.2",
+        "G40.3",
+        "G40.4",
+        "G40.5",
+        "G40.6",
+        "G40.7",
+        "G40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "clobetasol",
+      "categoria": "CEAF",
+      "cids": [
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "clonazepam 2 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "clonazepam 2,5 mg/mL – solução oral",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "clopidogrel",
+      "categoria": "CEAF",
+      "cids": [
+        "I20.0",
+        "I20.1",
+        "I21.0",
+        "I21.1",
+        "I21.2",
+        "I21.3",
+        "I21.4",
+        "I21.9",
+        "I22.0",
+        "I22.1",
+        "I22.8",
+        "I22.9",
+        "I23.0",
+        "I23.1",
+        "I23.2",
+        "I23.3",
+        "I23.4",
+        "I23.5",
+        "I23.6",
+        "I23.8",
+        "I24.0",
+        "I24.8",
+        "I24.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "cloreto de Potássio 900mg/15ml xarope 100ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "cloreto de sódio sol. Nasal 30ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "cloridrato de amitriptilina 25 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "cloridrato de clomipramina 25 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "cloroquina",
+      "categoria": "CEAF",
+      "cids": [
+        "L93.0",
+        "L93.1",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M32.1",
+        "M32.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "clorpromazina 100 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "clorpromazina 25 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "clozapina",
+      "categoria": "CEAF",
+      "cids": [
+        "F20.0",
+        "F20.1",
+        "F20.2",
+        "F20.3",
+        "F20.4",
+        "F20.5",
+        "F20.6",
+        "F20.8",
+        "F25.0",
+        "F25.1",
+        "F25.2",
+        "F31.1",
+        "F31.2",
+        "F31.3",
+        "F31.4",
+        "F31.5",
+        "F31.6",
+        "F31.7"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "codeína",
+      "categoria": "CEAF",
+      "cids": [
+        "R52.1",
+        "R52.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "complexo B vitaminico",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "danazol",
+      "categoria": "CEAF",
+      "cids": [
+        "D69.3",
+        "D84.1",
+        "L93.0",
+        "L93.1",
+        "M32.1",
+        "M32.8",
+        "N80.0",
+        "N80.1",
+        "N80.2",
+        "N80.3",
+        "N80.4",
+        "N80.5",
+        "N80.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "dapagliflozina",
+      "categoria": "CEAF",
+      "cids": [
+        "E11.2",
+        "E11.3",
+        "E11.4",
+        "E11.5",
+        "E11.6",
+        "E11.7",
+        "E11.8",
+        "E11.9",
+        "I50.0",
+        "I50.1",
+        "I50.9",
+        "N18.2",
+        "N18.3",
+        "N18.4",
+        "N18.5"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "deferasirox",
+      "categoria": "CEAF",
+      "cids": [
+        "E83.1",
+        "T45.4"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "deferiprona",
+      "categoria": "CEAF",
+      "cids": [
+        "E83.1",
+        "T45.4"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "desferroxamina",
+      "categoria": "CEAF",
+      "cids": [
+        "E83.1",
+        "N18.2",
+        "N18.3",
+        "N18.4",
+        "N18.5",
+        "N25.0",
+        "T45.4"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "desmopressina",
+      "categoria": "CEAF",
+      "cids": [
+        "E23.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "dexametasona 0,1 mg/ml elixir 100ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "dexametasona acetato 0,1% creme 10g",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "dexclorfeniramina 2mg/5ml S.O.",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "diazepan 10 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "diazepan 5 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "digoxina 0,25 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "dimenidrinato 25mg + vitamina B6 5mg/ml 20ml SO",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "dimeticona 75mg/ml 10ml SO",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "dipirona 500mg/ml 10ml S.O.",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "dipropionato de beclometasona+fumarato de formoterol dihidratado+brometo de glicopirrônio",
+      "categoria": "CEAF",
+      "cids": [
+        "J44.0",
+        "J44.1",
+        "J44.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "donepezila",
+      "categoria": "CEAF",
+      "cids": [
+        "F00.0",
+        "F00.1",
+        "F00.2",
+        "G30.0",
+        "G30.1",
+        "G30.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "dorzolamida",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "doxasozina 2mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "eculizumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "D59.5"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "eltrombopague olamina",
+      "categoria": "CEAF",
+      "cids": [
+        "D61.0",
+        "D61.1",
+        "D61.2",
+        "D61.3",
+        "D61.8",
+        "D69.3"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "enalapril 20mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "enalapril 5 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "enantato de Noretisterona 50 mg+Valerato de Estradiol 5mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "enoxaparina Sódica",
+      "categoria": "CEAF",
+      "cids": [
+        "D68.8",
+        "I82.0",
+        "I82.1",
+        "I82.2",
+        "I82.3",
+        "I82.8",
+        "O22.3",
+        "O22.5"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "entacapona",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "etanercepte",
+      "categoria": "CEAF",
+      "cids": [
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "etossuximida",
+      "categoria": "CEAF",
+      "cids": [
+        "G40.0",
+        "G40.1",
+        "G40.2",
+        "G40.3",
+        "G40.4",
+        "G40.5",
+        "G40.6",
+        "G40.7",
+        "G40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "everolimo",
+      "categoria": "CEAF",
+      "cids": [
+        "T86.1",
+        "T86.2",
+        "T86.4",
+        "Z94.0",
+        "Z94.1",
+        "Z94.4"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "fenitoína 100 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "fenobarbital 100 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "fenobarbital 4% 20mL – solução oral",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "fenofibrato",
+      "categoria": "CEAF",
+      "cids": [
+        "E78.0",
+        "E78.1",
+        "E78.2",
+        "E78.3",
+        "E78.4",
+        "E78.5",
+        "E78.6",
+        "E78.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "fenoterol",
+      "categoria": "CEAF",
+      "cids": [
+        "J44.0",
+        "J44.1",
+        "J44.8",
+        "J45.0",
+        "J45.1",
+        "J45.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "filgrastim",
+      "categoria": "CEAF",
+      "cids": [
+        "B17.1",
+        "B18.2",
+        "B20.0",
+        "B20.1",
+        "B20.2",
+        "B20.3",
+        "B20.4",
+        "B20.5",
+        "B20.6",
+        "B20.7",
+        "B20.8",
+        "B20.9",
+        "B22.0",
+        "B22.1",
+        "B22.2",
+        "B22.7",
+        "B23.0",
+        "B23.1",
+        "B23.2",
+        "B23.8",
+        "D46.0",
+        "D46.1",
+        "D46.7",
+        "D61.0",
+        "D61.1",
+        "D61.2",
+        "D61.3",
+        "D61.8",
+        "Z94.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "finasterida 5mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "fingolimode",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "fluconazol 150mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "fludrocortisona",
+      "categoria": "CEAF",
+      "cids": [
+        "E25.0",
+        "E27.1",
+        "E27.4"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "fluoxetina 20 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "formoterol",
+      "categoria": "CEAF",
+      "cids": [
+        "J44.0",
+        "J44.1",
+        "J44.8",
+        "J45.0",
+        "J45.1",
+        "J45.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "formoterol + budesonida",
+      "categoria": "CEAF",
+      "cids": [
+        "J44.0",
+        "J44.1",
+        "J44.8",
+        "J45.0",
+        "J45.1",
+        "J45.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "fumarato De Dimetila",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "gabapentina",
+      "categoria": "CEAF",
+      "cids": [
+        "G40.0",
+        "G40.1",
+        "G40.2",
+        "G40.3",
+        "G40.4",
+        "G40.5",
+        "G40.6",
+        "G40.7",
+        "G40.8",
+        "R52.1",
+        "R52.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "galantamina",
+      "categoria": "CEAF",
+      "cids": [
+        "F00.0",
+        "F00.1",
+        "F00.2",
+        "G30.0",
+        "G30.1",
+        "G30.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "galsulfase",
+      "categoria": "CEAF",
+      "cids": [
+        "E76.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "genfibrozila",
+      "categoria": "CEAF",
+      "cids": [
+        "E78.0",
+        "E78.1",
+        "E78.2",
+        "E78.3",
+        "E78.4",
+        "E78.5",
+        "E78.6",
+        "E78.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "glatiramer",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "golimumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "gosserrelina",
+      "categoria": "CEAF",
+      "cids": [
+        "D25.0",
+        "D25.1",
+        "D25.2",
+        "E22.8",
+        "N80.0",
+        "N80.1",
+        "N80.2",
+        "N80.3",
+        "N80.4",
+        "N80.5",
+        "N80.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "haloperidol 0,2% 20ml – solução oral",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "haloperidol 1 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "haloperidol 5 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "hidroxicloroquina",
+      "categoria": "CEAF",
+      "cids": [
+        "L93.0",
+        "L93.1",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M32.1",
+        "M32.8",
+        "M33.0",
+        "M33.1"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "hidroxiuréia",
+      "categoria": "CEAF",
+      "cids": [
+        "D57.0",
+        "D57.1",
+        "D57.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "hidróxido de Alumínio 61,5 mg/ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "ibuprofeno 600 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "idursulfase alfa",
+      "categoria": "CEAF",
+      "cids": [
+        "E76.1"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "iloprosta",
+      "categoria": "CEAF",
+      "cids": [
+        "I27.0",
+        "I27.2",
+        "I27.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "imiglucerase",
+      "categoria": "CEAF",
+      "cids": [
+        "E75.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "imipramina 25 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "imunoglobulina humana",
+      "categoria": "CEAF",
+      "cids": [
+        "B20.0",
+        "B20.1",
+        "B20.2",
+        "B20.3",
+        "B20.4",
+        "B20.5",
+        "B20.6",
+        "B20.7",
+        "B20.8",
+        "B20.9",
+        "B22.0",
+        "B22.1",
+        "B22.2",
+        "B22.7",
+        "B23.0",
+        "B23.1",
+        "B23.2",
+        "B23.8",
+        "B34.2",
+        "D59.0",
+        "D59.1",
+        "D60.0",
+        "D60.1",
+        "D69.3",
+        "D80.0",
+        "D80.1",
+        "D80.3",
+        "D80.5",
+        "D80.6",
+        "D80.7",
+        "D80.8",
+        "D81.0",
+        "D81.1",
+        "D81.2",
+        "D81.3",
+        "D81.4",
+        "D81.5",
+        "D81.6",
+        "D81.7",
+        "D81.8",
+        "D82.0",
+        "D82.1",
+        "D83.0",
+        "D83.2",
+        "D83.8",
+        "G61.0",
+        "G70.0",
+        "M33.0",
+        "M33.1",
+        "M33.2",
+        "T86.1",
+        "Z94.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "infliximabe",
+      "categoria": "CEAF",
+      "cids": [
+        "K50.0",
+        "K50.1",
+        "K50.8",
+        "K51.0",
+        "K51.2",
+        "K51.3",
+        "K51.5",
+        "K51.8",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "insulina Humana NPH 100 UI/ML 10ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "insulina Humana NPH 100 UI/ML3ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "insulina Humana Regular 100UI/ml 10ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "insulina Humana Regular 100UI/ml 3ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "iodeto de Potássio 100 mg/5ml xpe 100ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "isoflavona 60mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "isotretinoína",
+      "categoria": "CEAF",
+      "cids": [
+        "L70.0",
+        "L70.1",
+        "L70.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ivacaftor",
+      "categoria": "CEAF",
+      "cids": [
+        "E84.0",
+        "E84.1",
+        "E84.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ivacaftor + elexacaftor + tezacaftor",
+      "categoria": "CEAF",
+      "cids": [
+        "E84.0",
+        "E84.1",
+        "E84.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ivermectina 6mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "lamotrigina",
+      "categoria": "CEAF",
+      "cids": [
+        "F31.1",
+        "F31.2",
+        "F31.3",
+        "F31.4",
+        "F31.5",
+        "F31.6",
+        "F31.7",
+        "G40.0",
+        "G40.1",
+        "G40.2",
+        "G40.3",
+        "G40.4",
+        "G40.5",
+        "G40.6",
+        "G40.7",
+        "G40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "lanreotida",
+      "categoria": "CEAF",
+      "cids": [
+        "E22.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "laronidase",
+      "categoria": "CEAF",
+      "cids": [
+        "E76.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "latanoprosta",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "leflunomida",
+      "categoria": "CEAF",
+      "cids": [
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "leuprorrelina",
+      "categoria": "CEAF",
+      "cids": [
+        "D25.0",
+        "D25.1",
+        "D25.2",
+        "E22.8",
+        "N80.0",
+        "N80.1",
+        "N80.2",
+        "N80.3",
+        "N80.4",
+        "N80.5",
+        "N80.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "levetiracetam",
+      "categoria": "CEAF",
+      "cids": [
+        "G40.0",
+        "G40.1",
+        "G40.2",
+        "G40.3",
+        "G40.4",
+        "G40.5",
+        "G40.6",
+        "G40.7",
+        "G40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "levodopa 200 mg + benserazida 50mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "levomepromazina 100 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "levomepromazina 25 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "levomepromazina 4% – solução oral",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "levonogestrel 0,75 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "levonorgestrel 0,15 + Etinilestradiol 0,03mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "levotiroxina sódica 100mcg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "levotiroxina sódica 25mcg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "levotiroxina sódica 50mcg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "loratadina 10 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "loratadina 1mg/ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "medroxiprogesterona acetato 150mg/ml inj",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "memantina",
+      "categoria": "CEAF",
+      "cids": [
+        "F00.0",
+        "F00.1",
+        "F00.2",
+        "G30.0",
+        "G30.1",
+        "G30.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "mepolizumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "J45.0",
+        "J45.1",
+        "J45.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "mesalazina",
+      "categoria": "CEAF",
+      "cids": [
+        "H15.0",
+        "H20.1",
+        "H30.1",
+        "H30.2",
+        "H30.8",
+        "K50.0",
+        "K50.1",
+        "K50.8",
+        "L93.0",
+        "L93.1",
+        "M32.1",
+        "M32.8",
+        "T86.1",
+        "T86.2",
+        "T86.4",
+        "Z94.0",
+        "Z94.1",
+        "Z94.2",
+        "Z94.3",
+        "Z94.4",
+        "Z94.8",
+        "Z94.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "metadona",
+      "categoria": "CEAF",
+      "cids": [
+        "R52.1",
+        "R52.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "metildopa 250mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "metilprednisolona",
+      "categoria": "CEAF",
+      "cids": [
+        "H15.0",
+        "H20.1",
+        "H30.1",
+        "H30.2",
+        "H30.8",
+        "K50.0",
+        "K50.1",
+        "K50.8",
+        "L93.0",
+        "L93.1",
+        "M32.1",
+        "M32.8",
+        "T86.1",
+        "T86.2",
+        "T86.4",
+        "Z94.0",
+        "Z94.1",
+        "Z94.2",
+        "Z94.3",
+        "Z94.4",
+        "Z94.8",
+        "Z94.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "metoclopramida 10mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "metotrexato",
+      "categoria": "CEAF",
+      "cids": [
+        "K50.0",
+        "K50.1",
+        "K50.8",
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8",
+        "L93.0",
+        "L93.1",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M32.1",
+        "M32.8",
+        "M33.0",
+        "M33.1",
+        "M33.2",
+        "M34.0",
+        "M34.1",
+        "M34.8",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "metronidazol 10% 50g geléia vaginal",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "metronidazol 250mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "metronidazol 40mg/ml S.O.",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "micofenolato de mofetila",
+      "categoria": "CEAF",
+      "cids": [
+        "L93.0",
+        "L93.1",
+        "M32.1",
+        "M32.8",
+        "T86.1",
+        "T86.2",
+        "T86.4",
+        "Z94.0",
+        "Z94.1",
+        "Z94.4"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "miconazol creme dermatológico",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "miconazol, Nitrato 20 mg/g creme vaginal + aplicador",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "miglustate",
+      "categoria": "CEAF",
+      "cids": [
+        "E75.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "mikania glomerata 0,5mg/ml - Guaco xarope",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "mononitrato de isossorbida 20mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "morfina",
+      "categoria": "CEAF",
+      "cids": [
+        "R52.1",
+        "R52.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "naltrexona 50 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "naproxeno",
+      "categoria": "CEAF",
+      "cids": [
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M16.0",
+        "M16.1",
+        "M16.4",
+        "M16.5",
+        "M16.6",
+        "M16.7",
+        "M16.9",
+        "M17.0",
+        "M17.1",
+        "M17.2",
+        "M17.3",
+        "M17.4",
+        "M17.5",
+        "M17.9",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "natalizumabe",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "neomicina+Bacitracina 10g pomada",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "nifedipina 20mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "nistatina 25.000UI/gr creme vaginal 60g + aplicador",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "nitrazepan 5 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "nitrofurantoína 100mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "noretisterona 0,35mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "nortriptilina 25 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "nusinersena",
+      "categoria": "CEAF",
+      "cids": [
+        "G12.0",
+        "G12.1"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "octreotida",
+      "categoria": "CEAF",
+      "cids": [
+        "E22.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "olanzapina",
+      "categoria": "CEAF",
+      "cids": [
+        "F20.0",
+        "F20.1",
+        "F20.2",
+        "F20.3",
+        "F20.4",
+        "F20.5",
+        "F20.6",
+        "F20.8",
+        "F25.0",
+        "F25.1",
+        "F25.2",
+        "F31.1",
+        "F31.2",
+        "F31.3",
+        "F31.4",
+        "F31.5",
+        "F31.6",
+        "F31.7"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "oleo mineral 100 ml S.O.",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "omalizumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "J45.0",
+        "J45.1",
+        "J45.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "omeprazol 20 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "pamidronato",
+      "categoria": "CEAF",
+      "cids": [
+        "M80.0",
+        "M80.1",
+        "M80.2",
+        "M80.3",
+        "M80.4",
+        "M80.5",
+        "M80.8",
+        "M81.0",
+        "M81.1",
+        "M81.2",
+        "M81.3",
+        "M81.4",
+        "M81.5",
+        "M81.6",
+        "M81.8",
+        "M82.0",
+        "M82.1",
+        "M82.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "pancreatina",
+      "categoria": "CEAF",
+      "cids": [
+        "E84.1",
+        "E84.8",
+        "K86.0",
+        "K86.1",
+        "K90.3"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "paracetamol 200mg/ml S.O. gotas 15ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "paracetamol 500 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "paricalcitol",
+      "categoria": "CEAF",
+      "cids": [
+        "N18.2",
+        "N18.3",
+        "N18.4",
+        "N18.5",
+        "N25.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "penicilamina",
+      "categoria": "CEAF",
+      "cids": [
+        "E83.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "periciazina 4% 20mL – solução oral",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "permetrina 10 mg/ml loção",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "permetrina 50 mg/ml loção",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "pilocarpina",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "piridostigmina",
+      "categoria": "CEAF",
+      "cids": [
+        "G70.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "polivitamínico 20 ml S.O.",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "pramipexol",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "pravastatina",
+      "categoria": "CEAF",
+      "cids": [
+        "E78.0",
+        "E78.1",
+        "E78.2",
+        "E78.3",
+        "E78.4",
+        "E78.5",
+        "E78.6",
+        "E78.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "prednisolona, fosfato sódico 3mg/ml S O",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "prednisona 20mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "prednisona 5mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "primidona",
+      "categoria": "CEAF",
+      "cids": [
+        "G40.0",
+        "G40.1",
+        "G40.2",
+        "G40.3",
+        "G40.4",
+        "G40.5",
+        "G40.6",
+        "G40.7",
+        "G40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "prometazina 25 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "propatilnitrato 10 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "quetiapina",
+      "categoria": "CEAF",
+      "cids": [
+        "F20.0",
+        "F20.1",
+        "F20.2",
+        "F20.3",
+        "F20.4",
+        "F20.5",
+        "F20.6",
+        "F20.8",
+        "F25.0",
+        "F25.1",
+        "F25.2",
+        "F31.1",
+        "F31.2",
+        "F31.3",
+        "F31.4",
+        "F31.5",
+        "F31.6",
+        "F31.7"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "raloxifeno",
+      "categoria": "CEAF",
+      "cids": [
+        "M80.0",
+        "M80.1",
+        "M80.2",
+        "M80.3",
+        "M80.4",
+        "M80.5",
+        "M80.8",
+        "M81.0",
+        "M81.1",
+        "M81.2",
+        "M81.3",
+        "M81.4",
+        "M81.5",
+        "M81.6",
+        "M81.8",
+        "M82.0",
+        "M82.1",
+        "M82.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "rasaglina",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "retinol Palmitato 5.000 UI 45 g pomada",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "riluzol",
+      "categoria": "CEAF",
+      "cids": [
+        "G12.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "risanquizumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "risdiplam",
+      "categoria": "CEAF",
+      "cids": [
+        "G12.0",
+        "G12.1"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "risedronato",
+      "categoria": "CEAF",
+      "cids": [
+        "M80.0",
+        "M80.1",
+        "M80.2",
+        "M80.3",
+        "M80.4",
+        "M80.5",
+        "M80.8",
+        "M81.0",
+        "M81.1",
+        "M81.2",
+        "M81.3",
+        "M81.4",
+        "M81.5",
+        "M81.6",
+        "M81.8",
+        "M82.0",
+        "M82.1",
+        "M82.8",
+        "M85.8",
+        "M88.0",
+        "M88.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "risperidona",
+      "categoria": "CEAF",
+      "cids": [
+        "F20.0",
+        "F20.1",
+        "F20.2",
+        "F20.3",
+        "F20.4",
+        "F20.5",
+        "F20.6",
+        "F20.8",
+        "F25.0",
+        "F25.1",
+        "F25.2",
+        "F31.1",
+        "F31.2",
+        "F31.3",
+        "F31.4",
+        "F31.5",
+        "F31.6",
+        "F31.7",
+        "F84.0",
+        "F84.1",
+        "F84.3",
+        "F84.5",
+        "F84.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "rituximabe",
+      "categoria": "CEAF",
+      "cids": [
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M31.3",
+        "M31.7"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "rivastigmina",
+      "categoria": "CEAF",
+      "cids": [
+        "F00.0",
+        "F00.1",
+        "F00.2",
+        "G30.0",
+        "G30.1",
+        "G30.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "romosozumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "M80.0",
+        "M80.1",
+        "M80.2",
+        "M80.3",
+        "M80.4",
+        "M80.5",
+        "M80.8",
+        "M81.0",
+        "M81.1",
+        "M81.2",
+        "M81.3",
+        "M81.4",
+        "M81.5",
+        "M81.6",
+        "M81.8",
+        "M82.0",
+        "M82.1",
+        "M82.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "sacarato de hidróxido férrico",
+      "categoria": "CEAF",
+      "cids": [
+        "N18.0",
+        "N18.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "sacubitril valsartana sódica hidratada",
+      "categoria": "CEAF",
+      "cids": [
+        "I50.0",
+        "I50.1",
+        "I50.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "sais para reidratação oral",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "salbutamol 2mg/5ml 120 ml xarope",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "sapropterina",
+      "categoria": "CEAF",
+      "cids": [
+        "E70.0",
+        "E70.1"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "secuquinumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "selexipague",
+      "categoria": "CEAF",
+      "cids": [
+        "I27.0",
+        "I27.2",
+        "I27.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "sertralina 50 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "sevelamer",
+      "categoria": "CEAF",
+      "cids": [
+        "N18.2",
+        "N18.3",
+        "N18.4",
+        "N18.5",
+        "N25.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "sildenafila",
+      "categoria": "CEAF",
+      "cids": [
+        "I27.0",
+        "I27.2",
+        "I27.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "sirolimo",
+      "categoria": "CEAF",
+      "cids": [
+        "J84.8",
+        "T86.1",
+        "T86.4",
+        "Z94.0",
+        "Z94.4"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "somatropina",
+      "categoria": "CEAF",
+      "cids": [
+        "E23.0",
+        "Q96.0",
+        "Q96.1",
+        "Q96.2",
+        "Q96.3",
+        "Q96.4",
+        "Q96.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "sulfametoxazol + trimetroprima 200+40mg/5ml 100ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "sulfametoxazol 400mg+ trimetroprima 80mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "sulfassalazina",
+      "categoria": "CEAF",
+      "cids": [
+        "K50.0",
+        "K50.1",
+        "K50.8",
+        "K51.0",
+        "K51.1",
+        "K51.2",
+        "K51.3",
+        "K51.4",
+        "K51.5",
+        "K51.8",
+        "K52.2",
+        "M02.1",
+        "M02.3",
+        "M03.2",
+        "M03.6",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3",
+        "M07.4",
+        "M07.5",
+        "M07.6",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9",
+        "M46.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "sulfato ferroso 25mg/ml 30 ml S.O.",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "sulfato ferroso 40 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "tacrolimo",
+      "categoria": "CEAF",
+      "cids": [
+        "N04.0",
+        "N04.1",
+        "N04.2",
+        "N04.3",
+        "N04.4",
+        "N04.5",
+        "N04.6",
+        "N04.7",
+        "N04.8",
+        "T86.1",
+        "T86.2",
+        "T86.4",
+        "Z94.0",
+        "Z94.1",
+        "Z94.4"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "tafamidis",
+      "categoria": "CEAF",
+      "cids": [
+        "E85.1"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "teriflunomida",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "tiamazol 10mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "tiamina 300 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "timolol",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "timolol, maleato 0,5% colirio",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "tioridazina 100 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "tiotrópio + olodaterol",
+      "categoria": "CEAF",
+      "cids": [
+        "J44.0",
+        "J44.1",
+        "J44.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "tobramicina",
+      "categoria": "CEAF",
+      "cids": [
+        "E84.0",
+        "E84.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "tobramicina 0,3% colirio 5 ml",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "tocilizumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M08.0",
+        "M08.1",
+        "M08.2",
+        "M08.3",
+        "M08.4",
+        "M08.8",
+        "M08.9"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "tofacitinibe",
+      "categoria": "CEAF",
+      "cids": [
+        "K51.0",
+        "K51.2",
+        "K51.3",
+        "K51.5",
+        "K51.8",
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8",
+        "M07.0",
+        "M07.2",
+        "M07.3"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "topiramato",
+      "categoria": "CEAF",
+      "cids": [
+        "G40.0",
+        "G40.1",
+        "G40.2",
+        "G40.3",
+        "G40.4",
+        "G40.5",
+        "G40.6",
+        "G40.7",
+        "G40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "toxina botulínica tipo a",
+      "categoria": "CEAF",
+      "cids": [
+        "G04.1",
+        "G24.3",
+        "G24.4",
+        "G24.5",
+        "G24.8",
+        "G51.3",
+        "G51.8",
+        "G80.0",
+        "G80.1",
+        "G80.2",
+        "G81.1",
+        "G82.1",
+        "G82.4",
+        "I69.0",
+        "I69.1",
+        "I69.2",
+        "I69.3",
+        "I69.4",
+        "I69.8",
+        "T90.5",
+        "T90.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "tramadol 50 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "travoprosta",
+      "categoria": "CEAF",
+      "cids": [
+        "H40.1",
+        "H40.2",
+        "H40.3",
+        "H40.4",
+        "H40.5",
+        "H40.6",
+        "H40.8",
+        "Q15.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "trientina",
+      "categoria": "CEAF",
+      "cids": [
+        "E83.0"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "triexifenidil",
+      "categoria": "CEAF",
+      "cids": [],
+      "disponivel": true
+    },
+    {
+      "nome": "triptorrelina",
+      "categoria": "CEAF",
+      "cids": [
+        "D25.0",
+        "D25.1",
+        "D25.2",
+        "E22.8",
+        "N80.0",
+        "N80.1",
+        "N80.2",
+        "N80.3",
+        "N80.4",
+        "N80.5",
+        "N80.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "umeclidínio + vilanterol",
+      "categoria": "CEAF",
+      "cids": [
+        "J44.0",
+        "J44.1",
+        "J44.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "upadacitinibe",
+      "categoria": "CEAF",
+      "cids": [
+        "M05.0",
+        "M05.1",
+        "M05.2",
+        "M05.3",
+        "M05.8",
+        "M06.0",
+        "M06.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ustequinumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "L40.0",
+        "L40.1",
+        "L40.4",
+        "L40.8",
+        "L40.80"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "varfarina Sódica 5 mg",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "vedolizumabe",
+      "categoria": "CEAF",
+      "cids": [
+        "K51.0",
+        "K51.2",
+        "K51.3",
+        "K51.5",
+        "K51.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "vigabatrina",
+      "categoria": "CEAF",
+      "cids": [
+        "G40.0",
+        "G40.1",
+        "G40.2",
+        "G40.3",
+        "G40.4",
+        "G40.5",
+        "G40.6",
+        "G40.7",
+        "G40.8"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "vitamina A+D",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "vitaminas e Sais Minerais",
+      "categoria": "USAFA",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "ziprasidona",
+      "categoria": "CEAF",
+      "cids": [
+        "F20.0",
+        "F20.1",
+        "F20.3",
+        "F20.4",
+        "F20.5",
+        "F20.6",
+        "F20.8",
+        "F25.0",
+        "F25.1",
+        "F25.2"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ácido Ursodesoxicólico",
+      "categoria": "CEAF",
+      "cids": [
+        "K74.3"
+      ],
+      "disponivel": true
+    },
+    {
+      "nome": "ácido valpróico 250 mg",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "ácido valpróico 250 mg/5mL 100mL xarope",
+      "categoria": "CAPS II",
+      "cids": [],
+      "disponivel": false
+    },
+    {
+      "nome": "ácido zoledrônico",
+      "categoria": "CEAF",
+      "cids": [
+        "M80.0",
+        "M80.1",
+        "M80.2",
+        "M80.3",
+        "M80.4",
+        "M80.5",
+        "M80.8",
+        "M81.0",
+        "M81.1",
+        "M81.2",
+        "M81.3",
+        "M81.4",
+        "M81.5",
+        "M81.6",
+        "M81.8",
+        "M82.0",
+        "M82.1",
+        "M82.8",
+        "M85.8",
+        "M88.0",
+        "M88.8"
+      ],
+      "disponivel": true
+    }
+  ]
+}

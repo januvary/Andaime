@@ -1,0 +1,142 @@
+import sys
+from pathlib import Path
+import os
+
+
+
+def _apply_pending_update():
+    from andaime.updater import apply_pending_update
+
+    apply_pending_update()
+
+
+def _start_update_check(window):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QDialog, QLabel
+
+    from andaime.updater import UpdateCheckWorker, restart_app
+    from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+    from bap.ui_qt.widgets.dialogs import confirm_dialog
+
+    worker = UpdateCheckWorker(parent=window)
+
+    def _on_downloaded(tag):
+        if confirm_dialog(
+            window,
+            f"Atualização {tag}",
+            "Uma nova versão foi baixada e está pronta para uso.\n"
+            "Reinicie o aplicativo para aplicar a atualização.",
+            confirm_label="Reiniciar",
+            cancel_label="Mais tarde",
+            cancel_role="flat",
+            modal=True,
+        ):
+            restart_app()
+
+    def _on_failed(msg):
+        ErrorHandler.log(
+            f"Update check failed: {msg}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.UPDATER,
+        )
+
+    worker.update_ready.connect(_on_downloaded)
+    worker.update_failed.connect(_on_failed)
+    worker.no_update.connect(
+        lambda: ErrorHandler.log("No update available", context=ErrorContext.UPDATER)
+    )
+    # Mantém referência para o worker não ser coletado pelo GC.
+    window._update_worker = worker
+    worker.start()
+
+
+def main():
+    from pathlib import Path
+
+    # Set AppUserModelID + register icon in registry BEFORE QApplication.
+    from andaime.win32 import register_taskbar_identity
+
+    register_taskbar_identity(
+        "SISTEMAS.BAP", "BAP", Path(__file__).resolve().parent / "icon.ico"
+    )
+
+    _apply_pending_update()
+
+    import andaime
+    import PySide6
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QFont, QIcon
+    from PySide6.QtCore import QCoreApplication
+    from andaime.qt.fonts import FontSpec, apply_font
+    from bap.utils.config import SS54Config
+    from bap.database.ss54_database import SS54Database
+
+    # Garante que o Qt encontre os plugins (iconengines, imageformats) mesmo
+    # quando o executável é lançado fora do ambiente de desenvolvimento.
+    pyside_dir = Path(PySide6.__file__).resolve().parent
+    for plugin_subdir in ("plugins", "Qt/plugins"):
+        plugin_path = pyside_dir / plugin_subdir
+        if plugin_path.is_dir():
+            QCoreApplication.addLibraryPath(str(plugin_path))
+
+    # Config + error handler usam <root>/data por padrão (andaime).
+    import andaime.paths as _andaime_paths
+    from bap.utils.config import bap_data_dir
+
+    _andaime_paths.get_config_path = lambda: bap_data_dir() / "config.json"
+
+    from andaime.updater import get_shared_root
+
+    app = andaime.App(
+        "BAP",
+        "BAP",
+        config_cls=SS54Config,
+        db_cls=SS54Database,
+        root=get_shared_root(),
+        font=FontSpec("IBM Plex Sans", 11, style_hint=QFont.StyleHint.SansSerif, bundled=True),
+    )
+
+    # Fecha o banco (backup síncrono) no atexit, fora da thread de UI.
+    from andaime.shutdown import register_cleanup, setup_shutdown_handlers
+
+    setup_shutdown_handlers()
+    register_cleanup(app.db.close, "ss54_database")
+
+    from bap.ui_qt.styles import set_theme, get_stylesheet, get_palette, qpalette
+
+    qt_app = QApplication(sys.argv)
+
+    icon_path = Path(__file__).resolve().parent / "icon.ico"
+    splash = andaime.SplashScreen("BAP", icon_path)
+    splash.show()
+
+    apply_font(qt_app, app.font)
+
+    if icon_path.exists():
+        qt_app.setWindowIcon(QIcon(str(icon_path)))
+
+    from andaime.qt.dev_inspector import enable_if_env
+    enable_if_env(qt_app)
+
+    theme = app.config.get("theme", "dark")
+    set_theme(theme)
+    qt_app.setPalette(qpalette(get_palette(theme == "dark")))
+    qt_app.setStyleSheet(get_stylesheet())
+
+    from bap.ui_qt.main_window import MainWindow
+    from PySide6.QtCore import QTimer
+
+    window = MainWindow(app)
+    if icon_path.exists():
+        window.setWindowIcon(QIcon(str(icon_path)))
+    window.show()
+    splash.finish(window)
+    QTimer.singleShot(0, window.init_backend)
+
+    _start_update_check(window)
+
+    sys.exit(qt_app.exec())
+
+
+if __name__ == "__main__":
+    main()
