@@ -1,0 +1,191 @@
+#!/bin/bash
+# ============================================
+# SISTEMAS — Single-App Standalone Builder
+#
+# Builds ONE app as a standalone Python-style
+# distribution (embedded Python + app + andaime).
+#
+# Produces:
+#   dist/<app>/
+#   ├── python/              (pruned embedded CPython)
+#   ├── apps/<app>/          (app code, src→<app> renamed)
+#   ├── VERSION              (app version + runtime hash)
+#   ├── launcher.exe         (compiled with GitHub repo info)
+#   └── <app>-v<X>.zip           (user download: <DISPLAY>/<app>.exe + data/)
+#
+# Usage:
+#   ./build_app.sh rac                # build RAC
+#   ./build_app.sh emissor            # build Emissor
+#   ./build_app.sh rac --skip-deps    # skip Wine pip install
+#   ./build_app.sh rac --no-prune     # skip size optimisation
+# ============================================
+
+# Source build library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/build_lib.sh"
+
+# --- Args ---
+APP_TARGET=""
+SKIP_DEPS=0
+NO_PRUNE=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --skip-deps) SKIP_DEPS=1; shift ;;
+        --no-prune)  NO_PRUNE=1;  shift ;;
+        --help|-h)
+            echo "Usage: ./build_app.sh <app> [--skip-deps] [--no-prune]"
+            echo "Apps: ${!APPS[@]}"
+            exit 0 ;;
+        *) APP_TARGET="$1"; shift ;;
+    esac
+done
+
+# --- Determine apps to build ---
+declare -A BUILD_FLAGS
+if [ -z "$APP_TARGET" ] || [ -z "${APPS[$APP_TARGET]+x}" ]; then
+    echo "SISTEMAS — Standalone Builder"
+    echo ""
+    echo "  0) All apps"
+    APP_TARGET="$(select_app "$APP_TARGET")"
+
+    if [[ "$APP_TARGET" == "all" ]]; then
+        echo ""
+        for key in "${APP_ORDER[@]}"; do
+            bash "$0" "$key" $([ $SKIP_DEPS -eq 1 ] && echo --skip-deps) $([ $NO_PRUNE -eq 1 ] && echo --no-prune)
+        done
+        exit 0
+    fi
+fi
+
+BUILD_FLAGS["$APP_TARGET"]=1
+
+APP_INFO="${APPS[$APP_TARGET]}"
+APP_MODULE=$(app_field "$APP_INFO" 1)
+APP_REPO=$(app_field "$APP_INFO" 2)
+APP_SRC=$(app_field "$APP_INFO" 3)
+APP_ICON=$(app_field "$APP_INFO" 4)
+APP_DISPLAY=$(app_field "$APP_INFO" 5)
+
+DIST="$ANDAIME_REPO/dist"
+STAGE="$DIST/$APP_MODULE"
+
+# ============================================
+echo "============================================"
+echo "SISTEMAS — Standalone Build: $APP_DISPLAY"
+echo "  module: $APP_MODULE"
+echo "  repo:   $APP_REPO"
+echo "  deps:   $([ $SKIP_DEPS -eq 1 ] && echo 'skip' || echo 'install')"
+echo "  prune:  $([ $NO_PRUNE -eq 1 ] && echo 'skip' || echo 'yes')"
+echo "============================================"
+
+# ============================================
+# Prerequisites
+# ============================================
+check_prerequisites "standalone" "$APP_TARGET" || exit 1
+
+# ============================================
+# Sync app source
+# ============================================
+echo -e "\n${YELLOW}Syncing $APP_MODULE source...${NC}"
+sync_app "$APP_MODULE" || exit 1
+
+# ============================================
+# Prepare Wine Python dependencies
+# ============================================
+prepare_wine_python "$SKIP_DEPS"
+
+# ============================================
+# Compute hashes (deps freshly installed above, so compute once)
+# ============================================
+echo -e "\n${YELLOW}Computing hashes...${NC}"
+DSTAMP=$(datestamp_version)
+ok "Datestamp: $DSTAMP"
+
+RUNTIME_HASH=$(compute_runtime_hash)
+ok "Runtime hash: $RUNTIME_HASH"
+
+APP_HASH=$(compute_app_hash "$APP_MODULE")
+ok "App hash: $APP_HASH"
+
+ANDAIME_HASH=$(compute_andaime_hash)
+ok "Andaime hash: $ANDAIME_HASH"
+
+# ============================================
+# Clean + create stage
+# ============================================
+echo -e "\n${YELLOW}Creating stage...${NC}"
+rm -rf "$STAGE"
+mkdir -p "$STAGE/python" "$STAGE/apps"
+
+# VERSION file: datestamp + runtime hash + app hash
+echo -e "${DSTAMP}\nruntime: ${RUNTIME_HASH}\n${APP_MODULE}: ${APP_HASH}\nandaime: ${ANDAIME_HASH}" > "$STAGE/VERSION"
+ok "VERSION: $DSTAMP (runtime: $RUNTIME_HASH, $APP_MODULE: $APP_HASH, andaime: $ANDAIME_HASH)"
+
+# ============================================
+# Copy Windows Python tree
+# ============================================
+copy_python "$STAGE"
+
+# ============================================
+# Copy andaime chassis
+# ============================================
+copy_andaime "$STAGE"
+
+# ============================================
+# Stage app code
+# ============================================
+echo -e "\n${YELLOW}Staging app code...${NC}"
+stage_app "$APP_MODULE" "$STAGE"
+
+# ============================================
+# Prune (size optimisation)
+# ============================================
+prune_python "$STAGE" "$NO_PRUNE"
+
+# ============================================
+# Compile bytecode
+# ============================================
+compile_bytecode "$STAGE" "$APP_MODULE"
+
+# ============================================
+# Compile launcher.exe
+# ============================================
+echo -e "\n${YELLOW}Compiling launcher.exe...${NC}"
+LAUNCHER_PATH="$STAGE/${APP_MODULE}.exe"
+compile_launcher "$LAUNCHER_PATH" "$APP_ICON" "standalone" "$APP_INFO"
+
+# ============================================
+# Create zips
+# ============================================
+echo -e "\n${YELLOW}Creating archives...${NC}"
+
+TAG="$DSTAMP"
+
+# --- User-facing zip (extract-and-run: <DISPLAY>/<app>.exe + data/) ---
+USER_ZIP="$STAGE/${APP_MODULE}-${TAG}.zip"
+WRAPPER="$STAGE/$APP_DISPLAY"
+rm -f "$USER_ZIP"
+rm -rf "$WRAPPER"
+mkdir -p "$WRAPPER/data"
+cp "$LAUNCHER_PATH" "$WRAPPER/${APP_MODULE}.exe"
+cd "$STAGE"
+zip -r "$USER_ZIP" "$APP_DISPLAY/" -q
+USER_SIZE=$(du -sh "$USER_ZIP" | cut -f1)
+ok "user zip: $USER_SIZE"
+
+# ============================================
+# Report
+# ============================================
+echo -e "\n${YELLOW}Build complete!${NC}"
+echo ""
+echo "Output: $STAGE/"
+echo ""
+echo "Artifacts:"
+echo "  User zip:       $USER_ZIP ($USER_SIZE)"
+echo ""
+TOTAL=$(du -sh "$STAGE" | cut -f1)
+echo -e "  ${GREEN}Total stage:${NC} $TOTAL"
+echo ""
+echo "To release:"
+echo "  ./release_app.sh $APP_MODULE"

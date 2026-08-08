@@ -10,7 +10,7 @@ import traceback
 from contextlib import suppress
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 
 class ErrorLevel(Enum):
@@ -21,28 +21,50 @@ class ErrorLevel(Enum):
     CRITICAL = logging.CRITICAL
 
 
+class ErrorContext(str, Enum):
+    DATABASE = "Database"
+    FILE_IO = "File I/O"
+    PDF_GENERATION = "PDF Generation"
+    VALIDATION = "Validation"
+    CONFIGURATION = "Configuration"
+    UI = "User Interface"
+    SECURITY = "Security"
+    SHUTDOWN = "Shutdown"
+    NETWORK = "Network"
+    AUTOCOMPLETE = "Autocomplete"
+    STATE = "State Management"
+    EXPORT = "Export"
+    REGISTRY = "Registry"
+    UPDATER = "Updater"
+    BATCH = "Batch"
+    APP = "App"
+    UNKNOWN = "Unknown"
+
+
 class ErrorHandler:
-    _logger: Optional[logging.Logger] = None
-    _show_dialog_callback: Optional[Callable[[str, str, ErrorLevel], None]] = None
+    _logger: logging.Logger | None = None
+    _show_dialog_callback: Callable[[str, str, ErrorLevel], None] | None = None
     _initialized: bool = False
 
     @staticmethod
     def _ctx(context: Any) -> str:
-        if isinstance(context, str):
-            return context
-        return getattr(context, "value", str(context))
+        if isinstance(context, Enum):
+            return str(context.value)
+        return context if isinstance(context, str) else str(context)
 
     def __init__(self) -> None:
         if not self._initialized and self._logger is None:
             self._logger = logging.getLogger("andaime-fallback")
             self._logger.setLevel(logging.DEBUG)
-            if not self._logger.handlers:
+            if not self._logger.handlers and sys.stdout is not None:
                 handler = logging.StreamHandler(sys.stdout)
                 handler.setLevel(logging.INFO)
-                handler.setFormatter(logging.Formatter(
-                    "[%(asctime)s] [%(levelname)s] %(message)s",
-                    datefmt="%Y-%m-%d %H:%M:%S",
-                ))
+                handler.setFormatter(
+                    logging.Formatter(
+                        "[%(asctime)s] [%(levelname)s] %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S",
+                    )
+                )
                 self._logger.addHandler(handler)
 
     @classmethod
@@ -57,10 +79,11 @@ class ErrorHandler:
             datefmt="%Y-%m-%d %H:%M:%S",
         )
 
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(formatter)
-        cls._logger.addHandler(console_handler)
+        if sys.stdout is not None:
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(logging.INFO)
+            console_handler.setFormatter(formatter)
+            cls._logger.addHandler(console_handler)
 
         if root is not None:
             with suppress(Exception):
@@ -78,14 +101,14 @@ class ErrorHandler:
     @staticmethod
     def handle_error(
         error: Exception,
-        context: str = "Unknown",
+        context: str | ErrorContext = ErrorContext.UNKNOWN,
         level: ErrorLevel = ErrorLevel.ERROR,
         show_dialog: bool = True,
-        recovery_hint: Optional[str] = None,
+        recovery_hint: str | None = None,
     ) -> str:
         handler = ErrorHandler()
 
-        error_msg = f"[{context}] {type(error).__name__}: {error}"
+        error_msg = f"[{ErrorHandler._ctx(context)}] {type(error).__name__}: {error}"
 
         if handler._logger:
             log_func = {
@@ -107,7 +130,7 @@ class ErrorHandler:
 
             with suppress(Exception):
                 ErrorHandler._show_dialog_callback(
-                    f"Erro de {context}", dialog_msg, level
+                    f"Erro de {ErrorHandler._ctx(context)}", dialog_msg, level
                 )
 
         return error_msg
@@ -116,12 +139,12 @@ class ErrorHandler:
     def log(
         message: str,
         level: ErrorLevel = ErrorLevel.INFO,
-        context: str = "Unknown",
+        context: str | ErrorContext = ErrorContext.UNKNOWN,
     ) -> None:
         handler = ErrorHandler()
         if handler._logger:
             with suppress(Exception):
-                formatted_msg = f"[{context}] {message}"
+                formatted_msg = f"[{ErrorHandler._ctx(context)}] {message}"
 
                 log_func = {
                     ErrorLevel.DEBUG: handler._logger.debug,
@@ -153,7 +176,7 @@ class ErrorHandler:
 
         return ErrorHandler.handle_error(
             error,
-            context="File I/O",
+            context=ErrorContext.FILE_IO,
             level=ErrorLevel.ERROR,
             recovery_hint=hint + f"\n\nCaminho: {file_path}",
             show_dialog=show_dialog,
@@ -163,7 +186,7 @@ class ErrorHandler:
     def handle_validation_error(
         error: Exception,
         field: str,
-        recovery_hint: Optional[str] = None,
+        recovery_hint: str | None = None,
         show_dialog: bool = True,
     ) -> str:
         if recovery_hint is None:
@@ -171,7 +194,7 @@ class ErrorHandler:
 
         return ErrorHandler.handle_error(
             error,
-            context="Validation",
+            context=ErrorContext.VALIDATION,
             level=ErrorLevel.WARNING,
             recovery_hint=recovery_hint,
             show_dialog=show_dialog,
@@ -181,7 +204,7 @@ class ErrorHandler:
     def handle_database_error(
         error: Exception,
         operation: str = "database operation",
-        recovery_hint: Optional[str] = None,
+        recovery_hint: str | None = None,
         show_dialog: bool = True,
     ) -> str:
         if recovery_hint is None:
@@ -194,7 +217,7 @@ class ErrorHandler:
 
         return ErrorHandler.handle_error(
             error,
-            context="Database",
+            context=ErrorContext.DATABASE,
             level=ErrorLevel.ERROR,
             recovery_hint=recovery_hint,
             show_dialog=show_dialog,
@@ -205,8 +228,8 @@ class ErrorHandler:
         func: Callable[..., Any],
         *args: Any,
         operation_name: str = "operation",
-        on_error: Optional[Callable[[Exception], None]] = None,
-        context: str = "Unknown",
+        on_error: Callable[[Exception], None] | None = None,
+        context: str | ErrorContext = ErrorContext.UNKNOWN,
         **kwargs: Any,
     ) -> Any:
         try:
@@ -227,7 +250,7 @@ class ErrorHandler:
         func: Callable,
         *args: Any,
         operation_name: str = "operation",
-        context: str = "Unknown",
+        context: str | ErrorContext = ErrorContext.UNKNOWN,
         **kwargs: Any,
     ) -> Any:
         try:
@@ -245,13 +268,15 @@ class ErrorHandler:
         if ErrorHandler._logger is None:
             ErrorHandler._logger = logging.getLogger("andaime-fallback")
             ErrorHandler._logger.setLevel(logging.DEBUG)
-            if not ErrorHandler._logger.handlers:
+            if not ErrorHandler._logger.handlers and sys.stdout is not None:
                 handler = logging.StreamHandler(sys.stdout)
                 handler.setLevel(logging.INFO)
-                handler.setFormatter(logging.Formatter(
-                    "[%(asctime)s] [%(levelname)s] %(message)s",
-                    datefmt="%Y-%m-%d %H:%M:%S",
-                ))
+                handler.setFormatter(
+                    logging.Formatter(
+                        "[%(asctime)s] [%(levelname)s] %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S",
+                    )
+                )
                 ErrorHandler._logger.addHandler(handler)
 
     @staticmethod
