@@ -801,11 +801,17 @@ launcher_update_check(const char *localRoot, const char *appName,
     read_version_key(remoteVersionPath, appName, remoteApp, sizeof(remoteApp));
     read_version_key(remoteVersionPath, "andaime", remoteAndaime, sizeof(remoteAndaime));
 
-    /* Compare. */
-    int needPayload = (remoteRuntime[0] && strcmp(remoteRuntime, localRuntime) != 0);
+    /* Compare. Missing remote key = update needed (unifies with Python's
+     * origin — a release that omits a hash must still push an update rather
+     * than silently skipping). A release-side guard prevents bad VERSIONs
+     * from ever being published. */
+    int needPayload = (!remoteRuntime[0] ||
+                       (remoteRuntime[0] && strcmp(remoteRuntime, localRuntime) != 0));
     int needAppUpdate = needPayload ||
-                        (remoteApp[0] && strcmp(remoteApp, localApp) != 0) ||
-                        (remoteAndaime[0] && strcmp(remoteAndaime, localAndaime) != 0);
+                        (!remoteApp[0] ||
+                         (remoteApp[0] && strcmp(remoteApp, localApp) != 0)) ||
+                        (!remoteAndaime[0] ||
+                         (remoteAndaime[0] && strcmp(remoteAndaime, localAndaime) != 0));
 
     if (!needPayload && !needAppUpdate) {
         free(json);

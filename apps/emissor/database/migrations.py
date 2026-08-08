@@ -368,40 +368,62 @@ class DatabaseMigrator:
             raise
 
     @staticmethod
-    def normalize_ultima_receita(cursor: Any, conn: Any, db_path: str) -> None:
-        """Normaliza ``ultima_receita`` para ISO YYYY-MM-DD (idempotente)."""
+    def normalize_receitas(cursor: Any, conn: Any, db_path: str) -> None:
+        """Migra receitas: cria colunas ``receita_{2,3}_*`` e converte o legado
+        ``ultima_receita``/``tipo_receita`` em ``receita_1_*`` (drop das antigas).
+
+        Idempotente: baseia-se em ``PRAGMA table_info(pacientes)``. Em bancos
+        novos as colunas já vêm do ``CREATE TABLE`` e a função não faz nada.
+        """
         if db_path == ":memory:":
             return
 
-        cursor.execute("PRAGMA user_version")
-        if cursor.fetchone()[0] >= 4:
-            return
+        cursor.execute("PRAGMA table_info(pacientes)")
+        cols = {row[1] for row in cursor.fetchall()}
 
-        try:
+        if "receita_1_data" not in cols:
             cursor.execute("BEGIN IMMEDIATE")
-            cursor.execute("SELECT id, ultima_receita FROM pacientes")
-            for pid, value in cursor.fetchall():
-                if not value:
-                    continue
-                parsed = parse_date(value)
-                if not parsed:
-                    continue
-                iso = parsed.strftime("%Y-%m-%d")
-                if iso != value:
+            try:
+                cursor.execute("ALTER TABLE pacientes ADD COLUMN receita_1_data TEXT")
+                cursor.execute("ALTER TABLE pacientes ADD COLUMN receita_1_tipo TEXT")
+                if "ultima_receita" in cols and "tipo_receita" in cols:
                     cursor.execute(
-                        "UPDATE pacientes SET ultima_receita = ? WHERE id = ?",
-                        (iso, pid),
+                        """
+                        SELECT id, ultima_receita, tipo_receita FROM pacientes
+                        WHERE ultima_receita IS NOT NULL OR tipo_receita IS NOT NULL
+                        """
                     )
-            cursor.execute("PRAGMA user_version = 4")
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            ErrorHandler.log(
-                f"Erro ao normalizar ultima_receita: {e}",
-                level=ErrorLevel.ERROR,
-                context=ErrorContext.DATABASE,
-            )
-            raise
+                    for pid, ultima, tipo in cursor.fetchall():
+                        iso = ""
+                        parsed = parse_date(str(ultima).strip()) if ultima else None
+                        if parsed:
+                            iso = parsed.strftime("%Y-%m-%d")
+                        cursor.execute(
+                            """
+                            UPDATE pacientes
+                            SET receita_1_data = COALESCE(receita_1_data, ?),
+                                receita_1_tipo = COALESCE(receita_1_tipo, ?)
+                            WHERE id = ?
+                            """,
+                            (iso, (tipo or "").strip().lower(), pid),
+                        )
+                    cursor.execute("ALTER TABLE pacientes DROP COLUMN ultima_receita")
+                    cursor.execute("ALTER TABLE pacientes DROP COLUMN tipo_receita")
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                ErrorHandler.log(
+                    f"Erro ao normalizar receitas: {e}",
+                    level=ErrorLevel.ERROR,
+                    context=ErrorContext.DATABASE,
+                )
+                raise
+
+        for i in (2, 3):
+            for suffix in ("data", "tipo"):
+                col = f"receita_{i}_{suffix}"
+                if col not in cols:
+                    cursor.execute(f"ALTER TABLE pacientes ADD COLUMN {col} TEXT")
 
     @staticmethod
     def normalize_profissionais(cursor: Any, conn: Any, db_path: str) -> None:
@@ -510,6 +532,67 @@ class DatabaseMigrator:
             conn.rollback()
             ErrorHandler.log(
                 f"Erro ao normalizar profissionais: {e}",
+                level=ErrorLevel.ERROR,
+                context=ErrorContext.DATABASE,
+            )
+            raise
+
+    @staticmethod
+    def add_olostech_ok_flag(cursor: Any, conn: Any, db_path: str) -> None:
+        """Adiciona coluna olostech_ok em retiradas e marca antigas (idempotente).
+
+        - user_version 6: adiciona coluna olostech_ok se ausente.
+        - user_version 7: marca retiradas com data_retirada < '2026-08-08' como OK.
+        """
+        if db_path == ":memory:":
+            return
+
+        cursor.execute("PRAGMA user_version")
+        user_version = cursor.fetchone()[0]
+
+        try:
+            cursor.execute("BEGIN IMMEDIATE")
+
+            # 1. Garantir coluna (idempotente)
+            cursor.execute("PRAGMA table_info(retiradas)")
+            existing_cols = {row[1] for row in cursor.fetchall()}
+            if "olostech_ok" not in existing_cols:
+                cursor.execute(
+                    "ALTER TABLE retiradas ADD COLUMN olostech_ok "
+                    "INTEGER NOT NULL DEFAULT 0"
+                )
+                ErrorHandler.log(
+                    "Coluna olostech_ok adicionada em retiradas",
+                    level=ErrorLevel.INFO,
+                    context=ErrorContext.DATABASE,
+                )
+
+            cursor.execute("PRAGMA user_version = 6")
+
+            # 2. Backfill retiradas antigas
+            if user_version >= 7:
+                conn.commit()
+                return
+
+            cursor.execute(
+                "UPDATE retiradas SET olostech_ok = 1 "
+                "WHERE data_retirada < '2026-08-08'"
+            )
+            backfilled = cursor.rowcount
+            cursor.execute("PRAGMA user_version = 7")
+            conn.commit()
+
+            ErrorHandler.log(
+                f"{backfilled} retirada(s) marcada(s) como olostech_ok=1 "
+                f"(anteriores a 2026-08-08)",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.DATABASE,
+            )
+
+        except Exception as e:
+            conn.rollback()
+            ErrorHandler.log(
+                f"Erro na migração olostech_ok: {e}",
                 level=ErrorLevel.ERROR,
                 context=ErrorContext.DATABASE,
             )

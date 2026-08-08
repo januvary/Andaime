@@ -11,6 +11,8 @@ import operator
 
 from typing import Dict, List, Optional, Any
 
+from emissor.utils.date_utils import TIPO_RECEITA_INFO
+
 # Field type constants
 TYPE_TEXT = "text"
 TYPE_NUMBER = "number"
@@ -39,6 +41,31 @@ def transform_none(value: str) -> Any:
 def transform_uppercase(value: str) -> Any:
     """Transform value to uppercase"""
     return value.upper() if value else value
+
+
+# Templates das receitas (data + tipo/validade), 1..3 entradas.
+# gui_widget é "receita_grid": o widget grid custom dominante em OptionsSection.
+_RECEITA_DATA_FIELD = {
+    "type": TYPE_DATE,
+    "label": "Data da receita",
+    "gui_widget": "receita_grid",
+    "required": False,
+    "pdf_display": False,  # Used for vencimento computation, not display
+    "section": "options",  # Seção OptionsSection
+    "validation": validate_none,
+    "transform": transform_none,
+}
+_RECEITA_TIPO_FIELD = {
+    "type": TYPE_ENUM,
+    "label": "Validade da receita",
+    "gui_widget": "receita_grid",
+    "options": list(TIPO_RECEITA_INFO.keys()),
+    "required": False,
+    "pdf_display": False,  # Used for vencimento/aviso computation
+    "section": "options",  # Seção OptionsSection
+    "validation": validate_none,
+    "transform": transform_none,
+}
 
 
 # Configuration for all patient data fields
@@ -116,26 +143,21 @@ PATIENT_DATA_FIELDS: Dict[str, Dict[str, Any]] = {
         "validation": validate_none,
         "transform": lambda x: int(x) if x.isdigit() else None,
     },
-    # Última receita field (date)
-    "ultima_receita": {
-        "type": TYPE_DATE,
-        "label": "Última receita",
-        "gui_widget": WIDGET_MASKED,
-        "mask": "99/99/9999",  # Use '9' for optional digits
-        "required": False,
-        "pdf_display": False,  # Used for calculation, not display
-        "section": "options",  # Seção OptionsSection
-        "validation": validate_none,
-        "transform": transform_none,
-    },
-    # Tipo de receita field (radio buttons)
-    "tipo_receita": {
+    # Receitas (até 3; cada uma tem data + tipo que mapeia a validade)
+    "receita_1_data": _RECEITA_DATA_FIELD,
+    "receita_1_tipo": _RECEITA_TIPO_FIELD,
+    "receita_2_data": _RECEITA_DATA_FIELD,
+    "receita_2_tipo": _RECEITA_TIPO_FIELD,
+    "receita_3_data": _RECEITA_DATA_FIELD,
+    "receita_3_tipo": _RECEITA_TIPO_FIELD,
+    # Bloquear balanço field (toggle: "1"/"0")
+    "bloquear_balanco": {
         "type": TYPE_ENUM,
-        "label": "Tipo de receita",
+        "label": "Evitar dias de balanço",
         "gui_widget": WIDGET_RADIO,
-        "options": ["tipo_a", "tipo_b", "tipo_c"],
+        "options": ["1", "0"],
         "required": False,
-        "pdf_display": False,  # Used for validity calculation
+        "pdf_display": False,  # Used for date calculation / aviso
         "section": "options",  # Seção OptionsSection
         "validation": validate_none,
         "transform": transform_none,

@@ -8,6 +8,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib import colors
 
+from emissor.utils.date_utils import get_receitas_aviso
+
 
 @dataclass
 class PDFConfig:
@@ -124,16 +126,6 @@ class PDFDataContext:
         if missing:
             raise ValueError(f"Campos obrigatórios faltando: {missing}")
 
-        # Helper function para mapear tipo de receita
-        def get_texto_validade(tipo_receita: str) -> str:
-            """Mapeia tipo de receita para texto de validade."""
-            avisos_map = {
-                "tipo_a": "a cada 6 meses",
-                "tipo_b": "a cada 3 meses",
-                "tipo_c": "mensalmente - MEDICAMENTO SUJEITO A CONTROLE ESPECIAL",
-            }
-            return avisos_map.get(tipo_receita, "periodicamente")
-
         # Construir dados do paciente
         processos = data.get("processos", [])
 
@@ -159,9 +151,9 @@ class PDFDataContext:
         # Datas
         datas_data = data.get("datas", {})
 
-        # Avisos dinâmicos baseados no tipo de receita
-        tipo_receita = data.get("tipo_receita", "")
-        texto_validade = get_texto_validade(tipo_receita)
+        # Avisos dinâmicos baseados nas receitas (strictest wins)
+        receitas = data.get("receitas", [])
+        texto_validade = get_receitas_aviso(receitas)
 
         # Verificar se deve mostrar aviso DRS-IV
         tipo = data.get("tipo")

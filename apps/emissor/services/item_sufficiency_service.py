@@ -11,7 +11,7 @@ from andaime.dates import format_date
 
 
 class ItemSufficiencyService:
-    """Calcula datas de suficiência de itens de uma receita, considerando
+    """Calcula datas de suficiência de itens, considerando
     retiradas anteriores do mesmo item."""
 
     @staticmethod
@@ -29,11 +29,6 @@ class ItemSufficiencyService:
     def format_date(dt: date) -> str:
         """Formata data de suficiência como DD/MM/AAAA (sem dia da semana)."""
         return format_date(dt, include_weekday=False)
-
-    @staticmethod
-    def compute_plain_end(current_date: date, current_dias: int) -> date:
-        """Data de término considerando apenas a dispensação atual."""
-        return current_date + timedelta(days=current_dias)
 
     @staticmethod
     def compute_default_end(

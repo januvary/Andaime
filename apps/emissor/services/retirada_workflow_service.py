@@ -74,11 +74,10 @@ class RetiradaWorkflowService:
         self._state.calculate_dates(
             data_retirada_str=data_retirada_str,
             periodicidade_str=periodicidade,
-            ultima_receita_str=self._state.get_ultima_receita(),
-            tipo_receita=self._state.get_tipo_receita(),
             enable_distribution=config.distribute_retiradas,
             distribution_window_days=config.distribution_window_days,
             retirada_count_fn=self._db.count_retiradas_by_proxima_date,
+            bloquear_balanco=self._state.get_bloquear_balanco(),
         )
 
     def prepare(self, request: RetiradaRequest, pdf_generator: Any) -> PreparedRetirada:

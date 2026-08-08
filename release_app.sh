@@ -25,43 +25,22 @@ source "$SCRIPT_DIR/build_lib.sh"
 # --- Parse args / interactive menu ---
 APP_TARGET="${1:-}"
 
-show_menu() {
+if [ -z "$APP_TARGET" ] || [ -z "${APPS[$APP_TARGET]+x}" ]; then
     echo "SISTEMAS — Release"
     echo ""
     echo "  0) All apps"
-    local i=1
-    APP_KEYS=()
-    for key in bap emissor negativas rac; do
-        local DISPLAY
-        DISPLAY=$(app_field "${APPS[$key]}" 5)
-        echo "  $i) $DISPLAY"
-        APP_KEYS+=("$key")
-        ((i++))
-    done
-    echo ""
-}
-
-if [ -z "$APP_TARGET" ] || [ -z "${APPS[$APP_TARGET]+x}" ]; then
-    show_menu
-    read -rp "Select [0-$(( ${#APP_KEYS[@]} ))]: " choice
-
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 0 || choice > ${#APP_KEYS[@]} )); then
-        echo "Invalid selection."
-        exit 1
-    fi
+    APP_TARGET="$(select_app "$APP_TARGET")"
 
     read -rp "Notes [optional]: " NOTES
     NOTES="${NOTES:-}"
 
-    if [[ "$choice" == "0" ]]; then
+    if [[ "$APP_TARGET" == "all" ]]; then
         echo ""
-        for key in "${APP_KEYS[@]}"; do
+        for key in "${APP_ORDER[@]}"; do
             bash "$0" "$key" "$NOTES"
         done
         exit 0
     fi
-
-    APP_TARGET="${APP_KEYS[$((choice-1))]}"
 fi
 
 APP_INFO="${APPS[$APP_TARGET]}"

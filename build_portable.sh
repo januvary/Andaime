@@ -61,6 +61,9 @@ case "$APP_TARGET" in
          fi ;;
 esac
 
+# Selected apps in canonical order (all others filtered out).
+SELECTED="$(selected_apps "${!BUILD_FLAGS[@]}")"
+
 # ============================================
 echo "============================================"
 echo "SISTEMAS — Portable Build"
@@ -72,20 +75,15 @@ echo "============================================"
 # ============================================
 # Prerequisites
 # ============================================
-APPS_TO_CHECK=""
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    APPS_TO_CHECK="$APPS_TO_CHECK $app_key"
-done
+APPS_TO_CHECK="$SELECTED"
 check_prerequisites "portable" "$APPS_TO_CHECK" || exit 1
 
 # ============================================
 # Sync app sources
 # ============================================
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        echo -e "\n${YELLOW}Syncing $app_key source -> apps/$app_key/${NC}"
-        sync_app "$app_key" || exit 1
-    fi
+for app_key in $SELECTED; do
+    echo -e "\n${YELLOW}Syncing $app_key source -> apps/$app_key/${NC}"
+    sync_app "$app_key" || exit 1
 done
 
 # ============================================
@@ -110,12 +108,10 @@ echo "${DSTAMP}" > "$STAGE/VERSION"
 echo "runtime: ${RUNTIME_HASH}" >> "$STAGE/VERSION"
 ok "VERSION: $DSTAMP (runtime: $RUNTIME_HASH)"
 
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        app_hash=$(compute_app_hash "$app_key")
-        echo "$app_key: $app_hash" >> "$STAGE/VERSION"
-        ok "$app_key hash: $app_hash"
-    fi
+for app_key in $SELECTED; do
+    app_hash=$(compute_app_hash "$app_key")
+    echo "$app_key: $app_hash" >> "$STAGE/VERSION"
+    ok "$app_key hash: $app_hash"
 done
 
 ANDAIME_HASH=$(compute_andaime_hash)
@@ -135,11 +131,9 @@ copy_andaime "$STAGE"
 # ============================================
 # Stage app code
 # ============================================
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        echo -e "\n${YELLOW}Staging $app_key${NC}"
-        stage_app "$app_key" "$STAGE"
-    fi
+for app_key in $SELECTED; do
+    echo -e "\n${YELLOW}Staging $app_key${NC}"
+    stage_app "$app_key" "$STAGE"
 done
 
 # ============================================
@@ -150,31 +144,24 @@ prune_python "$STAGE" "$NO_PRUNE"
 # ============================================
 # Compile bytecode
 # ============================================
-APPS_TO_COMPILE=""
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        APPS_TO_COMPILE="$APPS_TO_COMPILE $app_key"
-    fi
-done
+APPS_TO_COMPILE="$SELECTED"
 compile_bytecode "$STAGE" "$APPS_TO_COMPILE"
 
 # ============================================
 # Compile launchers (per-app folders)
 # ============================================
 echo -e "\n${YELLOW}Compiling launchers...${NC}"
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        app_info="${APPS[$app_key]}"
-        module=$(app_field "$app_info" 1)
-        icon=$(app_field "$app_info" 4)
-        display=$(app_field "$app_info" 5)
+for app_key in $SELECTED; do
+    app_info="${APPS[$app_key]}"
+    module=$(app_field "$app_info" 1)
+    icon=$(app_field "$app_info" 4)
+    display=$(app_field "$app_info" 5)
 
-APP_DIR="$STAGE/$display"
-mkdir -p "$APP_DIR/data"
+    APP_DIR="$STAGE/$display"
+    mkdir -p "$APP_DIR/data"
 
-LAUNCHER_PATH="$APP_DIR/${module}.exe"
-        compile_launcher "$LAUNCHER_PATH" "$icon" "portable" "$app_info"
-    fi
+    LAUNCHER_PATH="$APP_DIR/${module}.exe"
+    compile_launcher "$LAUNCHER_PATH" "$icon" "portable" "$app_info"
 done
 
 # ============================================
@@ -209,23 +196,19 @@ TOTAL=$(du -sh "$STAGE" | cut -f1)
 PY_FINAL=$(du -sh "$STAGE/python" | cut -f1)
 echo -e "  ${GREEN}Total:${NC}   $TOTAL"
 echo -e "  python/: $PY_FINAL"
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        app_info="${APPS[$app_key]}"
-        name=$(app_field "$app_info" 5)
-        APP_SIZE=$(du -sh "$STAGE/apps/$(app_name "$app_info")" | cut -f1)
-        echo -e "  $name/:  $APP_SIZE"
-    fi
+for app_key in $SELECTED; do
+    app_info="${APPS[$app_key]}"
+    name=$(app_field "$app_info" 5)
+    APP_SIZE=$(du -sh "$STAGE/apps/$(app_name "$app_info")" | cut -f1)
+    echo -e "  $name/:  $APP_SIZE"
 done
 echo ""
 echo "Launchers:"
-for app_key in "${!BUILD_FLAGS[@]}"; do
-    if [ "${BUILD_FLAGS[$app_key]}" -eq 1 ]; then
-        app_info="${APPS[$app_key]}"
-        module=$(app_field "$app_info" 1)
-        display=$(app_field "$app_info" 5)
-        echo "  $STAGE/$display/${module}.exe"
-    fi
+for app_key in $SELECTED; do
+    app_info="${APPS[$app_key]}"
+    module=$(app_field "$app_info" 1)
+    display=$(app_field "$app_info" 5)
+    echo "  $STAGE/$display/${module}.exe"
 done
 echo ""
 

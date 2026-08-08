@@ -14,6 +14,21 @@ from typing import Any
 from andaime.dates import parse_date
 
 
+def _safe_int(value: Any) -> int:
+    """Converte valor para int, retornando 0 se inválido."""
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return 0
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
+
+
 def _normalize_date_display(value: str) -> str:
     """Convert a stored date (ISO or BR) to BR ``DD/MM/YYYY`` for display.
 
@@ -23,6 +38,25 @@ def _normalize_date_display(value: str) -> str:
         return ""
     parsed = parse_date(value)
     return parsed.strftime("%d/%m/%Y") if parsed else value
+    """Convert a stored date (ISO or BR) to BR ``DD/MM/YYYY`` for display.
+
+    Unparseable or empty values are returned unchanged.
+    """
+    if not value:
+        return ""
+    parsed = parse_date(value)
+    return parsed.strftime("%d/%m/%Y") if parsed else value
+
+
+def _normalize_bool(value: Any) -> bool:
+    """Converte valor armazenado (1/0, "1"/"0", True/False) para bool."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "on", "yes")
+    return False
 
 
 @dataclass
@@ -41,6 +75,28 @@ class CatalogItem:
             descricao=d.get("descricao", ""),
             unidade=d.get("unidade", ""),
         )
+
+
+@dataclass
+class ReceitaEntry:
+    """Uma receita do paciente: data + tipo (que mapeia a validade)."""
+
+    data: str = ""
+    tipo: str = ""
+
+    @classmethod
+    def from_row(cls, data: str = "", tipo: str = "") -> ReceitaEntry:
+        return cls(
+            data=_normalize_date_display(data or ""),
+            tipo=(tipo or "").strip().lower(),
+        )
+
+    def is_complete(self) -> bool:
+        """True se data e tipo preenchidos (vencimento computável)."""
+        return bool(self.data) and bool(self.tipo)
+
+    def to_data_dict(self) -> dict[str, str]:
+        return {"data": self.data, "tipo": self.tipo}
 
 
 @dataclass
@@ -80,8 +136,8 @@ class Patient(Mapping):
     telefone: str = ""
     tipo: str = ""
     periodicidade: str = ""
-    ultima_receita: str = ""
-    tipo_receita: str = ""
+    receitas: list[ReceitaEntry] = field(default_factory=list)
+    bloquear_balanco: bool = False
     observacoes: str = ""
     atendido_por: str = ""
     tem_retirada: bool = False
@@ -95,6 +151,12 @@ class Patient(Mapping):
             middle = key[len("processo_") : -2]
             if middle.isdigit():
                 return self.get_processo(int(middle))
+        if key.startswith("receita_") and key.endswith(("_data", "_tipo")):
+            middle = key[len("receita_") :]
+            idx_str, _, attr = middle.rpartition("_")
+            if idx_str.isdigit():
+                entry = self.get_receita(int(idx_str))
+                return entry.data if attr == "data" else entry.tipo
         if key in self.__dataclass_fields__:
             return getattr(self, key)
         raise KeyError(key)
@@ -103,9 +165,16 @@ class Patient(Mapping):
         yield from self.__dataclass_fields__
         for i in range(len(self.extra_processos)):
             yield f"processo_{i + 2}_n"
+        for i in range(len(self.receitas)):
+            yield f"receita_{i + 1}_data"
+            yield f"receita_{i + 1}_tipo"
 
     def __len__(self) -> int:
-        return len(self.__dataclass_fields__) + len(self.extra_processos)
+        return (
+            len(self.__dataclass_fields__)
+            + len(self.extra_processos)
+            + len(self.receitas) * 2
+        )
 
     def get_processos(self) -> list[str]:
         """Retorna lista de todos os processos (principal + extras)."""
@@ -142,6 +211,19 @@ class Patient(Mapping):
         count += sum(1 for p in self.extra_processos if p)
         return count
 
+    def get_receita(self, index: int) -> ReceitaEntry:
+        """Retorna receita pelo índice (1-based); vazia se fora do range.
+
+        Receitas são compactas (sem buracos): índice 1 é a primeira.
+        """
+        if 1 <= index <= len(self.receitas):
+            return self.receitas[index - 1]
+        return ReceitaEntry()
+
+    def receita_count(self) -> int:
+        """Retorna quantidade de receitas preenchidas (compactas)."""
+        return len(self.receitas)
+
     @classmethod
     def from_row(
         cls, row: dict[str, Any] | Any, items: list[PatientItem] | None = None
@@ -151,6 +233,12 @@ class Patient(Mapping):
         for i in range(2, 11):
             key = f"processo_{i}_n"
             extra_processos.append(d.get(key, "") or "")
+        receitas = []
+        for i in range(1, 4):
+            data = d.get(f"receita_{i}_data", "") or ""
+            tipo = d.get(f"receita_{i}_tipo", "") or ""
+            if data or tipo:
+                receitas.append(ReceitaEntry.from_row(data, tipo))
         return cls(
             id=d.get("id"),
             nome=d.get("nome", ""),
@@ -163,8 +251,8 @@ class Patient(Mapping):
             telefone=d.get("telefone", "") or "",
             tipo=d.get("tipo", "") or "",
             periodicidade=str(d.get("periodicidade", "") or ""),
-            ultima_receita=_normalize_date_display(d.get("ultima_receita", "") or ""),
-            tipo_receita=d.get("tipo_receita", "") or "",
+            receitas=receitas,
+            bloquear_balanco=_normalize_bool(d.get("bloquear_balanco")),
             observacoes=d.get("observacoes", "") or "",
             atendido_por=d.get("atendido_por", "") or "",
             tem_retirada=bool(d.get("tem_retirada", 0)),
@@ -211,6 +299,7 @@ class Retirada:
     created_at: str = ""
     updated_at: str = ""
     tipo: str = ""
+    olostech_ok: int = 0
     itens: list[RetiradaItem] = field(default_factory=list)
 
     @classmethod
@@ -224,7 +313,7 @@ class Retirada:
             patient_name=d.get("patient_name", ""),
             data_retirada=d.get("data_retirada", ""),
             data_proxima_retirada=d.get("data_proxima_retirada", ""),
-            substituida=d.get("substituida", 0),
+            substituida=_safe_int(d.get("substituida", 0)),
             matricula=d.get("matricula", "") or "",
             profissional=d.get("profissional", "") or "",
             crm=d.get("crm", "") or "",
@@ -232,5 +321,6 @@ class Retirada:
             created_at=d.get("created_at", "") or "",
             updated_at=d.get("updated_at", "") or "",
             tipo=d.get("tipo", "") or "",
+            olostech_ok=_safe_int(d.get("olostech_ok", 0)),
             itens=items or [],
         )

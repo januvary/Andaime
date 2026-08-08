@@ -72,7 +72,34 @@ if [ ! -f "$SISTEMAS/dist.zip" ] || [ ! -f "$SISTEMAS/VERSION" ]; then
     exit 1
 fi
 
-echo "[3/5] Creating release assets..."
+# ============================================
+# Guard: every expected hash must be present in VERSION.
+# A missing/absent hash makes the launcher/Python treat the release as an
+# update forever (hash-compare, missing = update needed). Catch it here so
+# a malformed VERSION is never published.
+# ============================================
+echo "[3/5] Validating VERSION manifest..."
+MISSING_HASH=0
+for check_key in runtime andaime ${APP_ORDER[@]}; do
+    if ! grep -q "^${check_key}:" "$SISTEMAS/VERSION"; then
+        echo -e "  ${RED}✗${NC} VERSION is missing key: ${check_key}"
+        MISSING_HASH=1
+    fi
+done
+if grep -E ": *[[:space:]]*(unknown)?[[:space:]]*$" "$SISTEMAS/VERSION"; then
+    echo -e "  ${RED}✗${NC} VERSION contains a blank/unknown hash."
+    MISSING_HASH=1
+else
+    echo -e "  ${GREEN}✓${NC} VERSION hashes present and non-empty"
+fi
+if [ "$MISSING_HASH" -eq 1 ]; then
+    echo -e "${RED}[ERROR]${NC} Refusing to release a malformed VERSION."
+    exit 1
+fi
+ok "VERSION manifest OK"
+echo ""
+
+echo "[4/5] Creating release assets..."
 
 # Rename dist.zip → {TAG}-payload.zip (updater matches "payload" in name)
 PAYLOAD_ASSET="/tmp/${TAG}-payload.zip"
@@ -101,7 +128,7 @@ zip -r "$PORTABLE_ASSET" \
     "SISTEMAS/RAC/" "SISTEMAS/Negativas/" "SISTEMAS/Emissor/" "SISTEMAS/BAP/" \
     "SISTEMAS/VERSION" "SISTEMAS/shortcuts.bat" -q
 
-echo "[4/5] Creating GitHub release on $REPO..."
+echo "[5/5] Creating GitHub release on $REPO..."
 gh release create "$TAG" \
     "$PORTABLE_ASSET" \
     "$PAYLOAD_ASSET" \

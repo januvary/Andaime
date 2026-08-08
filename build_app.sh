@@ -44,34 +44,18 @@ done
 # --- Determine apps to build ---
 declare -A BUILD_FLAGS
 if [ -z "$APP_TARGET" ] || [ -z "${APPS[$APP_TARGET]+x}" ]; then
-    # Interactive menu
     echo "SISTEMAS — Standalone Builder"
     echo ""
     echo "  0) All apps"
-    i=1
-    APP_KEYS=()
-    for key in bap emissor negativas rac; do
-        DISPLAY=$(app_field "${APPS[$key]}" 5)
-        echo "  $i) $DISPLAY"
-        APP_KEYS+=("$key")
-        ((i++))
-    done
-    echo ""
-    read -rp "Select [0-$((i-1))]: " choice
+    APP_TARGET="$(select_app "$APP_TARGET")"
 
-    if [[ "$choice" == "0" ]]; then
+    if [[ "$APP_TARGET" == "all" ]]; then
         echo ""
-        for key in "${APP_KEYS[@]}"; do
+        for key in "${APP_ORDER[@]}"; do
             bash "$0" "$key" $([ $SKIP_DEPS -eq 1 ] && echo --skip-deps) $([ $NO_PRUNE -eq 1 ] && echo --no-prune)
         done
         exit 0
     fi
-
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice >= i )); then
-        echo "Invalid selection."
-        exit 1
-    fi
-    APP_TARGET="${APP_KEYS[$((choice-1))]}"
 fi
 
 BUILD_FLAGS["$APP_TARGET"]=1
@@ -112,27 +96,20 @@ sync_app "$APP_MODULE" || exit 1
 prepare_wine_python "$SKIP_DEPS"
 
 # ============================================
-# Compute runtime hash
+# Compute hashes (deps freshly installed above, so compute once)
 # ============================================
-echo -e "\n${YELLOW}Computing runtime hash...${NC}"
-RUNTIME_HASH=$(compute_runtime_hash)
-ok "Runtime hash: $RUNTIME_HASH"
-
-# ============================================
-# 5. Read app version + compute hashes
-# ============================================
-STEP_NUM="5"
+echo -e "\n${YELLOW}Computing hashes...${NC}"
 DSTAMP=$(datestamp_version)
 ok "Datestamp: $DSTAMP"
+
+RUNTIME_HASH=$(compute_runtime_hash)
+ok "Runtime hash: $RUNTIME_HASH"
 
 APP_HASH=$(compute_app_hash "$APP_MODULE")
 ok "App hash: $APP_HASH"
 
 ANDAIME_HASH=$(compute_andaime_hash)
 ok "Andaime hash: $ANDAIME_HASH"
-
-RUNTIME_HASH=$(compute_runtime_hash)
-ok "Runtime hash: $RUNTIME_HASH"
 
 # ============================================
 # Clean + create stage

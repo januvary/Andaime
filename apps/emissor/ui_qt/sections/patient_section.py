@@ -14,7 +14,7 @@ e habilita edição do Nome, PATIENT_UPDATED atualiza campos específicos.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -480,7 +480,7 @@ class PatientSection(QtSection):
 
     # ========== Getters ==========
 
-    def get_patient_data(self) -> dict[str, str]:
+    def get_patient_data(self) -> dict[str, str | int | None]:
         """
         Extrai os valores atuais como dicionário.
 
@@ -488,7 +488,7 @@ class PatientSection(QtSection):
             Dicionário com campos não-vazios (processos como
             processo_n, processo_2_n, ...)
         """
-        data: dict[str, str] = {}
+        data: dict[str, str | int | None] = {}
 
         for key, edit in (
             ("nome", self._nome_edit),
@@ -606,7 +606,6 @@ class PatientSection(QtSection):
         return text.strip() if any(c.isalnum() for c in text) else ""
 
     @staticmethod
-    @staticmethod
     def _field_to_int(patient_data: Any, key: str) -> int | None:
         """Extrai campo inteiro opcional de patient_data."""
         raw = get_field_str(patient_data, key)
@@ -623,7 +622,7 @@ class PatientSection(QtSection):
         fn = getattr(patient_data, "processo_count", None)
         if callable(fn):
             try:
-                return int(fn())
+                return int(cast(int, fn()))
             except Exception:
                 pass
         return 1 if get_field_str(patient_data, "processo_n") else 0

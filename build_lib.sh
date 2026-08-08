@@ -19,12 +19,61 @@ APPS[emissor]="emissor|januvary/Emissor|$HOME/Projects/Emissor|$ANDAIME_REPO/lau
 APPS[rac]="rac|januvary/RAC|$HOME/Projects/RAC - Registros Alto Custo|$ANDAIME_REPO/launchers/icons/rac.ico|RAC"
 APPS[negativas]="negativas|januvary/negativas|$HOME/Projects/SISTEMA DE NEGATIVAS|$ANDAIME_REPO/launchers/icons/negativas.ico|Negativas"
 
+# --- Canonical app order (single source of truth for menus + build loops).
+# Keep in the order you want menus/VERSION emitted — NOT hash order. ---
+APP_ORDER=(bap emissor negativas rac)
+
 # --- Helpers ---
 app_field() { echo "$1" | cut -d'|' -f"$2"; }
 app_name() { echo "$1" | cut -d'|' -f1; }
 app_src() { echo "$1" | cut -d'|' -f3; }
 app_icon() { echo "$1" | cut -d'|' -f4; }
 app_repo() { echo "$ANDAIME_REPO/apps/$(app_name "$1")"; }
+
+# --- Print selected app keys in canonical order. Accepts the selected app
+# names as positional arguments (or a space-separated string). Unknown
+# names are ignored. ---
+selected_apps() {
+    local universe=" $* "
+    for key in "${APP_ORDER[@]}"; do
+        case "$universe" in
+            *" $key "*) echo "$key" ;;
+        esac
+    done
+}
+
+# --- Interactive single-app picker (shared by build/release scripts).
+# Echoes ONLY the chosen app key (or "all") to stdout, so it may be used in
+# a command substitution. Menu + prompts go to stderr.
+# If $1 is already a valid app key, returns it without prompting. ---
+select_app() {
+    local chosen="${1:-}"
+
+    if [ -n "$chosen" ] && [ -n "${APPS[$chosen]+x}" ]; then
+        echo "$chosen"
+        return
+    fi
+
+    local i=1
+    local -a keys=()
+    for key in "${APP_ORDER[@]}"; do
+        echo "  $i) $(app_field "${APPS[$key]}" 5)" >&2
+        keys+=("$key")
+        ((i++))
+    done
+    echo "" >&2
+    read -rp "Select [0-$((i-1))]: " choice >&2
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 0 || choice > i - 1 )); then
+        echo "Invalid selection." >&2
+        exit 1
+    fi
+    if [[ "$choice" == "0" ]]; then
+        echo "all"
+    else
+        echo "${keys[$((choice-1))]}"
+    fi
+}
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -458,18 +507,33 @@ XML
 
     x86_64-w64-mingw32-windres "$rc_dir/app.rc" "$rc_dir/app_res.o" 2>/dev/null
 
-    local gcc_cmd="x86_64-w64-mingw32-gcc -O2 -s -o \"$output\" \"$ANDAIME_REPO/launcher.c\" \"$ANDAIME_REPO/miniz.c\" \"$ANDAIME_REPO/miniz_zip.c\" \"$ANDAIME_REPO/miniz_tdef.c\" \"$ANDAIME_REPO/miniz_tinfl.c\" \"$rc_dir/app_res.o\" -mwindows -static -lcomctl32 -lshlwapi -lwininet"
+    local -a gcc_args=(
+        x86_64-w64-mingw32-gcc
+        -O2 -s
+        -o "$output"
+        "$ANDAIME_REPO/launcher.c"
+        "$ANDAIME_REPO/miniz.c"
+        "$ANDAIME_REPO/miniz_zip.c"
+        "$ANDAIME_REPO/miniz_tdef.c"
+        "$ANDAIME_REPO/miniz_tinfl.c"
+        "$rc_dir/app_res.o"
+        -mwindows -static
+        -lcomctl32 -lshlwapi -lwininet
+    )
 
     local module=$(app_field "$app_info" 1)
     local display=$(app_field "$app_info" 5)
 
-    if [[ "$mode" == "standalone" ]]; then
-        gcc_cmd="$gcc_cmd -DAPP_REPO=\\\"januvary/andaime\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\""
-    elif [[ "$mode" == "portable" ]]; then
-        gcc_cmd="$gcc_cmd -DAPP_REPO=\\\"januvary/andaime\\\" -DAPP_MODULE=\\\"$module\\\" -DAPP_DISPLAY=\\\"$display\\\" -DPORTABLE_MODE=1"
+    local defines=("-DAPP_REPO=\"januvary/andaime\""
+                   "-DAPP_MODULE=\"$module\""
+                   "-DAPP_DISPLAY=\"$display\"")
+    if [[ "$mode" == "portable" ]]; then
+        defines+=(-DPORTABLE_MODE=1)
     fi
 
-    eval "$gcc_cmd"
+    gcc_args+=("${defines[@]}")
+
+    "${gcc_args[@]}"
 
     rm -rf "$rc_dir"
 

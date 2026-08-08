@@ -123,6 +123,7 @@ class EmissorDatabase(BaseDatabase):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 substituida INTEGER NOT NULL DEFAULT 0,
+                olostech_ok INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(patient_id, data_retirada),
                 FOREIGN KEY (patient_id) REFERENCES pacientes(id) ON DELETE RESTRICT
             )
@@ -172,6 +173,12 @@ class EmissorDatabase(BaseDatabase):
                 "ALTER TABLE retiradas ADD COLUMN substituida INTEGER NOT NULL DEFAULT 0"
             )
 
+        # Garantir coluna olostech_ok em bancos existentes
+        if "olostech_ok" not in retirada_cols:
+            cursor.execute(
+                "ALTER TABLE retiradas ADD COLUMN olostech_ok INTEGER NOT NULL DEFAULT 0"
+            )
+
         # Garantir coluna ignorar_suficiencia em bancos existentes
         cursor.execute("PRAGMA table_info(retirada_items)")
         item_cols = {row[1] for row in cursor.fetchall()}
@@ -180,14 +187,21 @@ class EmissorDatabase(BaseDatabase):
                 "ALTER TABLE retirada_items ADD COLUMN ignorar_suficiencia INTEGER NOT NULL DEFAULT 0"
             )
 
+        # Garantir coluna bloquear_balanco em bancos existentes
+        cursor.execute("PRAGMA table_info(pacientes)")
+        pacientes_cur_cols = {row[1] for row in cursor.fetchall()}
+        if "bloquear_balanco" not in pacientes_cur_cols:
+            cursor.execute("ALTER TABLE pacientes ADD COLUMN bloquear_balanco TEXT")
+
         self._commit()
 
         if self.db_path != ":memory:":
             DatabaseMigrator.sync_definitive_catalog(cursor, self.conn, self.db_path)
             DatabaseMigrator.flatten_patient_data(cursor, self.conn, self.db_path)
             DatabaseMigrator.mark_superseded_retiradas(cursor, self.conn, self.db_path)
-            DatabaseMigrator.normalize_ultima_receita(cursor, self.conn, self.db_path)
             DatabaseMigrator.normalize_profissionais(cursor, self.conn, self.db_path)
+            DatabaseMigrator.add_olostech_ok_flag(cursor, self.conn, self.db_path)
+            DatabaseMigrator.normalize_receitas(cursor, self.conn, self.db_path)
 
     # ========================================================================
     # HELPERS
@@ -295,9 +309,11 @@ class EmissorDatabase(BaseDatabase):
         set_clauses: list[str] = []
         values: list[Any] = []
         for key, v in filtered.items():
-            if key == "ultima_receita" and isinstance(v, str) and v.strip():
+            if key.startswith("receita_") and key.endswith("_data") and v.strip():
                 parsed = parse_date(v.strip())
                 values.append(parsed.strftime("%Y-%m-%d") if parsed else "")
+            elif key == "bloquear_balanco":
+                values.append("1" if v else "0")
             elif isinstance(v, str) and not _is_enum_field(key):
                 values.append(v.strip().upper())
             else:
@@ -388,7 +404,6 @@ class EmissorDatabase(BaseDatabase):
                         return False
 
                     cur.execute("DELETE FROM pacientes WHERE id = ?", (patient_id,))
-                    self._commit()
                 finally:
                     cur.execute("PRAGMA foreign_keys = ON")
 
@@ -418,9 +433,7 @@ class EmissorDatabase(BaseDatabase):
     @db_op("read")
     def get_all_profissionais(self) -> List[Dict[str, Any]]:
         """Retorna todos os profissionais da tabela mestre (para autocomplete)."""
-        return self._fetch_all(
-            "SELECT id, nome, crm FROM profissionais ORDER BY nome"
-        )
+        return self._fetch_all("SELECT id, nome, crm FROM profissionais ORDER BY nome")
 
     @db_op("read")
     def get_profissional(self, profissional_id: int) -> Optional[Dict[str, Any]]:
@@ -442,9 +455,7 @@ class EmissorDatabase(BaseDatabase):
         crm = (crm or "").strip().upper()
 
         with self._cursor() as cur:
-            cur.execute(
-                "SELECT id, crm FROM profissionais WHERE nome = ?", (nome,)
-            )
+            cur.execute("SELECT id, crm FROM profissionais WHERE nome = ?", (nome,))
             row = cur.fetchone()
             if row is None:
                 cur.execute(
@@ -563,6 +574,10 @@ class EmissorDatabase(BaseDatabase):
                             data_proxima_retirada,
                         ),
                     )
+                    if cur.lastrowid is None:
+                        raise sqlite3.OperationalError(
+                            "Falha ao obter ID da retirada inserida"
+                        )
                     retirada_id = cur.lastrowid
                     ErrorHandler.log(
                         f"Nova retirada: ID {retirada_id}",
@@ -640,6 +655,28 @@ class EmissorDatabase(BaseDatabase):
                     ") AND lower(trim(descricao)) = ?",
                     (patient_id, data_retirada, norm_desc),
                 )
+
+    @db_op("write")
+    def mark_olostech_ok(self, retirada_id: int) -> bool:
+        """Marca retirada como registrada no Olostech."""
+        with self._cursor() as cur:
+            cur.execute(
+                "UPDATE retiradas SET olostech_ok = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (retirada_id,),
+            )
+            self._commit()
+        return True
+
+    @db_op("write")
+    def unmark_olostech_ok(self, retirada_id: int) -> bool:
+        """Desmarca retirada como registrada no Olostech."""
+        with self._cursor() as cur:
+            cur.execute(
+                "UPDATE retiradas SET olostech_ok = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (retirada_id,),
+            )
+            self._commit()
+        return True
 
     @db_op("read")
     def get_retirada_by_date(

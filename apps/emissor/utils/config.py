@@ -2,11 +2,53 @@
 # -*- coding: utf-8 -*-
 """Configuration Management — AppConfig (específico do Emissor)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from andaime.paths import get_root_directory
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+
+
+@dataclass
+class OlostechConfig:
+    """Configuração de integração com a plataforma Olostech."""
+
+    username: str = ""
+    password: str = ""
+    lst_acesso: str = ""
+    unit: str = ""
+    environment: str = ""
+    role: str = ""
+    aceite_chave: str = ""
+    mapping_file: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "username": self.username,
+            "password": self.password,
+            "lst_acesso": self.lst_acesso,
+            "unit": self.unit,
+            "environment": self.environment,
+            "role": self.role,
+            "aceite_chave": self.aceite_chave,
+            "mapping_file": self.mapping_file,
+        }
+
+    @staticmethod
+    def from_dict(data: dict[str, Any] | None) -> "OlostechConfig":
+        if not data:
+            return OlostechConfig()
+        return OlostechConfig(
+            username=data.get("username", ""),
+            password=data.get("password", ""),
+            lst_acesso=data.get("lst_acesso", ""),
+            unit=data.get("unit", ""),
+            environment=data.get("environment", ""),
+            role=data.get("role", ""),
+            aceite_chave=data.get("aceite_chave", ""),
+            mapping_file=data.get("mapping_file", ""),
+        )
 
 
 @dataclass
@@ -20,10 +62,13 @@ class AppConfig:
     distribution_window_days: int = 3
     scan_dpi: int = 200
     scan_color_mode: str = "grayscale"
+    olostech: OlostechConfig = field(default_factory=OlostechConfig)
 
     _VALID_COLOR_MODES: tuple[str, ...] = ("grayscale", "color", "bw")
 
     def __post_init__(self) -> None:
+        if isinstance(self.olostech, dict):
+            self.olostech = OlostechConfig.from_dict(self.olostech)
         self.validate()
 
     def validate(self) -> None:
@@ -85,6 +130,7 @@ class AppConfig:
             "distribution_window_days": self.distribution_window_days,
             "scan_dpi": self.scan_dpi,
             "scan_color_mode": self.scan_color_mode,
+            "olostech": self.olostech.to_dict(),
         }
 
     @staticmethod
@@ -97,6 +143,7 @@ class AppConfig:
             distribution_window_days=3,
             scan_dpi=200,
             scan_color_mode="grayscale",
+            olostech=OlostechConfig(),
         )
 
     @staticmethod

@@ -45,7 +45,7 @@ class _DrawingFlowable(Flowable):
         self.width = drawing.width
         self.height = drawing.height
 
-    def wrap(self, _aW: float, _aH: float) -> tuple[float, float]:
+    def wrap(self, aW: float, aH: float) -> tuple[float, float]:
         """Retorna dimensões do Flowable (interface Flowable)."""
         return (self.width, self.height)
 

@@ -156,3 +156,21 @@ class RetiradaService:
         )
 
         return SaveRetiradaResult(retirada_id=retirada_id)
+
+    def mark_olostech_ok(self, retirada_id: int) -> None:
+        """Marca retirada como registrada no Olostech."""
+        self._db.mark_olostech_ok(retirada_id)
+        ErrorHandler.log(
+            f"Retirada {retirada_id} marcada como registrada no Olostech",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )
+
+    def unmark_olostech_ok(self, retirada_id: int) -> None:
+        """Desmarca retirada como registrada no Olostech."""
+        self._db.unmark_olostech_ok(retirada_id)
+        ErrorHandler.log(
+            f"Retirada {retirada_id} desmarcada como registrada no Olostech",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )

@@ -339,8 +339,7 @@ class QtApp(QMainWindow):
             "datas": {
                 "hoje": dates["hoje"],
                 "proxima_vez": dates["proxima_vez"],
-                "validade_receita": dates["validade_receita"],
-                "ultima_receita": options_data.get("ultima_receita", ""),
+                "receitas": options_data.get("receitas", []),
             },
         }
 
@@ -351,6 +350,8 @@ class QtApp(QMainWindow):
 
         # Pré-calcular datas na thread da UI (notifica observers Qt).
         data_retirada_str = data["datas"]["hoje"]
+        if self._workflow_service is None:
+            return None
         self._workflow_service.ensure_dates_computed(data_retirada_str)
         proxima_vez = self.state_manager.get_calculated_dates().get("proxima_vez")
 
@@ -380,6 +381,7 @@ class QtApp(QMainWindow):
                 "Serviço de workflow não inicializado", color="status_error"
             )
             return
+        workflow = self._workflow_service
 
         # Validação rápida na thread da UI (campos obrigatórios).
         request = self._build_retirada_request()
@@ -397,8 +399,8 @@ class QtApp(QMainWindow):
         pdf_gen = self.pdf_generator
 
         def _work(req: RetiradaRequest) -> PreparedRetirada:
-            prepared = self._workflow_service.prepare(req, pdf_gen)
-            self._workflow_service.commit(prepared)
+            prepared = workflow.prepare(req, pdf_gen)
+            workflow.commit(prepared)
             return prepared
 
         self._db_runner.run(
@@ -427,6 +429,7 @@ class QtApp(QMainWindow):
         )
         self.dates_section.check_existing_retirada()
         self.dates_section.refresh_ultima_retirada()
+        self.actions_section._check_olostech_state()
         self.items_section.clear_reset_toggles()
 
         if getattr(self, "_pending_auto_print", False):
@@ -456,7 +459,9 @@ class QtApp(QMainWindow):
                 "PDF gerado, mas falha ao salvar no banco", color="status_error"
             )
         else:
-            ErrorHandler.handle_error(exc, context=ErrorContext.PDF_GENERATION)
+            ErrorHandler.handle_error(
+                Exception(str(exc)), context=ErrorContext.PDF_GENERATION
+            )
             self.search_section.set_status(
                 f"Erro inesperado: {exc}", color="status_error"
             )
@@ -518,7 +523,7 @@ class QtApp(QMainWindow):
         items_data = self.items_section.get_items_data()
 
         if not self.state_manager.has_selected_patient():
-            nome = patient_data.get("nome", "")
+            nome = str(patient_data.get("nome", "") or "")
             if not nome:
                 ErrorHandler.log(
                     "Nome do paciente é obrigatório para criar novo paciente",
@@ -812,7 +817,7 @@ class QtApp(QMainWindow):
             self.search_section.set_status(str(exc), color="status_error")
             ErrorHandler.handle_error(Exception(str(exc)), context=ErrorContext.FILE_IO)
         else:
-            ErrorHandler.handle_error(exc, context=ErrorContext.FILE_IO)
+            ErrorHandler.handle_error(Exception(str(exc)), context=ErrorContext.FILE_IO)
             self.search_section.set_status(status_msg, color="status_error")
 
     def _on_acquire_error(self, exc: BaseException) -> None:
@@ -886,6 +891,40 @@ class QtApp(QMainWindow):
             self.close()
         except Exception as e:
             ErrorHandler.handle_error(e, context=ErrorContext.UI)
+
+    # ========== Olostech ==========
+
+    def handle_olostech_registration(self) -> None:
+        """Inicia fluxo de registro Olostech para a retirada atual."""
+        from PySide6.QtWidgets import QMessageBox
+
+        from emissor.ui_qt.dialogs.olostech_dialog import show_olostech_dialog
+
+        patient = self.state_manager.get_selected_patient()
+        if patient is None:
+            return
+
+        retirada = self.actions_section._current_retirada
+        if retirada is None:
+            QMessageBox.warning(
+                self,
+                "Sem retirada",
+                "Não há retirada registrada para esta data.",
+            )
+            return
+
+        olostech_cfg = self.config_manager.get("olostech", {})
+        result = show_olostech_dialog(self, retirada, patient, olostech_cfg)
+
+        if result is None:
+            return  # cancelado
+
+        success, msg = result
+        if success:
+            self.retirada_service.mark_olostech_ok(retirada.id)
+            self.actions_section.set_olostech_registered(True)
+        else:
+            self.actions_section.enable_olostech_button()
 
     # ========== Ciclo de vida ==========
 

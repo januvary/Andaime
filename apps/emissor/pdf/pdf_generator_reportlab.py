@@ -13,6 +13,7 @@ from svglib.svglib import svg2rlg
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from emissor.pdf.pdf_config import PDFConfig, PDFDataContext
 from emissor.pdf.pdf_styles import PDFStyleManager, _DrawingFlowable
+from emissor.utils.date_utils import DateCalculator
 from emissor.utils.net_io import atomic_write_path
 
 # ============================================================================
@@ -33,7 +34,11 @@ class TableBuilderBase:
 
     def _apply_style(self, table: Table, extra: list) -> None:
         """Aplica grade padrão + comandos de estilo do builder."""
-        table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 1, self.config.COLOR_BORDER), *extra]))
+        table.setStyle(
+            TableStyle(
+                [("GRID", (0, 0), (-1, -1), 1, self.config.COLOR_BORDER), *extra]
+            )
+        )
 
     def _full_width_table(self, data: list, extra: list) -> Table:
         """Cria tabela de coluna única ocupando a largura total."""
@@ -323,7 +328,7 @@ class PatientInfoTableBuilder(TableBuilderBase):
         )
 
         # Construir comandos de estilo
-        style_commands = [
+        style_commands: list[tuple[Any, ...]] = [
             # Linha de título
             ("BACKGROUND", (0, 0), (-1, 0), self.config.COLOR_HEADER_BG),
             ("SPAN", (0, 0), (-1, 0)),
@@ -505,39 +510,42 @@ class ItemsTableBuilder(TableBuilderBase):
 
 
 class PrescriptionTableBuilder(TableBuilderBase):
-    """Builder para a tabela de datas de prescrição."""
+    """Builder para as datas das prescrições (não tipo C).
+
+    Uma linha por receita: "TRAZER NOVA PRESCRIÇÃO APÓS: {vencimento}" |
+    "ÚLTIMA PRESCRIÇÃO: {data}". Receitas tipo_c (30 dias) são omitidas.
+    Retorna None se não houver nenhuma receita elegível.
+    """
 
     def build(self, datas: Dict) -> List[Any] | None:
-        """Cria tabela com datas de prescrição. Retorna None se vazio."""
-        ultima_receita = datas.get("ultima_receita", "-")
-        validade_receita = datas.get("validade_receita", "-")
+        """Cria as tabelas de prescrição. Retorna None se vazio."""
+        receitas = [r for r in datas.get("receitas", []) if (r.get("tipo") or "")]
+        non_c = [r for r in receitas if (r.get("tipo") or "").lower() != "tipo_c"]
 
-        # Retornar None se ambos estão vazios
-        if ultima_receita in ("-", "", " ") and validade_receita in ("-", "", " "):
+        if not non_c:
             return None
 
-        # Usar valor se preenchido, senão "-"
-        display_ultima = ultima_receita if ultima_receita not in ("-", "", " ") else "-"
-        display_validade = (
-            validade_receita if validade_receita not in ("-", "", " ") else "-"
-        )
-
-        data = [
-            [
-                Paragraph(
-                    f"<b>TRAZER NOVA PRESCRIÇÃO APÓS: {display_validade}</b>",
-                    self.styles.create_bold_centered_style(),
-                ),
-                Paragraph(
-                    f"<b>ÚLTIMA PRESCRIÇÃO: {display_ultima}</b>",
-                    self.styles.create_bold_centered_style(),
-                ),
+        tables: List[Any] = []
+        for r in non_c:
+            ultima = (r.get("data") or "").strip() or "-"
+            tipo = (r.get("tipo") or "").strip().lower()
+            resultado = DateCalculator.calculate_validade_receita(ultima, tipo)
+            validade = resultado.get("validade_receita_formatted") or "-"
+            data = [
+                [
+                    Paragraph(
+                        f"<b>TRAZER NOVA PRESCRIÇÃO APÓS: {validade}</b>",
+                        self.styles.create_bold_centered_style(),
+                    ),
+                    Paragraph(
+                        f"<b>ÚLTIMA PRESCRIÇÃO: {ultima}</b>",
+                        self.styles.create_bold_centered_style(),
+                    ),
+                ]
             ]
-        ]
+            tables.append(self._two_col_table(data, align="CENTER"))
 
-        table = self._two_col_table(data, align="CENTER")
-
-        return [table]
+        return tables
 
 
 class ProfessionalInfoTableBuilder(TableBuilderBase):

@@ -1,7 +1,7 @@
 """Gerenciamento de estado centralizado da aplicação."""
 
 import copy
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from pathlib import Path
 from threading import RLock
 
@@ -22,8 +22,8 @@ _PATIENT_WRITABLE_FIELDS = frozenset(
         "telefone",
         "tipo",
         "periodicidade",
-        "ultima_receita",
-        "tipo_receita",
+        "receitas",
+        "bloquear_balanco",
         "observacoes",
         "atendido_por",
         "itens",
@@ -52,8 +52,8 @@ class StateManager:
 
         # Options state (para cálculo de datas)
         self._periodicidade: str = ""
-        self._ultima_receita: str = ""
-        self._tipo_receita: str = ""
+        self._receitas: List[Dict[str, str]] = []
+        self._bloquear_balanco: bool = False
 
         # Observadores
         self._observers: List[StateObserver] = []
@@ -323,36 +323,52 @@ class StateManager:
             StateEvent(event_type=StateEventType.DATE_RECALCULATION_NEEDED, data={})
         )
 
-    def get_ultima_receita(self) -> str:
-        """Retorna a última receita atual."""
+    def get_receitas(self) -> list[dict[str, str]]:
+        """Retorna a lista ordenada de receitas (data + tipo)."""
         with self._lock:
-            return self._ultima_receita
+            return [dict(r) for r in self._receitas]
 
-    def set_ultima_receita(self, value: str) -> None:
-        """Define última receita e notifica observadores."""
+    def set_receitas(self, receitas: List[Dict[str, str]]) -> None:
+        """Define a lista de receitas e notifica observadores.
+
+        Receitas são compactas (sem buracos); cada item tem "data" e "tipo".
+        """
+        normalized = []
+        for r in receitas:
+            data = (r.get("data") or "").strip()
+            tipo = (r.get("tipo") or "").strip().lower()
+            if data or tipo:
+                normalized.append({"data": data, "tipo": tipo})
+
         # Thread-safe state update
         with self._lock:
-            self._ultima_receita = value
+            self._receitas = normalized
 
         # Single notification call - error handling centralized
         self._notify_observers(
-            StateEvent(event_type=StateEventType.DATE_RECALCULATION_NEEDED, data={})
+            StateEvent(
+                event_type=StateEventType.DATE_RECALCULATION_NEEDED,
+                data={"calculation_mode": "proxima_vez_only"},
+            )
         )
 
-    def get_tipo_receita(self) -> str:
-        """Retorna o tipo de receita atual."""
+    def get_bloquear_balanco(self) -> bool:
+        """Retorna se o bloqueio de balanço está ativo."""
         with self._lock:
-            return self._tipo_receita
+            return self._bloquear_balanco
 
-    def set_tipo_receita(self, value: str) -> None:
-        """Define tipo de receita e notifica observadores."""
+    def set_bloquear_balanco(self, value: bool) -> None:
+        """Define bloqueio de balanço e notifica observadores."""
         # Thread-safe state update
         with self._lock:
-            self._tipo_receita = value
+            self._bloquear_balanco = bool(value)
 
         # Single notification call - error handling centralized
         self._notify_observers(
-            StateEvent(event_type=StateEventType.DATE_RECALCULATION_NEEDED, data={})
+            StateEvent(
+                event_type=StateEventType.DATE_RECALCULATION_NEEDED,
+                data={"calculation_mode": "proxima_vez_only"},
+            )
         )
 
     def update_date_field(
@@ -361,9 +377,9 @@ class StateManager:
         """Atualiza um campo de data (normaliza None para "") e notifica.
 
         Args:
-            field_name: 'periodicidade', 'ultima_receita' ou 'tipo_receita'
+            field_name: 'periodicidade'
             value: Valor (None vira "")
-            calculation_mode: 'full', 'proxima_vez_only' ou 'validade_only'
+            calculation_mode: 'full' ou 'proxima_vez_only'
         """
         self.update_date_fields(
             _calculation_mode=calculation_mode, **{field_name: value}
@@ -373,7 +389,7 @@ class StateManager:
         """Solicita recálculo de datas sem alterar campos.
 
         Args:
-            calculation_mode: 'full', 'proxima_vez_only' ou 'validade_only'
+            calculation_mode: 'full' ou 'proxima_vez_only'
         """
         self._notify_observers(
             StateEvent(
@@ -388,15 +404,15 @@ class StateManager:
         """Atualiza múltiplos campos de data com única notificação.
 
         Args:
-            _calculation_mode: 'full', 'proxima_vez_only' ou 'validade_only'
-            **fields: pares para periodicidade, ultima_receita, tipo_receita
+            _calculation_mode: 'full' ou 'proxima_vez_only'
+            **fields: pares para periodicidade
         """
-        valid_fields = {"periodicidade", "ultima_receita", "tipo_receita"}
+        valid_fields = {"periodicidade"}
         invalid = [f for f in fields.keys() if f not in valid_fields]
         if invalid:
             raise ValueError(
                 f"Unknown date fields: {invalid}. "
-                f"Must be one of: periodicidade, ultima_receita, tipo_receita"
+                f"Must be one of: periodicidade"
             )
 
         # Log batch update operation
@@ -414,10 +430,6 @@ class StateManager:
                 )
                 if field_name == "periodicidade":
                     self._periodicidade = normalized_value
-                elif field_name == "ultima_receita":
-                    self._ultima_receita = normalized_value
-                elif field_name == "tipo_receita":
-                    self._tipo_receita = normalized_value
 
         # Log notification emission
         ErrorHandler.log(
@@ -441,24 +453,24 @@ class StateManager:
         self,
         data_retirada_str: str,
         periodicidade_str: str,
-        ultima_receita_str: str,
-        tipo_receita: str,
         calculation_mode: str = "full",
         enable_distribution: bool = False,
         distribution_window_days: int = 3,
         retirada_count_fn: Any = None,
+        bloquear_balanco: bool = False,
     ) -> Dict[str, Any]:
-        """Calcula datas (próxima vez e validade) e armazena no estado.
+        """Calcula a próxima retirada e armazena no estado.
 
         Args:
-            calculation_mode: 'full', 'proxima_vez_only' ou 'validade_only'
+            calculation_mode: 'full' ou 'proxima_vez_only'
             enable_distribution: habilita distribuição inteligente
             distribution_window_days: janela em dias
             retirada_count_fn: callable para contar retiradas por data
+            bloquear_balanco: evita últimos 5 dias úteis do mês
         """
         from emissor.utils.date_utils import DateCalculator
 
-        if not periodicidade_str and not ultima_receita_str:
+        if not periodicidade_str:
             self.set_calculated_dates({})
             return {}
 
@@ -471,14 +483,9 @@ class StateManager:
                 enable_distribution=enable_distribution,
                 distribution_window_days=distribution_window_days,
                 retirada_count_fn=retirada_count_fn,
+                bloquear_balanco=bloquear_balanco,
             )
             result.update(proxima_result)
-
-        if calculation_mode in ("full", "validade_only"):
-            validade_result = DateCalculator.calculate_validade_receita(
-                ultima_receita_str, tipo_receita
-            )
-            result.update(validade_result)
 
         self.set_calculated_dates(result)
         return result
@@ -514,7 +521,12 @@ class StateManager:
         with self._lock:
             if not self._selected_patient:
                 return None
-            return cast(int, self._selected_patient.id)
+            raw_id = self._selected_patient.id
+            if isinstance(raw_id, int):
+                return raw_id
+            if isinstance(raw_id, str) and raw_id.isdigit():
+                return int(raw_id)
+            return None
 
     def get_patient_name(self) -> Optional[str]:
         """Retorna o nome do paciente selecionado ou None."""

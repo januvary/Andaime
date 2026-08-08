@@ -3,7 +3,7 @@
 """Cálculo de dias úteis e formatação de datas (feriados BR)."""
 
 from datetime import timedelta, date
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, Iterable, List
 
 from andaime.dates import DateCalculator as _BaseDateCalculator, parse_date, format_date
 
@@ -13,6 +13,57 @@ from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 # Cache de dias úteis por (ano, mês): get_business_days_of_month é puro e
 # reconstruído várias vezes por adjust_for_balanco / find_optimal_next_date.
 _business_days_cache: Dict[tuple[int, int], List[date]] = {}
+
+# Fonte única da verdade sobre os tipos de receita. Usada pelo cálculo de
+# validade (date_utils), pelo texto do aviso no PDF (pdf_config) e pelos
+# rótulos da UI (options_section / patient_fields_config).
+TIPO_RECEITA_INFO: Dict[str, Dict[str, Any]] = {
+    "tipo_a": {
+        "dias": 180,
+        "texto_validade": "a cada 6 meses",
+        "label": "180d",
+    },
+    "tipo_b": {
+        "dias": 90,
+        "texto_validade": "a cada 3 meses",
+        "label": "90d",
+    },
+    "tipo_c": {
+        "dias": 30,
+        "texto_validade": "mensalmente - MEDICAMENTO SUJEITO A CONTROLE ESPECIAL",
+        "label": "30d",
+    },
+}
+
+
+def get_tipo_receita_info(tipo_receita: str) -> Dict[str, Any]:
+    """Retorna info central do tipo de receita (dict vazio se desconhecido)."""
+    return TIPO_RECEITA_INFO.get(tipo_receita, {})
+
+
+def get_receitas_aviso(
+    receitas: Iterable[Dict[str, Any]], default: str = "periodicamente"
+) -> str:
+    """Texto do aviso de validade no PDF: 'strictest wins'.
+
+    Entre os tipos presentes nas receitas, usa o mais restritivo
+    (tipo_c > tipo_b > tipo_a). Sem receitas válidas, retorna ``default``.
+    """
+    presente = {
+        r.get("tipo", "").strip().lower()
+        for r in receitas
+        if (r.get("tipo") or "").strip()
+    }
+    if not presente:
+        return default
+    indice_max = max(
+        (i for i, tipo in enumerate(TIPO_RECEITA_INFO) if tipo in presente),
+        default=-1,
+    )
+    if indice_max < 0:
+        return default
+    tipo_max = list(TIPO_RECEITA_INFO)[indice_max]
+    return TIPO_RECEITA_INFO[tipo_max].get("texto_validade", default)
 
 
 class DateCalculator(_BaseDateCalculator):
@@ -163,16 +214,14 @@ class DateCalculator(_BaseDateCalculator):
             "validade_receita_countdown": "",
         }
 
-        validade_map = {"tipo_a": 180, "tipo_b": 90, "tipo_c": 30}
-
         if not ultima_receita_str or not tipo_receita:
             return result
 
         try:
             ultima_receita = parse_date(ultima_receita_str)
+            validade_dias = get_tipo_receita_info(tipo_receita).get("dias")
 
-            if ultima_receita and tipo_receita in validade_map:
-                validade_dias = validade_map[tipo_receita]
+            if ultima_receita and validade_dias is not None:
                 validade_date = DateCalculator.calculate_next_date(
                     ultima_receita, validade_dias
                 )

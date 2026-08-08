@@ -60,8 +60,6 @@ class DatesSection(QtSection):
         self._proxima_label: QLabel | None = None
         self._proxima_countdown: QLabel | None = None
         self._proxima_distribution: QLabel | None = None
-        self._validade_label: QLabel | None = None
-        self._validade_countdown: QLabel | None = None
         self._ultima_retirada_label: QLabel | None = None
         self._proxima_marcada_label: QLabel | None = None
 
@@ -87,12 +85,12 @@ class DatesSection(QtSection):
         box4, lay4 = self._date_box("date-box-4")
         self._ultima_retirada_label = QLabel("—")
         self._ultima_retirada_label.setStyleSheet(f"font-size: {PX_LARGE + 1}px;")
-        self._ultima_retirada_label.setAlignment(Qt.AlignCenter)
+        self._ultima_retirada_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._proxima_marcada_label = QLabel("")
         self._proxima_marcada_label.setProperty("class", "dim")
-        self._proxima_marcada_label.setAlignment(Qt.AlignCenter)
+        self._proxima_marcada_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         titulo4 = self._title_label("Última Retirada:")
-        titulo4.setAlignment(Qt.AlignCenter)
+        titulo4.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay4.addWidget(titulo4)
         lay4.addWidget(self._ultima_retirada_label)
         lay4.addWidget(self._proxima_marcada_label)
@@ -131,17 +129,6 @@ class DatesSection(QtSection):
         info2.addWidget(self._proxima_distribution)
         lay2.addLayout(info2)
         content.addWidget(box2)
-
-        # === Validade da receita (calculada) ===
-        box3, lay3 = self._date_box("date-box-3")
-        self._validade_label = QLabel("—")
-        self._validade_label.setStyleSheet(f"font-size: {PX_LARGE + 1}px;")
-        self._validade_countdown = QLabel("")
-        self._validade_countdown.setProperty("class", "dim")
-        lay3.addWidget(self._title_label("Validade da receita:"))
-        lay3.addWidget(self._validade_label)
-        lay3.addWidget(self._validade_countdown)
-        content.addWidget(box3)
 
     @staticmethod
     def _date_box(class_name: str) -> tuple[QFrame, QVBoxLayout]:
@@ -199,8 +186,6 @@ class DatesSection(QtSection):
         result = self.app.state_manager.calculate_dates(
             data_retirada_str=data_retirada_str,
             periodicidade_str=self.app.state_manager.get_periodicidade(),
-            ultima_receita_str=self.app.state_manager.get_ultima_receita(),
-            tipo_receita=self.app.state_manager.get_tipo_receita(),
             calculation_mode=calculation_mode,
             enable_distribution=self.app.config_manager.get(
                 "distribute_retiradas", True
@@ -209,14 +194,13 @@ class DatesSection(QtSection):
                 "distribution_window_days", 3
             ),
             retirada_count_fn=self.app.db.count_retiradas_by_proxima_date,
+            bloquear_balanco=self.app.state_manager.get_bloquear_balanco(),
         )
 
         if not result:
             self._set_label(self._proxima_label, "—")
             self._set_label(self._proxima_countdown, "")
             self._set_label(self._proxima_distribution, "")
-            self._set_label(self._validade_label, "—")
-            self._set_label(self._validade_countdown, "")
             return
 
         if "proxima_vez_formatted" in result:
@@ -232,16 +216,6 @@ class DatesSection(QtSection):
                 self._set_label(self._proxima_distribution, texto)
             else:
                 self._set_label(self._proxima_distribution, "")
-
-        if "validade_receita_formatted" in result:
-            self._set_label(
-                self._validade_label,
-                result.get("validade_receita_formatted") or "—",
-            )
-            self._set_label(
-                self._validade_countdown,
-                result.get("validade_receita_countdown", ""),
-            )
 
     def check_existing_retirada(self) -> None:
         """Verifica se já existe retirada para o paciente + data atual."""
@@ -368,7 +342,7 @@ class DatesSection(QtSection):
         Retorna os valores dos campos de data.
 
         Returns:
-            Dicionário com hoje/proxima_vez/validade_receita
+            Dicionário com hoje/proxima_vez
         """
         hoje = (
             self._hoje_edit.date().toString("dd/MM/yyyy")
@@ -378,9 +352,6 @@ class DatesSection(QtSection):
         return {
             "hoje": hoje,
             "proxima_vez": self._proxima_label.text() if self._proxima_label else "",
-            "validade_receita": (
-                self._validade_label.text() if self._validade_label else ""
-            ),
         }
 
     # ========== StateObserver ==========
@@ -392,8 +363,6 @@ class DatesSection(QtSection):
                 patient_data = event.data.get("patient", {})
                 self.app.state_manager.update_date_fields(
                     periodicidade=get_field_str(patient_data, "periodicidade"),
-                    ultima_receita=get_field_str(patient_data, "ultima_receita"),
-                    tipo_receita=get_field_str(patient_data, "tipo_receita"),
                 )
                 self.update_today_date()
                 self.check_existing_retirada()
@@ -403,22 +372,14 @@ class DatesSection(QtSection):
                 self._set_label(self._proxima_label, "—")
                 self._set_label(self._proxima_countdown, "")
                 self._set_label(self._proxima_distribution, "")
-                self._set_label(self._validade_label, "—")
-                self._set_label(self._validade_countdown, "")
                 self._set_label(self._retirada_registered_label, "")
                 self._set_label(self._ultima_retirada_label, "—")
                 self._set_label(self._proxima_marcada_label, "")
             elif event.event_type == StateEventType.PATIENT_UPDATED:
                 updates = event.data.get("updates", {})
-                if (
-                    "periodicidade" in updates
-                    or "ultima_receita" in updates
-                    or "tipo_receita" in updates
-                ):
+                if "periodicidade" in updates:
                     self.app.state_manager.update_date_fields(
                         periodicidade=updates.get("periodicidade", ""),
-                        ultima_receita=updates.get("ultima_receita", ""),
-                        tipo_receita=updates.get("tipo_receita", ""),
                     )
                 self.refresh_ultima_retirada()
             elif event.event_type == StateEventType.DATE_RECALCULATION_NEEDED:
