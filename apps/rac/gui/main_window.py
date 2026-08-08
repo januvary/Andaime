@@ -339,14 +339,42 @@ class MainWindow(QMainWindow):
         event.ignore()
 
     def dropEvent(self, event):
-        page = self._current_page()
-        if not isinstance(page, StartPage):
-            event.ignore()
-            return
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if path.lower().endswith(self._XLSX_SUFFIXES):
-                page.open_import_dialog(path)
+                self._open_import_dialog(path)
                 event.acceptProposedAction()
                 return
         event.ignore()
+
+    def _open_import_dialog(self, path: str) -> None:
+        from rac.gui.widgets.import_dialog import ImportPlanilhaDialog
+        from rac.importers.excel_importer import ExcelImporter
+
+        if self.db is None:
+            self.show_status("Banco de dados não inicializado", "warning")
+            return
+
+        db = self.db
+
+        try:
+            importer = ExcelImporter(path)
+        except Exception as e:
+            from andaime.error_handler import ErrorHandler, ErrorContext
+
+            ErrorHandler.handle_error(
+                e, context=ErrorContext.EXPORT, show_dialog=False
+            )
+            self.show_status(f"Erro ao abrir planilha: {e}", "negative")
+            return
+
+        existing = {p.name for p in db.get_all_pacientes()}
+
+        def _do_import(names: list[str]):
+            new, dup = db.import_pacientes(names)
+            self.show_status(
+                f"{new} paciente(s) importado(s) · {dup} já existiam", "positive"
+            )
+
+        dlg = ImportPlanilhaDialog(self, importer, existing, _do_import)
+        dlg.exec()
