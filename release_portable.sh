@@ -12,13 +12,9 @@
 
 set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_PORTABLE="$SCRIPT_DIR/build_portable.sh"
+source "$SCRIPT_DIR/build_lib.sh"
+
 DIST_DIR="$SCRIPT_DIR/dist"
 SISTEMAS="$DIST_DIR/SISTEMAS"
 REPO="januvary/andaime"
@@ -38,7 +34,7 @@ echo -e "${YELLOW}SISTEMAS - Portable Release ${TAG}${NC}"
 echo -e "${YELLOW}============================================${NC}"
 echo ""
 
-echo "[1/4] Checking for uncommitted changes..."
+echo "[1/5] Checking for uncommitted changes..."
 if ! git diff --quiet || ! git diff --cached --quiet; then
     echo -e "${YELLOW}[WARN]${NC} Uncommitted changes detected:"
     git status --short
@@ -59,9 +55,10 @@ fi
 echo -e "  ${GREEN}Clean working tree.${NC}"
 echo ""
 
-echo "[2/4] Building portable SISTEMAS distribution (all apps)..."
+echo "[2/5] Building portable SISTEMAS distribution (all apps)..."
+BUILD_PORTABLE="$SCRIPT_DIR/build_portable.sh"
 if [ ! -f "$BUILD_PORTABLE" ]; then
-    echo -e "${RED}[ERROR]${NC} build_portable.sh not found at $BUILD_PORTABLE"
+    err "build_portable.sh not found at $BUILD_PORTABLE"
     exit 1
 fi
 bash "$BUILD_PORTABLE" --app all
