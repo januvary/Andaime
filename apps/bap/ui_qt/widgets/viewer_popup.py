@@ -71,7 +71,10 @@ def _resolve_item_page(
 
     from andaime.pdf import render_page
 
-    yield render_page(raw, page_no, scale), None
+    try:
+        yield render_page(raw, page_no, scale), None
+    except Exception:
+        yield None, None
 
 
 class _PanLabel(QLabel):
@@ -131,10 +134,11 @@ class ViewerPopup(QDialog):
         if self._grid is None or not self._items:
             return
         current = self._items[self._index].tipo_documento
+        exclusions = getattr(self._grid, "_doc_exclusions", set())
         menu = _build_classify_menu(
             self,
             current=current,
-            exclusions=self._grid._doc_exclusions,
+            exclusions=exclusions,
             on_classify=self._classify_current,
         )
         menu.exec(event.globalPos())
@@ -143,7 +147,9 @@ class ViewerPopup(QDialog):
         if self._grid is None or not self._items:
             return
         item = self._items[self._index]
-        self._grid._classify(item, doc_type)
+        classify_method = getattr(self._grid, "_classify", None)
+        if classify_method is not None:
+            classify_method(item, doc_type)
         self._update_type_label()
 
     def _setup_ui(self):

@@ -24,6 +24,7 @@ from bap.constants import (
     NULL_STATUS,
     allowed_status_transitions,
     status_display_label,
+    Status,
 )
 from bap.ui_qt.widgets.dialogs import scaffold_dialog, make_dialog_button_row
 from bap.ui_qt.widgets.labels import SectionLabel
@@ -146,7 +147,12 @@ def show_status_dialog(
     # Status atual (apenas contexto, não selecionável).
     if active and active != NULL_STATUS:
         current = QTreeWidgetItem()
-        current.setText(0, f"✓ {STATUS_LABELS.get(active, active)}")
+        try:
+            status_key = Status(active)
+            display_label = STATUS_LABELS.get(status_key, active)
+        except ValueError:
+            display_label = active
+        current.setText(0, f"✓ {display_label}")
         current.setData(0, Qt.ItemDataRole.UserRole, None)
         font = current.font(0)
         font.setBold(True)

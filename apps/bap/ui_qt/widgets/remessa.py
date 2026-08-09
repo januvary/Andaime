@@ -170,7 +170,7 @@ def _populate_remessa_tree(
     year_items: dict[int, QTreeWidgetItem] = {}
     month_items: dict[tuple[int, int], QTreeWidgetItem] = {}
 
-    sorted_lotes: list[tuple[object, date]] = []
+    sorted_lotes: list[tuple[object, date, int]] = []
     for lote, cnt in db.get_lotes_with_counts():
         dt = parse_date(lote.date) or date.today()
         sorted_lotes.append((lote, dt, cnt))
@@ -183,7 +183,8 @@ def _populate_remessa_tree(
         is_past_year = year < current_year
 
         child = QTreeWidgetItem()
-        is_active = lote.id == active_id
+        lote_id = getattr(lote, "id", None)
+        is_active = lote_id == active_id
         prefix = "✓ " if is_active else "    "
         count = cnt
         child.setText(0, f"{prefix}{dt.strftime('%d/%m/%Y')} ({count})")

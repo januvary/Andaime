@@ -93,6 +93,9 @@ def ensure_processo_pdf(
     Para processos arquivados, o PDF é a fonte de verdade; a verificação é
     apenas de existência do arquivo, já que os BLOBs foram removidos.
     """
+    if processo.id is None:
+        return None, False
+
     arqs = db.get_arquivos_by_processo(processo.id)
     if not arqs:
         return None, False
@@ -111,8 +114,9 @@ def ensure_processo_pdf(
     dest.parent.mkdir(parents=True, exist_ok=True)
     # Uma única query para todos os BLOBs (em vez de um round-trip por
     # arquivo) — decisivo quando o banco está em share de rede.
-    conteudos_by_id = db.get_arquivos_conteudos([a.id for a in arqs])
-    conteudos = (conteudos_by_id.get(a.id) or b"" for a in arqs)
+    arquivo_ids = [a.id for a in arqs if a.id is not None]
+    conteudos_by_id = db.get_arquivos_conteudos(arquivo_ids)
+    conteudos = (conteudos_by_id.get(a.id) or b"" for a in arqs if a.id is not None)
     merge_conteudos_to_pdf(conteudos, str(dest))
     db.set_processo_pdf_sig(processo.id, sig)
     return str(dest), True
@@ -185,6 +189,8 @@ def build_remessa_group(
     skipped_ids: list[int] = []
 
     for processo in processos:
+        if processo.id is None:
+            continue
         pdf_path, has_docs = ensure_processo_pdf(db, root, processo)
         tipo_label = TIPO_LABELS.get(processo.tipo, processo.tipo or "")
         attach_name = (
@@ -204,10 +210,12 @@ def build_remessa_group(
         )
         items.append(item)
         if has_docs and pdf_path:
-            attachments.append((pdf_path, attach_name))
-            included_ids.append(processo.id)
+            attachments.append((pdf_path, attach_name or ""))
+            if processo.id is not None:
+                included_ids.append(processo.id)
         else:
-            skipped_ids.append(processo.id)
+            if processo.id is not None:
+                skipped_ids.append(processo.id)
 
     # Somente processos com documentos entram no corpo do e-mail.
     body_items = [it for it in items if it.has_docs]
@@ -238,7 +246,9 @@ def build_remessa_groups(
     Retorna uma lista com 0, 1 ou 2 grupos (renovação e/ou primeira
     solicitação), na ordem: renovação, primeira.
     """
-    root = resolve_arquivos_root(config)
+    root = resolve_arquivos_root(config.to_dict())
+    if lote.id is None:
+        return []
     completos = db.get_processos_by_lote_and_status(lote.id, Status.COMPLETO)
 
     renovacoes = [p for p in completos if p.solicitacao == "renovacao"]
@@ -275,6 +285,8 @@ def missing_drs_emails(
     antes de montar os grupos, evitando reconstruir os PDFs combinados só para
     descobrir quais e-mails faltam.
     """
+    if lote.id is None:
+        return []
     completos = db.get_processos_by_lote_and_status(lote.id, Status.COMPLETO)
     faltando: list[tuple[str, str]] = []
     for grupo, key in _DRS_EMAIL_KEYS.items():

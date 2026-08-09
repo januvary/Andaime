@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import re
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Any
 
 import openpyxl
@@ -48,8 +48,8 @@ def _norm(value: Any) -> str:
 
 
 def extract_xlsx_to_temp(
-    xlsx_path: str = None,
-    temp_db_path: str = None,
+    xlsx_path: str | None = None,
+    temp_db_path: str | None = None,
 ) -> dict[str, int]:
     """Lê a planilha e popula o banco temporário.
 
@@ -86,9 +86,8 @@ def extract_xlsx_to_temp(
 
     wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
 
-    for ws in wb.worksheets:
-        remessa_id: int | None = None
-        current_section = "primeira"
+    remessa_id: int | None = None
+    current_section = "primeira"
 
     for ws in wb.worksheets:
         for row in ws.iter_rows(values_only=True):
@@ -144,7 +143,7 @@ def extract_xlsx_to_temp(
     return counts
 
 
-def _unique_patients(temp_db_path: str = None) -> dict[str, str]:
+def _unique_patients(temp_db_path: str | None = None) -> dict[str, str]:
     """Retorna {nome_normalizado: telefone} sem duplicatas."""
     if temp_db_path is None:
         temp_db_path = _default_temp_db_path()
@@ -172,7 +171,7 @@ def _unique_patients(temp_db_path: str = None) -> dict[str, str]:
 
 def transfer_patients(
     db: SS54Database,
-    temp_db_path: str = None,
+    temp_db_path: str | None = None,
 ) -> int:
     """Insere pacientes únicos do banco temporário no banco principal.
 
@@ -192,7 +191,7 @@ def transfer_patients(
 
 def transfer_remessas(
     db: SS54Database,
-    temp_db_path: str = None,
+    temp_db_path: str | None = None,
 ) -> int:
     """Insere lotes (remessas) do banco temporário no banco principal.
 
@@ -210,7 +209,7 @@ def transfer_remessas(
     rows = conn.execute("SELECT DISTINCT data FROM remessas").fetchall()
     conn.close()
 
-    existing = {l.date for l in db.get_all_lotes()}
+    existing = {lote.date for lote in db.get_all_lotes()}
     added = 0
     for (data,) in rows:
         if not data or data in existing:
@@ -396,7 +395,7 @@ def _format_drug_entry(
 
 def transfer_solicitacoes(
     db: SS54Database,
-    temp_db_path: str = None,
+    temp_db_path: str | None = None,
 ) -> int:
     """Cria processos a partir das solicitações da planilha.
 
@@ -427,7 +426,7 @@ def transfer_solicitacoes(
     ).fetchall()
     conn.close()
 
-    lotes_por_data = {l.date: l for l in db.get_all_lotes()}
+    lotes_por_data = {lote.date: lote for lote in db.get_all_lotes()}
 
     resolved: list[tuple] = []
     for r in rows:
@@ -480,7 +479,11 @@ def transfer_solicitacoes(
         )
         for item in items[len(existentes):]:
             _, _, _, _, _, descricao, retorno = item
-            lote_year = parse_date(lote.date).year if lote else datetime.now().year
+            lote_year = datetime.now().year
+            if lote:
+                lote_date = parse_date(lote.date)
+                if lote_date:
+                    lote_year = lote_date.year
             obs_text = normalize_dates(retorno, lote_year)
             dates = _parse_dates_from_text(obs_text, lote_year)
             log_ts = dates[0].isoformat() if dates else ""
@@ -501,13 +504,13 @@ def transfer_solicitacoes(
     return added
 
 
-def _parse_dates_from_text(text: str, default_year: int) -> list[datetime]:
+def _parse_dates_from_text(text: str, default_year: int) -> list[date]:
     """Extrai datas no formato D/M[/YY] ou DD/MM[/YYYY] de um texto livre.
 
     Datas sem ano recebem ``default_year`` (normalmente o ano da remessa).
     Retorna uma lista ordenada de ``datetime.date`` únicos.
     """
-    dates: list[datetime] = []
+    dates: list[date] = []
     seen: set[tuple[int, int, int]] = set()
     for m in re.finditer(r"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b", text):
         try:
@@ -613,8 +616,12 @@ def expire_old_autorizados(
 
     expirados = 0
     for p in processos:
+        if p.id is None:
+            continue
         observacoes = p.observacoes or ""
         lote_date = parse_date(p.lote_date or "")
+        if lote_date is None:
+            continue
         lote_year = lote_date.year
 
         dates = _parse_dates_from_text(observacoes, lote_year)
@@ -631,8 +638,8 @@ def expire_old_autorizados(
 
 
 def run_import(
-    xlsx_path: str = None,
-    temp_db_path: str = None,
+    xlsx_path: str | None = None,
+    temp_db_path: str | None = None,
 ) -> dict[str, Any]:
     """Executa extração + transferência de pacientes. Retorna estatísticas."""
     from bap.utils.bootstrap import ensure_initialized

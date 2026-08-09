@@ -72,7 +72,7 @@ class DocumentPage(QWidget):
         )
 
         self._bottom_bar = BottomBar(
-            parent=self,
+            parent=None,
             left_widget=self.remessa_label,
             status_widget=self.status_selector,
             actions=[
@@ -160,5 +160,5 @@ class DocumentPage(QWidget):
     def reset(self) -> None:
         self.header.reset()
         self.grid.clear()
-        self.status_selector.set_status(None, emit=False)
+        self.status_selector.set_status("", emit=False)
         self.set_status("")

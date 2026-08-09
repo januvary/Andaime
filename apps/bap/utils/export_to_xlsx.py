@@ -16,7 +16,7 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 from andaime.dates import parse_date
-from bap.constants import SOLICITACAO_LABELS, TIPO_UPPER, STATUS_LABELS
+from bap.constants import SOLICITACAO_LABELS, TIPO_UPPER, STATUS_LABELS, Status
 from bap.database.ss54_database import SS54Database
 from bap.utils.text_utils import format_phone
 from bap.utils.date_utils import format_date_display
@@ -39,7 +39,7 @@ SECTION_FILLS = {
     "renovacao": _fill("FFCC33"),
 }
 
-STATUS_COLORS = {
+STATUS_COLORS: dict[str, str] = {
     "em_analise": "F2F2F2",
     "incompleto": "FCE4D6",
     "completo": "C6EFCE",
@@ -73,7 +73,18 @@ def _sheet_name_from_date(date_str: str) -> str:
 
 def _format_tipo(tipo: str | None) -> str:
     """Exibe tipo em maiúsculas, próximo ao estilo da planilha original."""
-    return TIPO_UPPER.get(tipo, (tipo or "").upper())
+    if tipo is None:
+        return ""
+    return TIPO_UPPER.get(tipo, tipo.upper())
+
+
+def _format_status(raw_status: str) -> str:
+    """Exibe status formatado para a planilha."""
+    try:
+        status_key = Status(raw_status)
+        return STATUS_LABELS.get(status_key, raw_status or "")
+    except ValueError:
+        return raw_status or ""
 
 
 def _set_column_widths(ws) -> None:
@@ -106,7 +117,8 @@ def export_processos_to_xlsx(
     wb = openpyxl.Workbook()
     # Remove a aba padrão criada automaticamente; criaremos uma aba por remessa
     default_sheet = wb.active
-    wb.remove(default_sheet)
+    if default_sheet is not None:
+        wb.remove(default_sheet)
 
     for remessa in sorted(grouped.keys()):
         sheet_name = _sheet_name_from_date(remessa)
@@ -121,11 +133,13 @@ def export_processos_to_xlsx(
         title_cell.alignment = CENTER
 
         # Remessa
-        ws["A3"] = "REMESSA:"
-        ws["B3"] = format_date_display(remessa)
-        ws["A3"].font = Font(name="Calibri", bold=True)
-        ws["A3"].alignment = CENTER
-        ws["B3"].alignment = CENTER
+        remessa_cell = ws["A3"]
+        remessa_cell.value = "REMESSA:"
+        data_cell = ws["B3"]
+        data_cell.value = format_date_display(remessa)
+        remessa_cell.font = Font(name="Calibri", bold=True)
+        remessa_cell.alignment = CENTER
+        data_cell.alignment = CENTER
 
         current_row = 5
         for solicitacao in ["primeira", "renovacao"]:
@@ -167,7 +181,7 @@ def export_processos_to_xlsx(
                     r["descricao"] or "",
                     r["observacoes"] or "",
                     format_phone(r["paciente_telefone"]) or "",
-                    STATUS_LABELS.get(raw_status, raw_status or ""),
+                    _format_status(raw_status),
                 ]
                 for col_idx, value in enumerate(values, start=1):
                     cell = ws.cell(row=current_row, column=col_idx, value=value)

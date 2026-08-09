@@ -20,16 +20,12 @@ from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QLabel,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QFrame,
     QTableView,
-    QTreeWidget,
-    QTreeWidgetItem,
     QTabWidget,
-    QTextEdit,
     QHeaderView,
     QVBoxLayout,
     QWidget,
@@ -81,9 +77,12 @@ def _status_color(status: str) -> QColor:
     key = (get_theme(), status)
     color = _STATUS_COLOR_CACHE.get(key)
     if color is None:
-        hex_color = colors().get(
-            STATUS_SEMANTIC.get(status, "text_dim"), "#6B7280"
-        )
+        try:
+            status_key = Status(status)
+            fallback = STATUS_SEMANTIC.get(status_key, "text_dim")
+        except ValueError:
+            fallback = "text_dim"
+        hex_color = colors().get(fallback, "#6B7280")
         color = QColor(hex_color)
         _STATUS_COLOR_CACHE[key] = color
     return color
@@ -252,7 +251,7 @@ class RemessasPage(QWidget):
         self._enviar_btn.setEnabled(False)
 
         self._bottom_bar = BottomBar(
-            parent=self,
+            parent=None,
             left_widget=self.remessa_label,
             status_widget=None,
             actions=[("Novo Processo", "flat-fill", self.novo_processo.emit)],
@@ -427,6 +426,8 @@ class RemessasPage(QWidget):
         lote_id = lote.id
 
         def _fetch():
+            if self._db is None:
+                return []
             return self._db.get_processos_by_lote(lote_id)
 
         def _apply(processos) -> None:
@@ -694,7 +695,7 @@ class RemessasPage(QWidget):
         )
 
     def _gerar_pdf(self, processo_id: int) -> None:
-        if self._db is None:
+        if self._db is None or self._config is None:
             return
         processo = self._db.get_processo_by_id(processo_id)
         if processo is None:
@@ -707,6 +708,8 @@ class RemessasPage(QWidget):
             return
         from andaime.qt import relative_path
 
+        if self._config is None:
+            return
         status_path = relative_path(resolve_arquivos_root(self._config.get_all()), pdf_path)
         self.set_status(
             f"PDF gerado: {status_path}", "status_success", path=pdf_path
@@ -735,8 +738,10 @@ class RemessasPage(QWidget):
         dlg.exec()
 
     def _populate_status_log(
-        self, list_widget: QListWidget, processo_id: int
+        self, list_widget: QListWidget | None, processo_id: int
     ) -> None:
+        if list_widget is None or self._db is None:
+            return
         list_widget.clear()
         logs = self._db.get_status_logs(processo_id)
         for log in logs:
@@ -763,7 +768,7 @@ class RemessasPage(QWidget):
         self, item: QListWidgetItem, processo_id: int, dlg: QDialog
     ) -> None:
         log_id = item.data(Qt.ItemDataRole.UserRole)
-        if log_id is None:
+        if log_id is None or self._db is None:
             return
         logs = self._db.get_status_logs(processo_id)
         current = next(
@@ -777,7 +782,7 @@ class RemessasPage(QWidget):
             confirm_label="Salvar",
             multiline=True,
         )
-        if text is not None:
+        if text is not None and self._db is not None:
             self._db.update_status_log(log_id, text)
             self._populate_status_log(
                 dlg.findChild(QListWidget), processo_id
@@ -816,13 +821,22 @@ class RemessasPage(QWidget):
         processo = self._db.get_processo_by_id(processo_id)
         if processo is None:
             return
-        lote = self._select_lote_dialog(processo.lote_id)
-        if lote is None:
+        if processo.lote_id is None:
             return
-        self._db.reassign_processo_lote(processo_id, lote.id)
+        selected = self._select_lote_dialog(processo.lote_id)
+        if selected is None or getattr(selected, "id", None) is None:
+            return
+        selected_id = getattr(selected, "id", None)
+        if selected_id is None:
+            return
+        if self._db is None:
+            return
+        self._db.reassign_processo_lote(processo_id, selected_id)
         self.refresh()
 
     def _select_lote_dialog(self, current_lote_id: object) -> object | None:
+        if self._db is None:
+            return None
         lotes = self._db.get_all_lotes()
         lotes = sorted(
             lotes,
@@ -885,6 +899,6 @@ class RemessasPage(QWidget):
             confirm_label="Selecionar",
             max_height=160,
         )
-        if pid is None:
+        if pid is None or self._db is None:
             return None
         return self._db.get_processo_by_id(pid)

@@ -230,15 +230,15 @@ def _http_error_message(exc: Exception) -> str:
                 body = body.decode("utf-8", "replace")
             if body:
                 try:
-                    data = json.loads(body)
+                    data = json.loads(body) if isinstance(body, str) else {}
                     msg = data.get("error", {}).get("message")
                     if msg:
                         return msg
                 except (ValueError, AttributeError):
                     pass
-            reason = exc._get_reason()
-            if reason:
-                return reason
+                reason = getattr(exc, "_get_reason", lambda: "")()
+                if reason:
+                    return reason
     except Exception:
         pass
     return str(exc)
@@ -265,7 +265,8 @@ def _is_scope_error(exc: Exception) -> bool:
                 "autherror",
                 "required scopes",
             )
-            if exc.status_code == 403 and any(m in body for m in markers):
+            status_code = getattr(exc, "status_code", None)
+            if status_code == 403 and any(m in body for m in markers):
                 return True
     except Exception:
         pass
@@ -298,7 +299,7 @@ def upload_drive_file(
     service = drive_service_from_credentials(creds)
     file_metadata = {"name": name, "mimeType": "application/pdf"}
     if parent_id:
-        file_metadata["parents"] = [parent_id]
+        file_metadata["parents"] = parent_id
     media = MediaFileUpload(path, mimetype="application/pdf", resumable=True)
     try:
         file = (

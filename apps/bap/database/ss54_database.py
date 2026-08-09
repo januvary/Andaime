@@ -324,7 +324,7 @@ class SS54Database(BaseDatabase):
         return [r["descricao"] for r in rows]
 
     @db_op("write")
-    def update_paciente(self, paciente_id: int, nome: str = None, telefone: str = None) -> bool:
+    def update_paciente(self, paciente_id: int, nome: str | None = None, telefone: str | None = None) -> bool:
         updates = {}
         if nome is not None:
             updates["nome"] = to_upper_normalized(nome.strip())
@@ -415,7 +415,7 @@ class SS54Database(BaseDatabase):
         solicitacao: str,
         descricao: str = "",
         observacoes: str = "",
-        status: str | None = _MISSING,
+        status: str | None = None,
         created_at: str | None = None,
         log_created_at: str | None = None,
     ) -> Processo:
@@ -429,7 +429,7 @@ class SS54Database(BaseDatabase):
 
         protocolo = generate_protocolo(lote.date, initials, seq)
 
-        status_val = Status.EM_ANALISE if status is _MISSING else status
+        status_val: str = status if status is not None else Status.EM_ANALISE
         now = created_at or datetime.now().isoformat()
         last_id = self._insert_row(
             "processos",
@@ -553,18 +553,18 @@ class SS54Database(BaseDatabase):
         )
 
     @db_op("write")
-    def update_processo_status(self, processo_id: int, status: str, observacoes: str = None) -> bool:
+    def update_processo_status(self, processo_id: int, status: str, observacoes: str | None = None) -> bool:
         current = self.get_processo_by_id(processo_id)
         if not current:
             return False
 
         # "" (ou None) representa "sem status" -> armazenado como NULL.
-        status = status or None
+        final_status: str | None = status or None
 
-        updates: dict = {"status": status}
-        if status == Status.ENVIADO:
+        updates: dict = {"status": final_status}
+        if final_status == Status.ENVIADO:
             updates["sent_at"] = datetime.now().isoformat()
-        elif status in (Status.AUTORIZADO, Status.NEGADO):
+        elif final_status in (Status.AUTORIZADO, Status.NEGADO):
             updates["result_at"] = datetime.now().isoformat()
 
         self._update_row("processos", processo_id, **updates)
@@ -575,7 +575,7 @@ class SS54Database(BaseDatabase):
         self._execute_write(
             "INSERT INTO status_logs (processo_id, old_status, new_status, observacoes, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
-            (processo_id, current.status or "", status or "", observacoes or "", now),
+            (processo_id, current.status or "", final_status or "", observacoes or "", now),
         )
         return True
 
@@ -628,6 +628,7 @@ class SS54Database(BaseDatabase):
             count = cur.rowcount
             self._commit()
         if count > 0:
+            self._commit()
             self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
             self._execute_write("VACUUM")
         return count
@@ -649,6 +650,8 @@ class SS54Database(BaseDatabase):
         if processo.lote_id == lote_id:
             return processo
         lote = self.get_lote_by_id(lote_id)
+        if processo.paciente_id is None:
+            return None
         paciente = self.get_paciente_by_id(processo.paciente_id)
         if lote is None or paciente is None:
             return None
@@ -679,6 +682,7 @@ class SS54Database(BaseDatabase):
                 )
             deleted = self._delete_row("processos", processo_id)
         if deleted:
+            self._commit()
             self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
             self._execute_write("VACUUM")
         return deleted
@@ -687,11 +691,11 @@ class SS54Database(BaseDatabase):
     def search_processos(
         self,
         query: str = "",
-        status: str = None,
-        tipo: str = None,
-        solicitacao: str = None,
-        lote_id: int = None,
-        active_lote_id: int = None,
+        status: str | None = None,
+        tipo: str | None = None,
+        solicitacao: str | None = None,
+        lote_id: int | None = None,
+        active_lote_id: int | None = None,
         limit: int = 50,
     ) -> list[Processo]:
         conditions = []
@@ -736,7 +740,7 @@ class SS54Database(BaseDatabase):
         order_by += "l.date DESC, pac.nome COLLATE NOCASE LIMIT ?"
 
         rows = self._fetch_processos_joined(
-            where, params + order_params + [limit], order_by
+            where, tuple(params + order_params + [limit]), order_by
         )
         return [Processo.from_row(r) for r in rows]
 
@@ -881,6 +885,7 @@ class SS54Database(BaseDatabase):
             )
             deleted = self._delete_row("arquivos", arquivo_id)
         if deleted:
+            self._commit()
             self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
             self._execute_write("VACUUM")
         return deleted

@@ -19,6 +19,8 @@ from pathlib import Path
 from andaime.dates import DateCalculator, parse_date
 
 from bap.database.ss54_database import SS54Database
+from bap.models import Lote, Processo
+from bap.utils.remessa_email import ensure_processo_pdf, processo_pdf_path
 
 
 def _parse(date_str: str) -> date:
@@ -36,30 +38,35 @@ def next_remessa_date(last: date) -> date:
     return prev if (target - prev) <= (nxt - target) else nxt
 
 
-def _create_lote_moving_incompletos(db: SS54Database, date_iso: str) -> object:
+def _create_lote_moving_incompletos(db: SS54Database, date_iso: str) -> Lote:
     """Cria um lote em ``date_iso`` e move processos incompletos para ele."""
     lote = db.create_lote(date_iso)
-    db.move_incompletos_to_lote(lote.id)
+    if lote.id is not None:
+        db.move_incompletos_to_lote(lote.id)
     return lote
 
 
-def _archive_processo(db: SS54Database, root: Path, processo: object) -> bool:
+def _archive_processo(db: SS54Database, root: Path, processo: Processo | object) -> bool:
     """Arquiva um processo: garante PDF e remove BLOBs.
 
     Idempotente: se já estiver arquivado, retorna ``True`` sem alterar nada.
     Se o PDF não existir, cria a partir dos BLOBs atuais. Preserva os metadados
     na tabela ``arquivos`` (conteúdo fica ``NULL``).
     """
-    if processo.is_archived:
+    if isinstance(processo, Processo) and processo.is_archived:
         return True
 
-    from bap.models import Processo
-    from bap.utils.remessa_email import ensure_processo_pdf, processo_pdf_path
-
+    processo_id = None
     if not isinstance(processo, Processo):
-        processo = db.get_processo_by_id(processo.id)
+        processo_id = getattr(processo, "id", None)
+        if processo_id is None:
+            return False
+        processo = db.get_processo_by_id(processo_id)
         if processo is None:
             return False
+
+    if processo.id is None:
+        return False
 
     pdf_path = processo_pdf_path(root, processo)
     if not pdf_path.exists():
@@ -74,7 +81,7 @@ def _archive_processo(db: SS54Database, root: Path, processo: object) -> bool:
 
 
 def archive_previous_lotes(
-    db: SS54Database, root: Path, new_lote: object
+    db: SS54Database, root: Path, new_lote: Lote
 ) -> dict:
     """Arquiva todos os processos de remessas anteriores a ``new_lote``.
 
@@ -84,6 +91,8 @@ def archive_previous_lotes(
     report = {"processos": 0, "arquivados": 0, "erros": 0, "error_detail": []}
     lotes = db.get_all_lotes()
     for lote in lotes:
+        if lote.id is None:
+            continue
         if lote.date >= new_lote.date:
             continue
         for processo in db.get_processos_by_lote(lote.id):
@@ -97,7 +106,7 @@ def archive_previous_lotes(
     return report
 
 
-def _ensure_lote_at_next_or_today(db: SS54Database, root: Path | None, lotes) -> tuple[int, object | None]:
+def _ensure_lote_at_next_or_today(db: SS54Database, root: Path | None, lotes) -> tuple[int, Lote | None]:
     """Cria a próxima remessa quinzenal (ou âncora em hoje se vazio).
 
     ``lotes`` já vem ordenada DESC por data (``get_all_lotes``). Retorna

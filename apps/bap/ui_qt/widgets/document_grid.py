@@ -165,13 +165,14 @@ class _Tile(QWidget):
         self._update_badge()
 
     def _update_thumb(self) -> None:
-        self._thumb.setPixmap(
-            self._pixmap.scaled(
-                124, 124,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.FastTransformation,
+        if self._pixmap is not None and not self._pixmap.isNull():
+            self._thumb.setPixmap(
+                self._pixmap.scaled(
+                    124, 124,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.FastTransformation,
+                )
             )
-        )
 
     def set_pixmap(self, pixmap: QPixmap) -> None:
         """Aplica uma miniatura renderizada fora da thread da UI."""
@@ -227,7 +228,9 @@ class _Tile(QWidget):
             for btn in self._action_btns:
                 btn.hide()
         else:
-            self.setGraphicsEffect(None)
+            empty_effect = QGraphicsOpacityEffect(self)
+            empty_effect.setEnabled(False)
+            self.setGraphicsEffect(empty_effect)
 
     def _over_button(self, event) -> bool:
         return isinstance(self.childAt(event.pos()), QPushButton)
@@ -269,14 +272,15 @@ class _Tile(QWidget):
         mime = QMimeData()
         mime.setData(self._INTERNAL_MIME, b"1")
         drag.setMimeData(mime)
-        pix = self._pixmap.scaled(
-            90, 90,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        if not pix.isNull():
-            drag.setPixmap(pix)
-            drag.setHotSpot(QPoint(pix.width() // 2, pix.height() // 2))
+        if self._pixmap is not None and not self._pixmap.isNull():
+            pix = self._pixmap.scaled(
+                90, 90,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            if not pix.isNull():
+                drag.setPixmap(pix)
+                drag.setHotSpot(QPoint(pix.width() // 2, pix.height() // 2))
         drag.exec(Qt.DropAction.MoveAction)
         self._grid.end_drag()
 
@@ -301,9 +305,8 @@ class _Tile(QWidget):
             event.ignore()
 
     def _copy(self):
-        pix = self._pixmap
-        if not pix.isNull():
-            QApplication.clipboard().setPixmap(pix)
+        if self._pixmap is not None and not self._pixmap.isNull():
+            QApplication.clipboard().setPixmap(self._pixmap)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -781,7 +784,8 @@ class DocumentGrid(QWidget):
             image = clipboard.image()
             if image.isNull():
                 return
-            import tempfile, os
+            import tempfile
+            import os
             fd, tmp_path = tempfile.mkstemp(suffix=".png")
             os.close(fd)
             try:
@@ -840,6 +844,7 @@ class DocumentGrid(QWidget):
             buf = io.BytesIO()
             out.write(buf)
             item.data = buf.getvalue()
+            item.page = 0
         if not item.arquivo_original and item.path:
             item.arquivo_original = Path(item.path).name
         self._invalidate_thumb(item)

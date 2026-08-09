@@ -60,7 +60,7 @@ STATUS_LABELS = {
 NULL_STATUS = "__null__"
 NULL_STATUS_LABEL = "Nenhum"
 
-STATUS_TRANSITIONS = {
+STATUS_TRANSITIONS: dict[Status, list[Status | str]] = {
     Status.EM_ANALISE: [Status.INCOMPLETO, Status.COMPLETO],
     Status.INCOMPLETO: [Status.COMPLETO],
     Status.COMPLETO: [Status.ENVIADO, Status.INCOMPLETO],
@@ -77,10 +77,14 @@ def status_display_label(key: str | None) -> str:
     """Rótulo de exibição de um status, tratando nulo/sentinel como "Nenhum"."""
     if not key or key == NULL_STATUS:
         return NULL_STATUS_LABEL
-    return STATUS_LABELS.get(key, key)
+    try:
+        status_key = Status(key)
+        return STATUS_LABELS.get(status_key, key)
+    except ValueError:
+        return key
 
 
-def allowed_status_transitions(current: str | None) -> list[str]:
+def allowed_status_transitions(current: str | None) -> list[Status | str]:
     """Retorna as chaves de status para as quais ``current`` pode mudar.
 
     - status nulo/vazio pode ir para qualquer status;
@@ -91,8 +95,9 @@ def allowed_status_transitions(current: str | None) -> list[str]:
     """
     if not current or current == NULL_STATUS:
         return list(STATUS_LABELS.keys())
-    allowed = STATUS_TRANSITIONS.get(current, [])
-    result = [k for k in STATUS_LABELS if k in allowed]
+    current_status = Status(current)
+    allowed = STATUS_TRANSITIONS.get(current_status, [])
+    result: list[Status | str] = [k for k in STATUS_LABELS if k in allowed]
     if NULL_STATUS in allowed:
         result.append(NULL_STATUS)
     if current != Status.ENCERRADO:

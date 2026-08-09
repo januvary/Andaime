@@ -4,12 +4,11 @@ from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QMessageBox,
-    QProgressDialog,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from andaime.qt import ShortcutManager
 
 from bap.database.ss54_database import SS54Database
@@ -26,7 +25,6 @@ from bap.constants import (
     Status,
     status_display_label,
 )
-from bap.utils.config import bap_data_dir
 from bap.utils.date_utils import format_date_display
 from bap.utils.arquivo_storage import resolve_arquivos_root
 
@@ -124,10 +122,12 @@ class MainWindow(QMainWindow):
         )
         # Ctrl+F alterna entre páginas (dispatcher pela página atual).
         self.shortcuts.bind("Ctrl+F", self._toggle_page)
-        self.shortcuts.register_hint(
-            doc_bar.action_button("Retornar"), "Ctrl+F"
-        )
-        self.shortcuts.register_hint(rem_bar.action_button("Novo Processo"), "Ctrl+F")
+        retornar_btn = doc_bar.action_button("Retornar")
+        if retornar_btn is not None:
+            self.shortcuts.register_hint(retornar_btn, "Ctrl+F")
+        novo_btn = rem_bar.action_button("Novo Processo")
+        if novo_btn is not None:
+            self.shortcuts.register_hint(novo_btn, "Ctrl+F")
         # Ctrl+R foca a busca da página atual.
         self.shortcuts.bind("Ctrl+R", self._focus_search)
         self.shortcuts.bind(
@@ -187,7 +187,6 @@ class MainWindow(QMainWindow):
             return
 
         from bap.ui_qt.widgets.config_dialog import QtConfigDialog
-        from bap.utils.arquivo_storage import resolve_arquivos_root
 
         cfg = self.config.get_all()
         default_root = resolve_arquivos_root(None)
@@ -212,7 +211,6 @@ class MainWindow(QMainWindow):
             return
 
         from PySide6.QtWidgets import QFileDialog
-        from bap.utils.arquivo_storage import resolve_arquivos_root
 
         cfg = self.config.get_all() if self.config else None
         default_dir = resolve_arquivos_root(cfg)
@@ -252,6 +250,8 @@ class MainWindow(QMainWindow):
         if self.config:
             self.config.set("theme", theme)
         qt_app = QApplication.instance()
+        if qt_app is None:
+            return
         qt_app.setPalette(qpalette(get_palette(dark_mode)))
         qt_app.setStyleSheet(get_stylesheet())
         self.theme_changed.emit()
@@ -277,11 +277,12 @@ class MainWindow(QMainWindow):
         self._db_runner = DbAsyncRunner(self._db_worker)
 
         def _load():
-            from bap.utils.arquivo_storage import resolve_arquivos_root
             from bap.utils.remessa_service import ensure_remessas
 
+            if self.config is None or self.db is None:
+                return {}, None
             root = resolve_arquivos_root(self.config.get_all())
-            ensure_remessas(self.db, root)
+            ensure_remessas(self.db, root) if self.db else {}
             pacientes = self.db.get_all_pacientes()
             active = self._resolve_active_lote()
             return pacientes, active
@@ -290,9 +291,13 @@ class MainWindow(QMainWindow):
 
     def _on_backend_loaded(self, result) -> None:
         pacientes, active = result
+        if self.db is None:
+            return
         self._init_remessa_with(active)
-        self._header.set_patients(pacientes)
-        self._header.set_descricoes(self.db.get_distinct_descricoes())
+        if not isinstance(pacientes, list):
+            pacientes = []
+        self._header.set_patientes(pacientes)
+        self._header.set_descricoes(self.db.get_distinct_descricoes() if self.db else [])
         self._remessa_page.refresh(force=False)
         self._sender.scan_drs_messages()
         self.set_status("")
@@ -626,12 +631,10 @@ class MainWindow(QMainWindow):
         self, processo_id: int, fresh: Processo, items: list[GridItem]
     ) -> None:
         """Persiste um processo arquivado: metadados no DB, conteúdo no PDF."""
-        from pathlib import Path
 
         import hashlib
 
         from andaime.pdf import merge_pdfs
-        from bap.utils.arquivo_storage import resolve_arquivos_root
         from bap.utils.remessa_email import processo_pdf_path
 
         arqs = self.db.get_arquivos_by_processo(processo_id)

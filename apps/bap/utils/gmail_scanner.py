@@ -160,9 +160,7 @@ def scan_drs_messages(db, service, max_results: int = 100) -> int:
         # de forma isolada por paciente (um e-mail pode conter vários).
         matches: list[tuple[int, int | None]] = []  # (paciente_id, pos)
         for pid, nome_norm in name_map:
-            res = extractOne(
-                nome_norm, [body_norm], scorer=fuzz.partial_ratio, score_cutoff=90
-            )
+            res = extractOne(nome_norm, [body_norm], score_cutoff=90)
             if res is None:
                 continue
             if fuzz.token_set_ratio(nome_norm, res[0]) < 90:

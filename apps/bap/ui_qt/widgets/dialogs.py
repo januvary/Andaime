@@ -110,9 +110,9 @@ def confirm_dialog(
         dlg.setWindowModality(_Qt.WindowModality.ApplicationModal)
     if no_close_button:
         dlg.setWindowFlags(
-            _Qt.Dialog
-            | _Qt.CustomizeWindowHint
-            | _Qt.WindowTitleHint
+            _Qt.WindowType.Dialog
+            | _Qt.WindowType.CustomizeWindowHint
+            | _Qt.WindowType.WindowTitleHint
         )
 
     label = QLabel(message)
@@ -187,13 +187,16 @@ def open_input_dialog(
     cancel.clicked.connect(dlg.reject)
     layout.addLayout(btn_row)
 
-    if not multiline:
+    if not multiline and isinstance(input_field, QLineEdit):
         input_field.returnPressed.connect(dlg.accept)
     confirm.clicked.connect(dlg.accept)
 
     if dlg.exec() != QDialog.DialogCode.Accepted:
         return None
-    text = (
-        input_field.toPlainText() if multiline else input_field.text()
-    ).strip()
+    if multiline and isinstance(input_field, QTextEdit):
+        text = input_field.toPlainText().strip()
+    elif isinstance(input_field, QLineEdit):
+        text = input_field.text().strip()
+    else:
+        text = ""
     return text or None

@@ -69,7 +69,7 @@ class Header(QWidget):
             parent=self,
         )
         self._search.setFixedHeight(34)
-        self._search.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._search.selection_changed.connect(self._on_patient_key_selected)
 
         self._telefone = SearchableComboBox(
@@ -77,7 +77,7 @@ class Header(QWidget):
             placeholder="Telefone",
         )
         self._telefone.setFixedHeight(34)
-        self._telefone.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._telefone.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._telefone.line_edit.textEdited.connect(self._on_telefone_text_edited)
         self._telefone.selection_changed.connect(self._on_telefone_selected)
 
@@ -107,7 +107,7 @@ class Header(QWidget):
             search_fn=static_search_fn({}),
             placeholder="Descrição",
         )
-        self._descricao.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._descricao.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._descricao.setFixedHeight(34)
 
         self._config_btn = QPushButton("\u2699")

@@ -11,8 +11,6 @@ def _apply_pending_update():
 
 
 def _start_update_check(window):
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QDialog, QLabel
 
     from andaime.updater import UpdateCheckWorker, restart_app
     from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel

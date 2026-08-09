@@ -434,6 +434,8 @@ class RemessaSender(QObject):
 
     def _mark_lote_sent_and_finalize(self, lote_id: int) -> None:
         """Marca a remessa como enviada e cria a próxima/arquiva a anterior."""
+        if self._db is None:
+            return
         pendings = self._db.get_pending_sends("pending")
         for ps in pendings:
             if ps["lote_id"] != lote_id:
@@ -447,6 +449,8 @@ class RemessaSender(QObject):
         from bap.utils.arquivo_storage import resolve_arquivos_root
         from bap.utils.remessa_service import ensure_next_open_lote
 
+        if self._config is None:
+            return
         root = resolve_arquivos_root(self._config.get_all())
         ensure_next_open_lote(self._db, root)
 
