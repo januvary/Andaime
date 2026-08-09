@@ -32,6 +32,7 @@ class RegistroListPage(ListPage):
         date_to: str | None = None,
     ):
         db = main_window.db
+        assert db is not None, "Database not initialized"
         self._db = db
         self._date_from = date_from
         self._date_to = date_to
@@ -39,6 +40,7 @@ class RegistroListPage(ListPage):
             tipo=tipo, item_id=item_id, date_from=date_from, date_to=date_to
         )
         pacientes = len({r.paciente_id for r in registros})
+        title_parts = []
 
         if kind == "item":
             assert item_id is not None

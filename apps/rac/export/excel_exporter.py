@@ -223,8 +223,9 @@ class ExcelExporter:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        if ws is not None:
-            ws.title = "Estatísticas"
+        if ws is None:
+            return None
+        ws.title = "Estatísticas"
 
         styles = _make_excel_styles()
 
@@ -311,8 +312,9 @@ class ExcelExporter:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        if ws is not None:
-            ws.title = "Pacientes"
+        if ws is None:
+            return None
+        ws.title = "Pacientes"
 
         styles = _make_excel_styles()
 
@@ -364,8 +366,9 @@ class ExcelExporter:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        if ws is not None:
-            ws.title = "Catálogo"
+        if ws is None:
+            return None
+        ws.title = "Catálogo"
 
         styles = _make_excel_styles()
 
@@ -408,8 +411,9 @@ class ExcelExporter:
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        if ws is not None:
-            ws.title = "Registros"
+        if ws is None:
+            return None
+        ws.title = "Registros"
 
         styles = _make_excel_styles()
         n_cols = len(headers)

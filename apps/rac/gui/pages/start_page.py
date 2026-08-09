@@ -4,6 +4,9 @@
 Start Page — malote header, search, tipo buttons, export
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from contextlib import suppress
 
 from PySide6.QtWidgets import (
@@ -15,6 +18,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from PySide6.QtCore import Qt
+
+if TYPE_CHECKING:
+    from rac.gui.main_window import MainWindow
 
 from andaime.widgets import SearchableComboBox
 from rac.gui.brasao import get_brasao_pixmap, get_rac_pixmap
@@ -57,7 +63,7 @@ class StartPage(BasePage):
     SUBTITLE_SPACING = 8
     BRASAO_SPACING = 8
     
-    def __init__(self, main_window):
+    def __init__(self, main_window: MainWindow):
         super().__init__(main_window)
         self._pre_search_malote = None
         self._sep_line: QFrame | None = None
@@ -157,12 +163,12 @@ class StartPage(BasePage):
         layout.addWidget(self._subtitle_label)
         
         # USAFA name
-        usafa_name = self._mw.config.get("usafa_name") or "Sua unidade de saúde"
+        usafa_name = self._config().get("usafa_name") or "Sua unidade de saúde"
         self._usafa_label = QLabel(usafa_name)
         self._usafa_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._usafa_label.setStyleSheet(f"{style_base} font-size: {self.USAFA_FONT_SIZE};")
         self._usafa_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._usafa_label.mousePressEvent = self._on_usafa_click
+        self._usafa_label.mousePressEvent = lambda event: self._on_usafa_click(event)  # type: ignore[method-assign]
         layout.addWidget(self._usafa_label)
 
     def _build_columns(self, layout: QVBoxLayout):
@@ -241,7 +247,7 @@ class StartPage(BasePage):
 
     def refresh(self):
         if self._pre_search_malote is not None:
-            self._mw.state.set_active_malote(self._pre_search_malote)
+            self._state().set_active_malote(self._pre_search_malote)
             self._pre_search_malote = None
         self._malote_label.refresh()
         self._search_combo.clear()
@@ -249,7 +255,7 @@ class StartPage(BasePage):
     def _search_registros(self, query: str) -> dict[str, str]:
         if not query:
             return {}
-        malote = self._mw.state.get_active_malote()
+        malote = self._state().get_active_malote()
         active_id = malote.id if malote else None
         resultados = self._mw.services.registro.search_by_paciente(query, active_id)
         return {
@@ -266,11 +272,11 @@ class StartPage(BasePage):
             reg_id = int(data)
             reg = self._mw.services.registro.get(reg_id)
             if reg:
-                self._pre_search_malote = self._mw.state.get_active_malote()
+                self._pre_search_malote = self._state().get_active_malote()
                 self._mw.navigate_to("patient", paciente_id=reg.paciente_id, highlight_registro=reg_id)
     
     def _require_malote(self) -> bool:
-        if not self._mw.state.has_active_malote():
+        if not self._state().has_active_malote():
             self._toast("Selecione um malote primeiro!", "warning")
             return False
         return True
@@ -278,7 +284,7 @@ class StartPage(BasePage):
     def _on_tipo_click(self, tipo_key: str):
         if not self._require_malote():
             return
-        malote = self._mw.state.get_active_malote()
+        malote = self._state().get_active_malote()
         if malote and is_malote_past(malote):
             if not confirm_past_malote(
                 self.window(), malote, on_change=self._malote_label.open_dialog
@@ -294,8 +300,10 @@ class StartPage(BasePage):
     def _on_export(self):
         if not self._require_malote():
             return
-        malote = self._mw.state.get_active_malote()
-        exporter = ExcelExporter(self._mw.db)
+        malote = self._state().get_active_malote()
+        if malote is None or malote.id is None:
+            return
+        exporter = ExcelExporter(self._require_db())
         export_with_fallback(
             self,
             lambda: exporter.export_malote(malote.id),
@@ -350,10 +358,10 @@ class StartPage(BasePage):
 
     def _update_brasao(self):
         """Update all logos and subtitle colors on theme change."""
-        if not all([self._brasao_label, self._rac_label, self._subtitle_label, self._usafa_label]):
+        if self._brasao_label is None or self._rac_label is None:
             return
-        
-        theme = self._mw.config.get("theme", "light")
+
+        theme = self._config().get("theme", "light")
         dark_mode = (theme == "dark")
         
         # Update logos
@@ -370,6 +378,8 @@ class StartPage(BasePage):
     
     def _update_subtitle_colors(self):
         """Update subtitle label colors on theme change."""
+        if self._subtitle_label is None or self._usafa_label is None:
+            return
         from rac.gui.styles import colors as _colors
         
         c = _colors()
@@ -384,8 +394,8 @@ class StartPage(BasePage):
         """Handle click on USAFA name to edit it."""
         from main import _show_usafa_dialog
 
-        new_name = _show_usafa_dialog(self._mw.config, parent=self.window())
-        if new_name:
+        new_name = _show_usafa_dialog(self._config(), parent=self.window())
+        if new_name and self._usafa_label is not None:
             self._usafa_label.setText(new_name)
 
     def set_shortcuts_visible(self, show: bool):

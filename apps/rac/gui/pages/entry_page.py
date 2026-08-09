@@ -4,8 +4,11 @@
 Entry Page — record creation and editing
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -18,6 +21,9 @@ from PySide6.QtWidgets import (
     QLineEdit,
 )
 from PySide6.QtCore import Qt, QTimer
+
+if TYPE_CHECKING:
+    from rac.gui.main_window import MainWindow
 
 from andaime.widgets import SearchableComboBox, CycleButton, static_search_fn
 from andaime.error_handler import ErrorContext
@@ -54,7 +60,7 @@ class _RowData:
 class EntryPage(BasePage):
     def __init__(
         self,
-        main_window,
+        main_window: MainWindow,
         tipo: str,
         edit_id: int | None = None,
         return_to: str = "start",
@@ -79,7 +85,7 @@ class EntryPage(BasePage):
         if edit_id:
             self._edit_ctx = self._mw.services.registro.load_for_edit(edit_id)
 
-        self._mw.state.set_current_tipo(tipo)
+        self._state().set_current_tipo(tipo)
         self._build_ui()
 
     @property
@@ -119,7 +125,7 @@ class EntryPage(BasePage):
         if self._edit_registro:
             malote = self._mw.services.malote.get(self._edit_registro.malote_id)
             if malote:
-                self._mw.state.set_active_malote(malote)
+                self._state().set_active_malote(malote)
 
         self._malote_label = MaloteLabel(self._mw)
 
@@ -225,9 +231,9 @@ class EntryPage(BasePage):
         self._shortcut_widgets["toggle_stay"] = stay_label
 
         self._auto_switch = QCheckBox()
-        self._auto_switch.setChecked(self._mw.state.get_stay_on_page())
+        self._auto_switch.setChecked(self._state().get_stay_on_page())
         self._auto_switch.stateChanged.connect(
-            lambda: self._mw.state.set_stay_on_page(self._auto_switch.isChecked())
+            lambda: self._state().set_stay_on_page(self._auto_switch.isChecked())
         )
         h.addWidget(self._auto_switch)
 
@@ -426,7 +432,7 @@ class EntryPage(BasePage):
         pass
 
     def _on_malote_changed(self):
-        malote = self._mw.state.get_active_malote()
+        malote = self._state().get_active_malote()
         if malote and is_malote_past(malote):
             confirm_past_malote(
                 self.window(), malote, on_change=self._malote_label.open_dialog
@@ -475,7 +481,7 @@ class EntryPage(BasePage):
         return items
 
     def _load_items_for_context(self, paciente_id: int):
-        malote = self._mw.state.get_active_malote()
+        malote = self._state().get_active_malote()
         tipo = self._tipo_combo.current_tipo()
 
         ctx = self._mw.services.registro.load_for_context(
@@ -532,7 +538,7 @@ class EntryPage(BasePage):
         tipo = self._tipo_combo.current_tipo()
         waiting_docs = self._docs_check.isChecked()
 
-        malote = self._mw.state.get_active_malote()
+        malote = self._state().get_active_malote()
         if not malote:
             self._toast("Selecione um malote", "warning")
             return
@@ -592,7 +598,7 @@ class EntryPage(BasePage):
 
         delete_registro_with_undo(
             self,
-            self._mw.db,
+            self._require_db(),
             self._edit_id,
             on_refresh=lambda: QTimer.singleShot(800, self._navigate_back),
         )

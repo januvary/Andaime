@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
@@ -10,6 +13,9 @@ from PySide6.QtWidgets import (
     QMenu,
 )
 from PySide6.QtCore import Qt
+
+if TYPE_CHECKING:
+    from rac.gui.main_window import MainWindow
 
 from rac.gui.widgets import (
     TipoButton,
@@ -43,7 +49,7 @@ def _remove_layout_item(item):
 
 
 class PatientPage(BasePage):
-    def __init__(self, main_window, paciente_id: int, highlight_registro: int | None = None, return_to: str = "start"):
+    def __init__(self, main_window: MainWindow, paciente_id: int, highlight_registro: int | None = None, return_to: str = "start"):
         super().__init__(main_window)
         self._paciente_id = paciente_id
         self._highlight_registro = highlight_registro
@@ -268,10 +274,10 @@ class PatientPage(BasePage):
             )
 
     def _delete_registro(self, reg_id: int):
-        delete_registro_with_undo(self, self._mw.db, reg_id, self.refresh)
+        delete_registro_with_undo(self, self._require_db(), reg_id, self.refresh)
 
     def _on_new_registro(self, tipo: str):
-        if not self._mw.state.has_active_malote():
+        if not self._state().has_active_malote():
             self._toast("Selecione um malote primeiro!", "warning")
             return
         self._mw.navigate_to(

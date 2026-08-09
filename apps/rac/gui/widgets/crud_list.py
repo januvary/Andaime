@@ -120,11 +120,11 @@ class CrudList:
         n_cols = 1 + (1 if has_secondary else 0) + (1 if has_tertiary else 0) + (1 if has_quaternary else 0)
         self.list_widget = QTableWidget(0, n_cols)
         headers = ["Nome"]
-        if has_tertiary:
+        if has_tertiary and self._tertiary_header:
             headers.append(self._tertiary_header)
-        if has_quaternary:
+        if has_quaternary and self._quaternary_header:
             headers.append(self._quaternary_header)
-        if has_secondary:
+        if has_secondary and self._secondary_header:
             headers.append(self._secondary_header)
         self.list_widget.setHorizontalHeaderLabels(headers)
         header = self.list_widget.horizontalHeader()

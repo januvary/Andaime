@@ -10,9 +10,9 @@ destrutivos, sistema ``btnrole``, tipos de medicamento) continuam
 definidas localmente neste módulo.
 """
 
-_current_theme: str = "light"
-
 from andaime.qt.theme import LIGHT as _SHARED_LIGHT, DARK as _SHARED_DARK
+
+_current_theme: str = "light"
 
 
 # RAC key -> chave correspondente na paleta compartilhada. Chaves com o mesmo

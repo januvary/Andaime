@@ -10,12 +10,12 @@ from PySide6.QtWidgets import (
     QLabel,
     QDialog,
     QPushButton,
-    QComboBox,
 )
 from typing import Callable, Optional
 
 from rac.gui.widgets.buttons import make_button
 from rac.gui.widgets.labels import HeadingLabel
+from rac.gui.widgets._completer import themed_combo
 from rac.gui.styles import colors
 from rac.gui.widgets.toast import show_toast
 from rac.services.registro_service import RegistroService
@@ -82,7 +82,7 @@ def open_select_dialog(
     dlg, layout = scaffold_dialog(parent, title, spacing=16)
     layout.addSpacing(4)
 
-    input_field = QComboBox()
+    input_field = themed_combo()
     input_field.addItems(options)
     if initial:
         idx = input_field.findText(initial)

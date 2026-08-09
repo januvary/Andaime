@@ -4,6 +4,9 @@
 Preview Page — tabbed table view of malote registros
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
@@ -15,6 +18,9 @@ from PySide6.QtWidgets import (
     QMenu,
 )
 from PySide6.QtCore import Qt
+
+if TYPE_CHECKING:
+    from rac.gui.main_window import MainWindow
 
 from rac.gui.widgets import (
     MaloteLabel,
@@ -35,7 +41,7 @@ from andaime.qt.table import table_batch_populate
 
 
 class PreviewPage(BasePage):
-    def __init__(self, main_window):
+    def __init__(self, main_window: MainWindow):
         super().__init__(main_window)
         self._build_ui()
 
@@ -56,7 +62,7 @@ class PreviewPage(BasePage):
 
     def _build_tabs(self, layout: QVBoxLayout, insert_index: int | None = None):
         self.clear_keyboard_nav()
-        malote = self._mw.state.get_active_malote()
+        malote = self._state().get_active_malote()
         if not malote:
             return
 
@@ -154,11 +160,11 @@ class PreviewPage(BasePage):
             idx = self._tabs.addTab(tab, tab_label)
             self._tab_tipo_keys.append(tipo)
             self._tab_searches[idx] = search
-            self._shortcut_searches.append(("_search_placeholder", search))
+            self._shortcut_searches.append(("Buscar paciente ou medicamento...", search))
 
         self._tabs.currentChanged.connect(self._on_tab_changed)
         saved = self._mw._last_preview_tipo
-        target_idx = self._tab_tipo_keys.index(saved) if saved in self._tab_tipo_keys else 0
+        target_idx = self._tab_tipo_keys.index(saved) if saved and saved in self._tab_tipo_keys else 0
         if target_idx == self._tabs.currentIndex():
             self._on_tab_changed(target_idx)
         else:
@@ -261,7 +267,7 @@ class PreviewPage(BasePage):
                 )
             )
 
-        active = self._mw.state.get_active_malote()
+        active = self._state().get_active_malote()
         malotes = self._mw.services.malote.all()
         other_malotes = [m for m in malotes if not active or m.id != active.id]
         if other_malotes:
@@ -349,7 +355,7 @@ class PreviewPage(BasePage):
 
     def _confirm_delete(self, reg_ids: list[int]):
         if len(reg_ids) == 1:
-            delete_registro_with_undo(self, self._mw.db, reg_ids[0], self.refresh)
+            delete_registro_with_undo(self, self._require_db(), reg_ids[0], self.refresh)
         else:
             if not confirm_delete_dialog(
                 self,

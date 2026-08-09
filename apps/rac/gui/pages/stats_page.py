@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -13,6 +16,9 @@ from PySide6.QtWidgets import (
     QLineEdit,
 )
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from rac.gui.main_window import MainWindow
 
 from PySide6.QtCore import Qt, QTimer
 
@@ -82,7 +88,7 @@ class _TipoCard(QWidget):
 
 
 class StatsPage(BasePage):
-    def __init__(self, main_window):
+    def __init__(self, main_window: MainWindow):
         super().__init__(main_window)
         self._date_from: str | None = None
         self._date_to: str | None = None
@@ -98,12 +104,7 @@ class StatsPage(BasePage):
 
         self._build_medications_table(layout)
         layout.addSpacing(12)
-
-        export_btn = make_button("Exportar Estatisticas", "positive")
-        export_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        export_btn.setFixedHeight(44)
-        export_btn.clicked.connect(self._on_export)
-        layout.addWidget(export_btn)
+        self._add_export_button(layout, self._on_export, label="Exportar Estatísticas")
 
     def _build_header(self, layout: QVBoxLayout):
         back_btn = make_button("Voltar", "flat")
@@ -147,12 +148,13 @@ class StatsPage(BasePage):
         result = _show_date_picker(self, side)
         if result is _CANCELLED:
             return
+        date_str = result if isinstance(result, str) else None
         if side == "from":
-            self._date_from = result
+            self._date_from = date_str
             if self._date_to and self._date_from and self._date_from > self._date_to:
                 self._date_to = self._date_from
         else:
-            self._date_to = result
+            self._date_to = date_str
             if self._date_from and self._date_to and self._date_from > self._date_to:
                 self._date_from = self._date_to
         self._update_date_buttons()
@@ -252,7 +254,7 @@ class StatsPage(BasePage):
         self._shortcut_searches.append(("Buscar medicamento", self._meds_search))
 
     def _load_stats(self):
-        db = self._mw.db
+        db = self._require_db()
 
         tipo_rows = db.get_stats_by_tipo(
             date_from=self._date_from, date_to=self._date_to
@@ -322,7 +324,7 @@ class StatsPage(BasePage):
         )
 
     def _on_export(self):
-        exporter = ExcelExporter(self._mw.db)
+        exporter = ExcelExporter(self._require_db())
         export_with_fallback(
             self,
             lambda: exporter.export_stats(
@@ -338,7 +340,7 @@ class StatsPage(BasePage):
 _RESET_SENTINEL = object()
 
 
-def _show_date_picker(parent_page: StatsPage, side: str):
+def _show_date_picker(parent_page: StatsPage, side: str) -> object:
     mw = parent_page._mw
     parent = parent_page.window()
 
@@ -368,7 +370,7 @@ def _show_date_picker(parent_page: StatsPage, side: str):
         if data is _RESET_SENTINEL:
             selected_date[0] = None
             dlg.accept()
-        elif data is not None:
+        elif isinstance(data, str):
             selected_date[0] = data
             dlg.accept()
         else:

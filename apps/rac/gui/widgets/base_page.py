@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QSizePolicy,
     QLineEdit,
+    QPushButton,
 )
 from PySide6.QtCore import Qt, QItemSelectionModel
 from PySide6.QtGui import QKeyEvent
 from typing import Callable
+
+if TYPE_CHECKING:
+    from rac.gui.main_window import MainWindow
 
 from rac.gui.widgets.toast import ToastMixin
 from rac.gui.widgets.buttons import make_button
@@ -18,12 +25,27 @@ from rac.gui.constants import SHORTCUT_LABELS
 
 
 class BasePage(QWidget, ToastMixin):
-    def __init__(self, main_window=None):
+    def __init__(self, main_window: MainWindow):
         super().__init__()
         self._mw = main_window
         self._shortcut_widgets: dict = {}
         self._shortcut_searches: list[tuple[str, QLineEdit]] = []
+        self._shortcut_exports: list[tuple[QPushButton, str]] = []
         self._keyboard_nav: list[tuple[QWidget, QLineEdit, Callable]] = []
+
+    # Type guards: state/config are only None during MainWindow initialization,
+    # before any page is instantiated.
+    def _state(self):
+        assert self._mw.state is not None, "State not initialized"
+        return self._mw.state
+
+    def _config(self):
+        assert self._mw.config is not None, "Config not initialized"
+        return self._mw.config
+
+    def _require_db(self):
+        assert self._mw.db is not None, "Database not initialized"
+        return self._mw.db
 
     def _scaffold(self, expand_vertical: bool = False) -> QVBoxLayout:
         outer = QVBoxLayout(self)
@@ -115,6 +137,9 @@ class BasePage(QWidget, ToastMixin):
             line_edit.setPlaceholderText(
                 f"{placeholder} (Ctrl+R)" if show else placeholder
             )
+        key = SHORTCUT_LABELS["export"][0]
+        for btn, label in self._shortcut_exports:
+            btn.setText(f"{label} ({key})" if show else label)
 
     def _handle_error(self, e, context=None):
         from andaime.error_handler import ErrorContext, ErrorHandler
@@ -137,23 +162,26 @@ class BasePage(QWidget, ToastMixin):
         layout.addLayout(h)
         return h
 
-    def _add_export_button(self, layout: QVBoxLayout, on_export, label: str = "Exportar Planilha"):
+    def _add_export_button(self, layout: QVBoxLayout, on_export, label: str | None = None):
+        if label is None:
+            label = SHORTCUT_LABELS["export"][1]
         btn = make_button(label, "positive")
         btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         btn.setFixedHeight(44)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(on_export)
+        self._shortcut_exports.append((btn, label))
         layout.addWidget(btn)
         return btn
 
     def _export_active_malote(self):
         from rac.export.excel_exporter import ExcelExporter
 
-        if not self._mw.state.has_active_malote():
+        malote = self._state().get_active_malote()
+        if malote is None or malote.id is None:
             self._toast("Selecione um malote primeiro!", "warning")
             return
-        malote = self._mw.state.get_active_malote()
-        exporter = ExcelExporter(self._mw.db)
+        exporter = ExcelExporter(self._require_db())
         export_with_fallback(
             self,
             lambda: exporter.export_malote(malote.id),

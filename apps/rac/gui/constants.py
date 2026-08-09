@@ -29,7 +29,7 @@ RIGHT_BUTTON_SYMBOLS: dict[str, str] = {
 
 SHORTCUT_LABELS: dict[str, tuple[str, str]] = {
     "save": ("Ctrl+S", "Salvar"),
-    "export": ("Ctrl+E", "Exportar Planilha"),
+    "export": ("Ctrl+E", "Exportar Listas"),
     "back": ("Esc", "Voltar"),
     "preview": ("Ctrl+G", "Visualizar Malote"),
     "medicamentos": ("Ctrl+M", "Medicamentos"),

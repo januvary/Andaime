@@ -4,11 +4,17 @@
 Pacientes Page — manage the patient list
 """
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from rac.gui.widgets import BasePage, CrudList, HeadingLabel, export_with_fallback
 from rac.export.excel_exporter import ExcelExporter
 from rac.models import Paciente
+
+if TYPE_CHECKING:
+    from rac.gui.main_window import MainWindow
 
 
 def _format_last_registro(p: Paciente) -> str:
@@ -22,7 +28,7 @@ def _format_last_registro(p: Paciente) -> str:
 
 
 class PacientesPage(BasePage):
-    def __init__(self, main_window, return_to: str = "start"):
+    def __init__(self, main_window: MainWindow, return_to: str = "start"):
         super().__init__(main_window)
         self._return_to = return_to
         self._build_ui()
@@ -49,8 +55,8 @@ class PacientesPage(BasePage):
             delete_in_use_msg="Não é possível excluir: paciente com registros",
             count_label=self._heading,
             secondary_header="Último registro",
-            secondary_value=_format_last_registro,
-            secondary_sort_key=lambda p: p.last_registro_date or "",
+            secondary_value=lambda p: _format_last_registro(p) if isinstance(p, Paciente) else "",
+            secondary_sort_key=lambda p: p.last_registro_date or "" if hasattr(p, 'last_registro_date') else "",
             on_activate=lambda pid: self._mw.navigate_to("patient", paciente_id=pid, return_to="pacientes"),
             extra_context_items=[
                 ("Ver paciente", self._view_paciente),
@@ -65,7 +71,7 @@ class PacientesPage(BasePage):
         ]
 
     def _on_export(self):
-        exporter = ExcelExporter(self._mw.db)
+        exporter = ExcelExporter(self._require_db())
         export_with_fallback(
             self,
             lambda: exporter.export_pacientes(),

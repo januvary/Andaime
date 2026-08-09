@@ -147,7 +147,7 @@ class RACDatabase(BaseDatabase):
             count = cur.fetchone()[0]
 
             if count == 0:
-                for name, unidade, cids_json in DEFINITIVE_CATALOG:
+                for name, cids_json in DEFINITIVE_CATALOG:
                     parsed_unidade = parse_unidade_from_name(name)
                     cur.execute(
                         "INSERT INTO items_catalog (name, unidade, cids) VALUES (?, ?, ?)",
@@ -746,7 +746,7 @@ class RACDatabase(BaseDatabase):
         date_to: str | None = None,
         extra: str | None = None,
         extra_params: list | None = None,
-    ) -> tuple[str, list]:
+    ) -> tuple[str, tuple]:
         clauses: list[str] = []
         params: list = []
         if extra:
@@ -762,7 +762,7 @@ class RACDatabase(BaseDatabase):
             clauses.append("m.date <= ?")
             params.append(date_to)
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-        return where, params
+        return where, tuple(params)
 
     @db_op("read")
     def get_stats_by_tipo(
@@ -883,7 +883,7 @@ class RACDatabase(BaseDatabase):
             f"JOIN items_catalog ic ON ri.item_id = ic.id "
             f"WHERE ri.registro_id IN ({placeholders}) "
             f"ORDER BY ri.process_group, ic.name COLLATE NOCASE",
-            registro_ids,
+            tuple(registro_ids),
         )
         result: dict[int, list[RegistroItem]] = {}
         for r in rows:

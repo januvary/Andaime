@@ -4,12 +4,18 @@
 Medicamentos Page — manage the medication (item catalog) list
 """
 
+from __future__ import annotations
+
 import json
+from typing import TYPE_CHECKING
 
 from rac.gui.widgets import (
     BasePage, CrudList, HeadingLabel, export_with_fallback, open_input_dialog, open_select_dialog, open_estoque_dialog,
 )
 from rac.export.excel_exporter import ExcelExporter
+
+if TYPE_CHECKING:
+    from rac.gui.main_window import MainWindow
 
 
 def _format_cids(item) -> str:
@@ -32,7 +38,7 @@ def _full_cids(item) -> str:
 
 
 class MedicamentosPage(BasePage):
-    def __init__(self, main_window):
+    def __init__(self, main_window: MainWindow):
         super().__init__(main_window)
         self._build_ui()
 
@@ -58,10 +64,10 @@ class MedicamentosPage(BasePage):
             delete_in_use_msg="Não é possível excluir: medicamento em uso",
             count_label=self._heading,
             tertiary_header="Estoque",
-            tertiary_value=lambda item: str(item.quantidade),
+            tertiary_value=lambda item: str(item.quantidade) if hasattr(item, 'quantidade') else "0",
             tertiary_edit_callback=self._edit_estoque,
             quaternary_header="Unid.",
-            quaternary_value=lambda item: item.unidade,
+            quaternary_value=lambda item: item.unidade if hasattr(item, 'unidade') else "un",
             quaternary_edit_callback=self._edit_unidade,
             secondary_header="CIDs",
             secondary_value=_format_cids,
@@ -108,7 +114,7 @@ class MedicamentosPage(BasePage):
             self._handle_error(e)
 
     def _on_export(self):
-        exporter = ExcelExporter(self._mw.db)
+        exporter = ExcelExporter(self._require_db())
         export_with_fallback(
             self,
             lambda: exporter.export_catalog(),

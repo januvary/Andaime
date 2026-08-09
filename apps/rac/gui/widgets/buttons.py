@@ -3,7 +3,7 @@
 
 from PySide6.QtWidgets import QPushButton, QSizePolicy, QStyle, QStyleOptionButton
 from PySide6.QtCore import Qt, Signal, QRect, QSize
-from PySide6.QtGui import QIcon, QPainter, QFontMetrics
+from PySide6.QtGui import QIcon, QPainter
 from pathlib import Path
 
 from rac.gui.styles import tipo_button_qss, toggle_theme, get_stylesheet, get_theme, faded_tipo_color
@@ -63,7 +63,6 @@ class IconButtonBase(QPushButton):
 
         painter.setPen(option.palette.buttonText().color())
         painter.setFont(self.font())
-        fm = QFontMetrics(self.font())
         icon_size = self.iconSize()
         margin = 18
         spacing = 6

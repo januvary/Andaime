@@ -417,7 +417,8 @@ def _save_pontos(pontos_path: Path, pontos_data: dict):
 
 
 def _show_new_malote_dialog(label: MaloteLabel):
-    from rac.utils.text_utils import parse_date, format_malote_date
+    from andaime.dates import parse_date
+    from rac.utils.text_utils import format_malote_date
     from rac.utils.date_calculator import next_send_date, calculate_arrival_date
     from andaime.error_handler import ErrorContext, ErrorHandler
     from andaime.widgets import DateLineEdit
@@ -472,7 +473,7 @@ def _show_new_malote_dialog(label: MaloteLabel):
 
 
 def _show_date_dialog(label: MaloteLabel, malote, field: str, on_done):
-    from rac.utils.text_utils import parse_date
+    from andaime.dates import parse_date
     from andaime.error_handler import ErrorContext, ErrorHandler
     from andaime.widgets import DateLineEdit
 
