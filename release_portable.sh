@@ -34,7 +34,7 @@ echo -e "${YELLOW}SISTEMAS - Portable Release ${TAG}${NC}"
 echo -e "${YELLOW}============================================${NC}"
 echo ""
 
-echo "[1/5] Checking for uncommitted changes..."
+echo "[1/6] Checking andaime repo for uncommitted changes..."
 if ! git diff --quiet || ! git diff --cached --quiet; then
     echo -e "${YELLOW}[WARN]${NC} Uncommitted changes detected:"
     git status --short
@@ -52,10 +52,39 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
     fi
 fi
 
-echo -e "  ${GREEN}Clean working tree.${NC}"
+echo -e "  ${GREEN}Andaime repo clean.${NC}"
 echo ""
 
-echo "[2/5] Building portable SISTEMAS distribution (all apps)..."
+# ============================================
+# Commit + push app source repos
+# ============================================
+echo "[2/6] Committing + pushing app source repos..."
+for app_key in "${APP_ORDER[@]}"; do
+    app_info="${APPS[$app_key]}"
+    src=$(app_field "$app_info" 3)
+    display=$(app_field "$app_info" 5)
+
+    if [ ! -d "$src" ]; then
+        echo -e "  ${YELLOW}!${NC} $display: source not found ($src), skipping"
+        continue
+    fi
+
+    cd "$src"
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        git add -A
+        git commit -m "Sync before release ${TAG}" >/dev/null
+        echo -e "  ${GREEN}✓${NC} $display: committed uncommitted changes"
+    fi
+
+    git push origin HEAD >/dev/null 2>&1 \
+        && echo -e "  ${GREEN}✓${NC} $display: pushed" \
+        || echo -e "  ${YELLOW}!${NC} $display: push failed (no remote?)"
+done
+echo ""
+
+cd "$SCRIPT_DIR"
+
+echo "[3/6] Building portable SISTEMAS distribution (all apps)..."
 BUILD_PORTABLE="$SCRIPT_DIR/build_portable.sh"
 if [ ! -f "$BUILD_PORTABLE" ]; then
     err "build_portable.sh not found at $BUILD_PORTABLE"
@@ -75,7 +104,7 @@ fi
 # update forever (hash-compare, missing = update needed). Catch it here so
 # a malformed VERSION is never published.
 # ============================================
-echo "[3/5] Validating VERSION manifest..."
+echo "[4/6] Validating VERSION manifest..."
 MISSING_HASH=0
 for check_key in runtime andaime ${APP_ORDER[@]}; do
     if ! grep -q "^${check_key}:" "$SISTEMAS/VERSION"; then
@@ -96,7 +125,7 @@ fi
 ok "VERSION manifest OK"
 echo ""
 
-echo "[4/5] Creating release assets..."
+echo "[5/6] Creating release assets..."
 
 # Rename dist.zip → {TAG}-payload.zip (updater matches "payload" in name)
 PAYLOAD_ASSET="/tmp/${TAG}-payload.zip"
@@ -125,7 +154,7 @@ zip -r "$PORTABLE_ASSET" \
     "SISTEMAS/RAC/" "SISTEMAS/Negativas/" "SISTEMAS/Emissor/" "SISTEMAS/BAP/" \
     "SISTEMAS/VERSION" "SISTEMAS/shortcuts.bat" -q
 
-echo "[5/5] Creating GitHub release on $REPO..."
+echo "[6/6] Creating GitHub release on $REPO..."
 gh release create "$TAG" \
     "$PORTABLE_ASSET" \
     "$PAYLOAD_ASSET" \
@@ -137,9 +166,9 @@ gh release create "$TAG" \
 echo ""
 
 # ============================================
-# Commit + squash + push andaime repo
+# Commit + push andaime repo
 # ============================================
-echo "Committing + squashing andaime repo..."
+echo "Committing + pushing andaime repo..."
 cd "$SCRIPT_DIR"
 
 git add -A
@@ -148,15 +177,9 @@ if ! git diff --cached --quiet; then
 fi
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-SQUASH_BRANCH="__release_sync"
-git branch -D "$SQUASH_BRANCH" 2>/dev/null || true
-git checkout -b "$SQUASH_BRANCH"
-git reset --soft "$(git rev-list --max-parents=0 HEAD)"
-git commit -m "SISTEMAS ${TAG}" >/dev/null
-git push origin "$SQUASH_BRANCH:$CURRENT_BRANCH" --force
-git checkout "$CURRENT_BRANCH"
-git branch -D "$SQUASH_BRANCH" 2>/dev/null || true
-echo -e "  ${GREEN}$CURRENT_BRANCH squashed to ${TAG}${NC}"
+git push origin "$CURRENT_BRANCH" 2>/dev/null \
+    && echo -e "  ${GREEN}Pushed to origin/${CURRENT_BRANCH}${NC}" \
+    || echo -e "  ${YELLOW}!${NC} Push failed (no remote?)"
 
 echo ""
 echo -e "${GREEN}Done!${NC}"

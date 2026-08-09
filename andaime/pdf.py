@@ -144,7 +144,14 @@ def render_page_pil(
     with _PDFIUM_LOCK:
         doc = pdfium.PdfDocument(str(src) if isinstance(src, (str, Path)) else src)
         try:
-            pil = doc[page or 0].render(scale=scale).to_pil()
+            if len(doc) == 0:
+                raise ValueError("PDF has no pages")
+            
+            page_index = page or 0
+            if page_index >= len(doc):
+                page_index = 0
+            
+            pil = doc[page_index].render(scale=scale).to_pil()
         finally:
             doc.close()
 

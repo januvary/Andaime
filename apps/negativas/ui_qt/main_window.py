@@ -10,7 +10,6 @@ from typing import Optional, Dict, List
 
 from PySide6.QtCore import Qt, QTimer, QDate, QBuffer, QIODevice, QUrl
 from PySide6.QtGui import QTextCursor, QImage, QPixmap, QTextDocument, QPainter
-from PySide6.QtSvgWidgets import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -765,6 +764,11 @@ class MainWindow(QMainWindow):
     def _render_svg_pixmap(self, width: int, height: int) -> QPixmap:
         """Renderiza o SVG como QPixmap com a cor do tema."""
         import base64
+
+        try:
+            from PySide6.QtSvg import QSvgRenderer
+        except ImportError:
+            return QPixmap()
 
         svg_data = svg_base64()
         if not svg_data:

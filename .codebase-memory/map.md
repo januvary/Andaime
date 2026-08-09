@@ -2,7 +2,6 @@
 # Skeleton bodies mean: signatures kept, implementations stripped to '...'.
 
 ## andaime/database.py
-_symbols: 41_ 
 ```python
 """
 Base SQLite database class with connection management, retries, and backups.
@@ -54,130 +53,130 @@ _NETWORK_FS_TYPES = frozenset(
 _DRIVE_REMOTE = 4
 
 
-def _decode_mount_point(raw: str) -> str:
+def _decode_mount_point(raw: str) -> str:   [REF:51-53]
     ...
 
 
-def _read_proc_mounts() -> list[tuple[str, str, str]]:
+def _read_proc_mounts() -> list[tuple[str, str, str]]:   [REF:56-72]
     ...
 
 
-def _is_network_path(path: str) -> bool:
+def _is_network_path(path: str) -> bool:   [REF:75-129] → andaime/database.py:56 _read_proc_mounts
     ...
 
 
-def db_op(op_type: str = "read") -> Callable[[Callable[_P, _R]], Callable[_P, _R]]:
+def db_op(op_type: str = "read") -> Callable[[Callable[_P, _R]], Callable[_P, _R]]:   [REF:132-148]
     ...
 
 
-class BaseDatabase(ABC):
-    def __init__(
+class BaseDatabase(ABC):   [REF:151-538]
+    def __init__(   [REF:152-170] → andaime/database.py:203 _resolve_default_db_path → andaime/error_handler.py:139 log → andaime/database.py:240 _initialize
         self, db_path: str | None = None, entity_name: str = "registros"
     ) -> None:
         ...
 
     @abstractmethod
-    def _create_schema(self) -> None:
+    def _create_schema(self) -> None:   [REF:173-174]
         ...
 
-    def _ensure_schema_meta(self) -> None:
+    def _ensure_schema_meta(self) -> None:   [REF:176-182] → andaime/database.py:350 _cursor → andaime/database.py:423 _commit
         ...
 
-    def _ensure_schema_version(self) -> int:
+    def _ensure_schema_version(self) -> int:   [REF:184-192] → andaime/database.py:176 _ensure_schema_meta → andaime/database.py:350 _cursor
         ...
 
-    def _set_schema_version(self, version: int) -> None:
+    def _set_schema_version(self, version: int) -> None:   [REF:194-201] → andaime/database.py:176 _ensure_schema_meta → andaime/database.py:350 _cursor → andaime/database.py:423 _commit
         ...
 
-    def _resolve_default_db_path(self) -> str:
+    def _resolve_default_db_path(self) -> str:   [REF:203-204] → andaime/paths.py:15 resolve_db_path
         ...
 
-    def __enter__(self) -> "BaseDatabase":
+    def __enter__(self) -> "BaseDatabase":   [REF:206-207]
         ...
 
-    def __exit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> Literal[False]:
+    def __exit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> Literal[False]:   [REF:209-211]
         ...
 
-    def __del__(self) -> None:
+    def __del__(self) -> None:   [REF:213-215]
         ...
 
-    def _apply_pragmas(self, cur: sqlite3.Cursor) -> None:
+    def _apply_pragmas(self, cur: sqlite3.Cursor) -> None:   [REF:217-238] → andaime/database.py:75 _is_network_path → andaime/error_handler.py:139 log
         ...
 
-    def _initialize(self) -> None:
+    def _initialize(self) -> None:   [REF:240-281] → andaime/error_handler.py:139 log → andaime/error_handler.py:204 handle_database_error → andaime/database.py:283 _log_initialization_success → andaime/database.py:173 _create_schema → andaime/database.py:217 _apply_pragmas → andaime/database.py:350 _cursor
         ...
 
-    def _log_initialization_success(self) -> None:
+    def _log_initialization_success(self) -> None:   [REF:283-288] → andaime/error_handler.py:139 log
         ...
 
-    def _is_connection_healthy(self) -> bool:
+    def _is_connection_healthy(self) -> bool:   [REF:290-300]
         ...
 
-    def _reconnect_unlocked(self) -> None:
+    def _reconnect_unlocked(self) -> None:   [REF:302-328] → andaime/error_handler.py:139 log → andaime/error_handler.py:204 handle_database_error → andaime/database.py:217 _apply_pragmas → andaime/database.py:350 _cursor
         ...
 
-    def _refresh_connection(self) -> None:
+    def _refresh_connection(self) -> None:   [REF:330-332] → andaime/database.py:302 _reconnect_unlocked
         ...
 
-    def _ensure_connection(self) -> None:
+    def _ensure_connection(self) -> None:   [REF:334-337] → andaime/database.py:302 _reconnect_unlocked → andaime/database.py:290 _is_connection_healthy
         ...
 
-    def _get_cursor(self) -> sqlite3.Cursor:
+    def _get_cursor(self) -> sqlite3.Cursor:   [REF:339-342]
         ...
 
-    def _get_connection(self) -> sqlite3.Connection:
+    def _get_connection(self) -> sqlite3.Connection:   [REF:344-347]
         ...
 
     @contextmanager
-    def _cursor(self) -> Iterator[sqlite3.Cursor]:
+    def _cursor(self) -> Iterator[sqlite3.Cursor]:   [REF:350-355] → andaime/database.py:339 _get_cursor
         ...
 
-    def _fetch_one(self, sql: str, params: tuple = ()) -> dict | None:
+    def _fetch_one(self, sql: str, params: tuple = ()) -> dict | None:   [REF:357-361] → andaime/database.py:350 _cursor
         ...
 
-    def _fetch_all(self, sql: str, params: tuple = ()) -> list[dict]:
+    def _fetch_all(self, sql: str, params: tuple = ()) -> list[dict]:   [REF:363-366] → andaime/database.py:350 _cursor
         ...
 
-    def _fetch_value(self, sql: str, params: tuple = ()) -> Any:
+    def _fetch_value(self, sql: str, params: tuple = ()) -> Any:   [REF:368-372] → andaime/database.py:350 _cursor
         ...
 
-    def _execute_write(self, sql: str, params: tuple = ()) -> bool:
+    def _execute_write(self, sql: str, params: tuple = ()) -> bool:   [REF:374-378] → andaime/database.py:350 _cursor → andaime/database.py:423 _commit
         ...
 
-    def _execute_insert(self, sql: str, params: tuple = ()) -> int:
+    def _execute_insert(self, sql: str, params: tuple = ()) -> int:   [REF:380-386] → andaime/database.py:350 _cursor → andaime/database.py:423 _commit
         ...
 
-    def _fetch_by_id(self, table: str, row_id: int) -> dict | None:
+    def _fetch_by_id(self, table: str, row_id: int) -> dict | None:   [REF:388-389] → andaime/database.py:357 _fetch_one
         ...
 
-    def _fetch_all_table(self, table: str, order_by: str = "") -> list[dict]:
+    def _fetch_all_table(self, table: str, order_by: str = "") -> list[dict]:   [REF:391-395] → andaime/database.py:363 _fetch_all
         ...
 
-    def _fetch_count(self, table: str, where: str = "", params: tuple = ()) -> int:
+    def _fetch_count(self, table: str, where: str = "", params: tuple = ()) -> int:   [REF:397-402] → andaime/database.py:368 _fetch_value
         ...
 
-    def _insert_row(self, table: str, **kwargs: Any) -> int:
+    def _insert_row(self, table: str, **kwargs: Any) -> int:   [REF:404-408] → andaime/database.py:380 _execute_insert
         ...
 
-    def _update_row(self, table: str, row_id: int, **kwargs: Any) -> bool:
+    def _update_row(self, table: str, row_id: int, **kwargs: Any) -> bool:   [REF:410-413] → andaime/database.py:374 _execute_write
         ...
 
-    def _delete_row(
+    def _delete_row(   [REF:415-421] → andaime/database.py:397 _fetch_count → andaime/database.py:374 _execute_write
         self, table: str, row_id: int, guards: list[tuple[str, str]] | None = None
     ) -> bool:
         ...
 
-    def _commit(self) -> None:
+    def _commit(self) -> None:   [REF:423-427]
         ...
 
     @contextmanager
-    def transaction(self) -> Iterator[None]:
+    def transaction(self) -> Iterator[None]:   [REF:430-457]
         ...
 
-    def _rollback(self) -> None:
+    def _rollback(self) -> None:   [REF:459-462]
         ...
 
-    def _retry_on_transient_error(
+    def _retry_on_transient_error(   [REF:464-491] → andaime/error_handler.py:139 log
         self,
         operation: Callable,
         max_retries: int = 3,
@@ -185,15 +184,14 @@ class BaseDatabase(ABC):
     ) -> Any:
         ...
 
-    def _backup_database(self) -> None:
+    def _backup_database(self) -> None:   [REF:493-518] → andaime/error_handler.py:139 log
         ...
 
-    def close(self, skip_backup: bool = False) -> None:
+    def close(self, skip_backup: bool = False) -> None:   [REF:520-538] → andaime/database.py:493 _backup_database → andaime/error_handler.py:139 log
         ...
 ```
 
 ## andaime/error_handler.py
-_symbols: 15_ 
 ```python
 """
 Centralized error handling with logging and UI dialogs.
@@ -210,7 +208,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-class ErrorLevel(Enum):
+class ErrorLevel(Enum):   [REF:16-21]
     DEBUG = logging.DEBUG
     INFO = logging.INFO
     WARNING = logging.WARNING
@@ -218,7 +216,7 @@ class ErrorLevel(Enum):
     CRITICAL = logging.CRITICAL
 
 
-class ErrorContext(str, Enum):
+class ErrorContext(str, Enum):   [REF:24-41]
     DATABASE = "Database"
     FILE_IO = "File I/O"
     PDF_GENERATION = "PDF Generation"
@@ -238,24 +236,24 @@ class ErrorContext(str, Enum):
     UNKNOWN = "Unknown"
 
 
-class ErrorHandler:
+class ErrorHandler:   [REF:44-287]
     _logger: logging.Logger | None = None
     _show_dialog_callback: Callable[[str, str, ErrorLevel], None] | None = None
     _initialized: bool = False
 
     @staticmethod
-    def _ctx(context: Any) -> str:
+    def _ctx(context: Any) -> str:   [REF:50-53]
         ...
 
-    def __init__(self) -> None:
+    def __init__(self) -> None:   [REF:55-68]
         ...
 
     @classmethod
-    def init(cls, app_name: str, root: Path | None = None) -> None:
+    def init(cls, app_name: str, root: Path | None = None) -> None:   [REF:71-99]
         ...
 
     @staticmethod
-    def handle_error(
+    def handle_error(   [REF:102-136] → andaime/error_handler.py:50 _ctx → andaime/error_handler.py:44 ErrorHandler
         error: Exception,
         context: str | ErrorContext = ErrorContext.UNKNOWN,
         level: ErrorLevel = ErrorLevel.ERROR,
@@ -265,7 +263,7 @@ class ErrorHandler:
         ...
 
     @staticmethod
-    def log(
+    def log(   [REF:139-157] → andaime/error_handler.py:50 _ctx → andaime/error_handler.py:44 ErrorHandler
         message: str,
         level: ErrorLevel = ErrorLevel.INFO,
         context: str | ErrorContext = ErrorContext.UNKNOWN,
@@ -273,7 +271,7 @@ class ErrorHandler:
         ...
 
     @staticmethod
-    def handle_file_error(
+    def handle_file_error(   [REF:160-183] → andaime/error_handler.py:102 handle_error
         error: Exception,
         file_path: str,
         operation: str = "access",
@@ -282,7 +280,7 @@ class ErrorHandler:
         ...
 
     @staticmethod
-    def handle_validation_error(
+    def handle_validation_error(   [REF:186-201] → andaime/error_handler.py:102 handle_error
         error: Exception,
         field: str,
         recovery_hint: str | None = None,
@@ -291,7 +289,7 @@ class ErrorHandler:
         ...
 
     @staticmethod
-    def handle_database_error(
+    def handle_database_error(   [REF:204-224] → andaime/error_handler.py:102 handle_error
         error: Exception,
         operation: str = "database operation",
         recovery_hint: str | None = None,
@@ -300,7 +298,7 @@ class ErrorHandler:
         ...
 
     @staticmethod
-    def safe_execute(
+    def safe_execute(   [REF:227-246] → andaime/error_handler.py:102 handle_error
         func: Callable[..., Any],
         *args: Any,
         operation_name: str = "operation",
@@ -311,7 +309,7 @@ class ErrorHandler:
         ...
 
     @staticmethod
-    def suppress_and_log(
+    def suppress_and_log(   [REF:249-264] → andaime/error_handler.py:139 log
         func: Callable,
         *args: Any,
         operation_name: str = "operation",
@@ -321,16 +319,15 @@ class ErrorHandler:
         ...
 
     @staticmethod
-    def _setup_logging() -> None:
+    def _setup_logging() -> None:   [REF:267-280]
         ...
 
     @staticmethod
-    def get_logger() -> logging.Logger:
+    def get_logger() -> logging.Logger:   [REF:283-287] → andaime/error_handler.py:267 _setup_logging → andaime/error_handler.py:44 ErrorHandler
         ...
 ```
 
 ## andaime/updater.py
-_symbols: 29_ 
 ```python
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -397,19 +394,19 @@ ANDAIME_REPO = "januvary/andaime"
 # ============================================================================
 
 
-def get_install_root() -> Path:
+def get_install_root() -> Path:   [REF:66-100]
     ...
 
 
-def get_shared_root() -> Path:
+def get_shared_root() -> Path:   [REF:103-114]
     ...
 
 
-def staging_path() -> Path:
+def staging_path() -> Path:   [REF:117-119] → andaime/updater.py:66 get_install_root
     ...
 
 
-def _get_app_module() -> str:
+def _get_app_module() -> str:   [REF:122-136]
     ...
 
 
@@ -418,23 +415,23 @@ def _get_app_module() -> str:
 # ============================================================================
 
 
-def parse_manifest_text(text: str) -> dict[str, str]:
+def parse_manifest_text(text: str) -> dict[str, str]:   [REF:144-164]
     ...
 
 
-def read_version_manifest(path: Path | None = None) -> dict[str, str]:
+def read_version_manifest(path: Path | None = None) -> dict[str, str]:   [REF:167-176] → andaime/updater.py:144 parse_manifest_text → andaime/updater.py:66 get_install_root
     ...
 
 
-def get_local_manifest() -> dict[str, str]:
+def get_local_manifest() -> dict[str, str]:   [REF:179-181] → andaime/updater.py:167 read_version_manifest
     ...
 
 
-def get_local_hash(module: str) -> str:
+def get_local_hash(module: str) -> str:   [REF:184-186]
     ...
 
 
-def get_local_runtime_hash() -> str:
+def get_local_runtime_hash() -> str:   [REF:189-191]
     ...
 
 
@@ -443,11 +440,11 @@ def get_local_runtime_hash() -> str:
 # ============================================================================
 
 
-def _verify_zip_paths(zf: zipfile.ZipFile) -> None:
+def _verify_zip_paths(zf: zipfile.ZipFile) -> None:   [REF:199-206]
     ...
 
 
-def _sha256_file(path: Path) -> str:
+def _sha256_file(path: Path) -> str:   [REF:209-214]
     ...
 
 # ============================================================================
@@ -455,15 +452,15 @@ def _sha256_file(path: Path) -> str:
 # ============================================================================
 
 
-def _swap_directory(current: Path, new: Path) -> list[tuple[Path, Path]]:
+def _swap_directory(current: Path, new: Path) -> list[tuple[Path, Path]]:   [REF:221-237]
     ...
 
 
-def _rollback(swaps: list[tuple[Path, Path]]) -> None:
+def _rollback(swaps: list[tuple[Path, Path]]) -> None:   [REF:240-247]
     ...
 
 
-def _cleanup_old_dirs(root: Path) -> None:
+def _cleanup_old_dirs(root: Path) -> None:   [REF:250-270]
     ...
 
 
@@ -472,11 +469,11 @@ def _cleanup_old_dirs(root: Path) -> None:
 # ============================================================================
 
 
-def _detect_install_format(root: Path) -> str:
+def _detect_install_format(root: Path) -> str:   [REF:278-298]
     ...
 
 
-def _format_error_message(current_format: str, staged_format: str) -> str:
+def _format_error_message(current_format: str, staged_format: str) -> str:   [REF:301-307]
     ...
 
 
@@ -485,33 +482,33 @@ def _format_error_message(current_format: str, staged_format: str) -> str:
 # ============================================================================
 
 
-def _acquire_lock(lock_path: Path) -> object | None:
+def _acquire_lock(lock_path: Path) -> object | None:   [REF:315-338]
     ...
 
 
-def _release_lock(lock_path: Path, lock_handle: object | None) -> None:
+def _release_lock(lock_path: Path, lock_handle: object | None) -> None:   [REF:341-346]
     ...
 
 
-def apply_pending_update() -> bool:
+def apply_pending_update() -> bool:   [REF:349-380] → andaime/updater.py:250 _cleanup_old_dirs → andaime/updater.py:315 _acquire_lock → andaime/updater.py:66 get_install_root → andaime/updater.py:383 _apply_pending_update_locked → andaime/updater.py:341 _release_lock
     ...
 
 
-def _apply_pending_update_locked() -> bool:
+def _apply_pending_update_locked() -> bool:   [REF:383-482] → andaime/updater.py:498 _launch_with_monitoring → andaime/updater.py:117 staging_path → andaime/error_handler.py:139 log → andaime/updater.py:66 get_install_root → andaime/updater.py:240 _rollback → andaime/updater.py:611 _show_update_error → andaime/updater.py:278 _detect_install_format → andaime/updater.py:122 _get_app_module
     ...
 
 
-def _get_python_exe() -> Path:
+def _get_python_exe() -> Path:   [REF:485-495] → andaime/updater.py:66 get_install_root
     ...
 
 
-def _launch_with_monitoring(
+def _launch_with_monitoring(   [REF:498-563] → andaime/error_handler.py:139 log → andaime/updater.py:240 _rollback → andaime/updater.py:485 _get_python_exe
     app_module: str, swaps: list[tuple[Path, Path]]
 ) -> None:
     ...
 
 
-def signal_post_update_success() -> None:
+def signal_post_update_success() -> None:   [REF:566-578]
     ...
 
 
@@ -520,7 +517,7 @@ def signal_post_update_success() -> None:
 # ============================================================================
 
 
-def restart_app() -> None:
+def restart_app() -> None:   [REF:586-603] → andaime/updater.py:122 _get_app_module → andaime/updater.py:485 _get_python_exe
     ...
 
 
@@ -529,7 +526,7 @@ def restart_app() -> None:
 # ============================================================================
 
 
-def _show_update_error(error: Exception) -> None:
+def _show_update_error(error: Exception) -> None:   [REF:611-627] → andaime/error_handler.py:139 log
     ...
 
 
@@ -538,7 +535,7 @@ def _show_update_error(error: Exception) -> None:
 # ============================================================================
 
 
-class UpdateCheckWorker(QThread):
+class UpdateCheckWorker(QThread):   [REF:635-800]
     """Background thread that checks januvary/andaime for updates.
 
     Uses hash-based comparison: downloads payload.zip when the runtime
@@ -557,20 +554,19 @@ class UpdateCheckWorker(QThread):
     update_failed = Signal(str)
     no_update = Signal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:   [REF:654-655]
         ...
 
-    def run(self) -> None:
+    def run(self) -> None:   [REF:657-781] → andaime/updater.py:144 parse_manifest_text → andaime/updater.py:117 staging_path → andaime/updater.py:179 get_local_manifest → andaime/updater.py:783 _download_and_stage → andaime/updater.py:122 _get_app_module
         ...
 
-    def _download_and_stage(
+    def _download_and_stage(   [REF:783-800] → andaime/updater.py:199 _verify_zip_paths → andaime/updater.py:117 staging_path
         self, url: str, tmp: str, filename: str, headers: dict, context: ssl.SSLContext
     ) -> None:
         ...
 ```
 
 ## andaime/widgets.py
-_symbols: 29_ 
 ```python
 """PySide6 search-enabled combo box widget with accent-insensitive matching."""
 
@@ -592,11 +588,11 @@ from andaime.text import scored_search_dict
 SearchFn = Callable[[str], dict[str, str]]
 
 
-def static_search_fn(options: dict[str, str]) -> SearchFn:
+def static_search_fn(options: dict[str, str]) -> SearchFn:   [REF:21-38] → andaime/text.py:28 scored_search_dict
     ...
 
 
-class SearchableComboBox(QWidget):
+class SearchableComboBox(QWidget):   [REF:41-174]
     """
     Campo de busca com autocomplete.
 
@@ -607,7 +603,7 @@ class SearchableComboBox(QWidget):
     selection_changed = Signal(object)
     text_edited = Signal(str)
 
-    def __init__(
+    def __init__(   [REF:52-85]
         self,
         search_fn: SearchFn,
         placeholder: str = "Buscar...",
@@ -616,46 +612,46 @@ class SearchableComboBox(QWidget):
         ...
 
     @property
-    def line_edit(self) -> QLineEdit:
+    def line_edit(self) -> QLineEdit:   [REF:88-90]
         ...
 
-    def set_search_fn(self, search_fn: SearchFn) -> None:
+    def set_search_fn(self, search_fn: SearchFn) -> None:   [REF:92-95] → andaime/widgets.py:151 _update_model
         ...
 
-    def current_data(self) -> str | None:
+    def current_data(self) -> str | None:   [REF:97-99]
         ...
 
-    def set_current(self, data: str, label: str) -> None:
+    def set_current(self, data: str, label: str) -> None:   [REF:101-105]
         ...
 
-    def set_current_by_data(self, data: str) -> None:
+    def set_current_by_data(self, data: str) -> None:   [REF:107-114]
         ...
 
-    def set_text(self, text: str) -> None:
+    def set_text(self, text: str) -> None:   [REF:116-130]
         ...
 
-    def current_text(self) -> str:
+    def current_text(self) -> str:   [REF:132-134]
         ...
 
-    def focus_search(self) -> None:
+    def focus_search(self) -> None:   [REF:136-139]
         ...
 
-    def clear(self) -> None:
+    def clear(self) -> None:   [REF:141-145]
         ...
 
-    def _on_text_edited(self, text: str) -> None:
+    def _on_text_edited(self, text: str) -> None:   [REF:147-149] → andaime/widgets.py:151 _update_model
         ...
 
-    def _update_model(self, query: str, show_popup: bool = False) -> None:
+    def _update_model(self, query: str, show_popup: bool = False) -> None:   [REF:151-160]
         # A search_fn é a fonte da verdade sobre o que casa e em que ordem.
         # O widget NÃO refiltra pelo label (senão buscas por um campo que não
         # aparece no label — ex.: telefone — seriam descartadas).
         ...
 
-    def _on_text_changed(self, text: str) -> None:
+    def _on_text_changed(self, text: str) -> None:   [REF:162-166]
         ...
 
-    def _on_activated(self, text: str) -> None:
+    def _on_activated(self, text: str) -> None:   [REF:168-174]
         ...
 
 
@@ -663,11 +659,11 @@ import calendar
 from datetime import date, timedelta
 
 
-def _add_months(d: date, n: int) -> date:
+def _add_months(d: date, n: int) -> date:   [REF:181-187]
     ...
 
 
-class DateLineEdit(QLineEdit):
+class DateLineEdit(QLineEdit):   [REF:190-257]
     """Date entry that combines free typing with QDateEdit-style arrow stepping.
 
     Typed input is auto-formatted to ``DD/MM/YYYY`` (slashes inserted as digits
@@ -676,25 +672,25 @@ class DateLineEdit(QLineEdit):
     section editing -- without giving up the text-field typing experience.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:   [REF:199-202]
         ...
 
     @staticmethod
-    def _format(text: str) -> str:
+    def _format(text: str) -> str:   [REF:205-211]
         ...
 
-    def _on_text_edited(self, text: str) -> None:
+    def _on_text_edited(self, text: str) -> None:   [REF:213-229] → andaime/widgets.py:205 _format
         ...
 
-    def keyPressEvent(self, event: Any) -> None:
+    def keyPressEvent(self, event: Any) -> None:   [REF:231-237] → andaime/widgets.py:239 _step
         ...
 
-    def _step(self, up: bool) -> bool:
+    def _step(self, up: bool) -> bool:   [REF:239-257] → andaime/dates.py:141 parse_date → andaime/widgets.py:181 _add_months
         ...
 
 
-class CycleButton(QPushButton):
-    def __init__(
+class CycleButton(QPushButton):   [REF:260-311]
+    def __init__(   [REF:261-285]
         self,
         label: str,
         role: str,
@@ -709,14 +705,14 @@ class CycleButton(QPushButton):
     ):
         ...
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event):   [REF:287-297] → andaime/widgets.py:299 _apply_label
         ...
 
-    def _apply_label(self):
+    def _apply_label(self):   [REF:299-302]
         ...
 
     @property
-    def value(self) -> int:
+    def value(self) -> int:   [REF:309-311] → andaime/widgets.py:299 _apply_label
         ...
 
     @value.setter
@@ -725,7 +721,6 @@ class CycleButton(QPushButton):
 ```
 
 ## andaime/qt/theme.py
-_symbols: 17_ 
 ```python
 """Tema Qt neutro compartilhado (andaime.qt).
 
@@ -757,14 +752,14 @@ from PySide6.QtWidgets import QPushButton
 # ============================================================================
 
 
-def _platform_font() -> str:
+def _platform_font() -> str:   [REF:31-36]
     ...
 
 
 FONT_FAMILY = _platform_font()
 
 
-def set_font_family(family: str) -> None:
+def set_font_family(family: str) -> None:   [REF:42-49]
     ...
 
 
@@ -970,11 +965,11 @@ _SEMANTIC: dict[str, dict[str, str]] = {
 }
 
 
-def _lerp_hex(lo: str, hi: str, t: float) -> str:
+def _lerp_hex(lo: str, hi: str, t: float) -> str:   [REF:254-259]
     ...
 
 
-def _build_palette(mode: str) -> dict[str, str]:
+def _build_palette(mode: str) -> dict[str, str]:   [REF:262-271] → andaime/qt/theme.py:254 _lerp_hex
     ...
 
 
@@ -989,27 +984,27 @@ DARK: dict[str, str] = _build_palette("DARK")
 _current_theme: str = "dark"
 
 
-def set_theme(theme: str) -> None:
+def set_theme(theme: str) -> None:   [REF:285-287]
     ...
 
 
-def get_theme() -> str:
+def get_theme() -> str:   [REF:290-291]
     ...
 
 
-def toggle_theme() -> str:
+def toggle_theme() -> str:   [REF:294-297]
     ...
 
 
-def colors() -> dict[str, str]:
+def colors() -> dict[str, str]:   [REF:300-302]
     ...
 
 
-def get_palette(dark_mode: bool = True) -> dict[str, str]:
+def get_palette(dark_mode: bool = True) -> dict[str, str]:   [REF:305-306]
     ...
 
 
-def qpalette(palette: dict[str, str]) -> QPalette:
+def qpalette(palette: dict[str, str]) -> QPalette:   [REF:309-333]
     ...
 
 
@@ -1018,7 +1013,7 @@ def qpalette(palette: dict[str, str]) -> QPalette:
 # ============================================================================
 
 
-def get_stylesheet(theme: Optional[str] = None) -> str:
+def get_stylesheet(theme: Optional[str] = None) -> str:   [REF:341-344] → andaime/qt/theme.py:351 _build_qss
     ...
 
 
@@ -1026,7 +1021,7 @@ def get_stylesheet(theme: Optional[str] = None) -> str:
 stylesheet = get_stylesheet
 
 
-def _build_qss(c: dict) -> str:
+def _build_qss(c: dict) -> str:   [REF:351-701]
     ...
 
 
@@ -1035,7 +1030,7 @@ def _build_qss(c: dict) -> str:
 # ============================================================================
 
 
-def make_button(
+def make_button(   [REF:709-723]
     text: str,
     role: str = "flat",
     parent=None,
@@ -1043,7 +1038,7 @@ def make_button(
     ...
 
 
-class ThemeToggleButton(QPushButton):
+class ThemeToggleButton(QPushButton):   [REF:726-751]
     """Botão de alternância de tema (claro/escuro).
 
     Mostra ☾ no modo escuro e ☀ no modo claro (reflete o estado atual).
@@ -1053,18 +1048,17 @@ class ThemeToggleButton(QPushButton):
 
     theme_toggled = Signal(bool)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None):   [REF:736-743] → andaime/qt/theme.py:290 get_theme → andaime/qt/theme.py:750 _update_icon
         ...
 
-    def _toggle(self):
+    def _toggle(self):   [REF:745-748] → andaime/qt/theme.py:750 _update_icon
         ...
 
-    def _update_icon(self):
+    def _update_icon(self):   [REF:750-751]
         ...
 ```
 
 ## andaime/qt/top_bar.py
-_symbols: 16_ 
 ```python
 """Barra superior genérica (andaime.qt).
 
@@ -1109,17 +1103,17 @@ _COL_OPTIONS = 6
 _COL_RIGHT = 3
 
 
-def coerce_actions(actions: list) -> list[QWidget]:
+def coerce_actions(actions: list) -> list[QWidget]:   [REF:44-60] → andaime/qt/theme.py:709 make_button
     ...
 
 
-class TopBar(QFrame):
+class TopBar(QFrame):   [REF:63-288]
     """Barra superior: tema + busca | ações | widget à direita."""
 
     selection_changed = Signal(object)  # key emitido pelo SearchableComboBox
     theme_toggled = Signal(bool)
 
-    def __init__(
+    def __init__(   [REF:69-180] → andaime/qt/top_bar.py:184 _build_search → andaime/qt/theme.py:726 ThemeToggleButton → andaime/qt/top_bar.py:215 _coerce_actions
         self,
         parent: QWidget | None = None,
         search_fn: Optional[Callable[[str], dict[str, str]]] = None,
@@ -1145,59 +1139,58 @@ class TopBar(QFrame):
 
     # ========== Construção ==========
 
-    def _build_search(
+    def _build_search(   [REF:184-206] → andaime/widgets.py:41 SearchableComboBox → andaime/qt/top_bar.py:208 _clear_search_slot
         self,
         search_fn: Optional[Callable[[str], dict[str, str]]],
         placeholder: str,
     ) -> None:
         ...
 
-    def _clear_search_slot(self) -> None:
+    def _clear_search_slot(self) -> None:   [REF:208-212]
         ...
 
     @staticmethod
-    def _coerce_actions(actions: list) -> list[QWidget]:
+    def _coerce_actions(actions: list) -> list[QWidget]:   [REF:215-216] → andaime/qt/top_bar.py:44 coerce_actions
         ...
 
     # ========== API ==========
 
-    def add_action(self, action) -> None:
+    def add_action(self, action) -> None:   [REF:220-227] → andaime/qt/top_bar.py:215 _coerce_actions
         ...
 
-    def set_mid_widget(self, widget: QWidget) -> None:
+    def set_mid_widget(self, widget: QWidget) -> None:   [REF:229-238]
         ...
 
-    def set_search_fn(
+    def set_search_fn(   [REF:240-243] → andaime/qt/top_bar.py:184 _build_search
         self, search_fn: Optional[Callable[[str], dict[str, str]]]
     ) -> None:
         ...
 
-    def set_search_options(
+    def set_search_options(   [REF:245-249] → andaime/qt/top_bar.py:184 _build_search
         self, options: dict[str, str], placeholder: str = "Buscar..."
     ) -> None:
         ...
 
-    def set_current(self, key: str, label: str) -> None:
+    def set_current(self, key: str, label: str) -> None:   [REF:251-254]
         ...
 
-    def set_current_by_key(self, key: str) -> None:
+    def set_current_by_key(self, key: str) -> None:   [REF:256-258]
         ...
 
-    def clear_search(self) -> None:
+    def clear_search(self) -> None:   [REF:260-262]
         ...
 
-    def current_text(self) -> str:
+    def current_text(self) -> str:   [REF:264-267]
         ...
 
-    def set_right_widget(self, widget: QWidget) -> None:
+    def set_right_widget(self, widget: QWidget) -> None:   [REF:269-280]
         ...
 
-    def set_title(self, title: str) -> None:
+    def set_title(self, title: str) -> None:   [REF:282-288] → andaime/qt/top_bar.py:269 set_right_widget
         ...
 ```
 
 ## andaime/config.py
-_symbols: 13_ 
 ```python
 """
 Generic configuration manager.
@@ -1219,58 +1212,57 @@ from andaime.paths import get_config_path
 from andaime.error_handler import ErrorHandler, ErrorLevel
 
 
-class _ConfigSchema(Protocol):
+class _ConfigSchema(Protocol):   [REF:21-25]
     @classmethod
     ...
 
     ...
 
 
-class ConfigManager:
+class ConfigManager:   [REF:23-23]
     _instance: ConfigManager | None = None
     _config: Any = None
     _config_cls: type[_ConfigSchema] | None = None
 
-    def __new__(cls) -> ConfigManager:
+    def __new__(cls) -> ConfigManager:   [REF:25-25]
         ...
 
     @classmethod
-    def init(cls, config_cls: type[_ConfigSchema]) -> None:
+    def init(cls, config_cls: type[_ConfigSchema]) -> None:   [REF:28-164]
         ...
 
-    def __init__(self) -> None:
-        ...
-
-    @classmethod
-    def _load(cls) -> Any:
+    def __init__(self) -> None:   [REF:33-36]
         ...
 
     @classmethod
-    def _save_to_file(cls, config: Any) -> None:
-        ...
-
-    def get(self, key: str, default: Any = None) -> Any:
-        ...
-
-    def set(self, key: str, value: Any) -> bool:
-        ...
-
-    def get_all(self) -> Any:
-        ...
-
-    def reload(self) -> None:
-        ...
-
-    def reset_to_defaults(self) -> None:
+    def _load(cls) -> Any:   [REF:39-40]
         ...
 
     @classmethod
-    def _reset(cls) -> None:
+    def _save_to_file(cls, config: Any) -> None:   [REF:42-44] → andaime/config.py:47 _load
+        ...
+
+    def get(self, key: str, default: Any = None) -> Any:   [REF:47-85] → andaime/error_handler.py:139 log → andaime/config.py:23 get_defaults → andaime/paths.py:40 get_config_path → andaime/config.py:88 _save_to_file
+        ...
+
+    def set(self, key: str, value: Any) -> bool:   [REF:88-107] → andaime/error_handler.py:139 log → andaime/paths.py:40 get_config_path → andaime/error_handler.py:102 handle_error
+        ...
+
+    def get_all(self) -> Any:   [REF:109-116] → andaime/config.py:47 _load
+        ...
+
+    def reload(self) -> None:   [REF:118-143] → andaime/error_handler.py:139 log → andaime/config.py:47 _load → andaime/config.py:88 _save_to_file
+        ...
+
+    def reset_to_defaults(self) -> None:   [REF:145-148] → andaime/config.py:47 _load
+        ...
+
+    @classmethod
+    def _reset(cls) -> None:   [REF:150-152] → andaime/config.py:47 _load
         ...
 ```
 
 ## andaime/qt/table.py
-_symbols: 16_ 
 ```python
 """Table helpers for Qt — two approaches, same module.
 
@@ -1304,11 +1296,11 @@ from PySide6.QtWidgets import (
 
 
 @contextmanager
-def table_batch_populate(table: QTableWidget) -> Iterator[None]:
+def table_batch_populate(table: QTableWidget) -> Iterator[None]:   [REF:33-80]
     ...
 
 
-class NoElideDelegate(QStyledItemDelegate):
+class NoElideDelegate(QStyledItemDelegate):   [REF:83-129]
     """Draws cell text without ellipsis ("...") and adds a bottom separator.
 
     By default, Qt elides text that doesn't fit a cell. This delegate draws
@@ -1319,10 +1311,10 @@ class NoElideDelegate(QStyledItemDelegate):
 
     _TEXT_HMARGIN = 8
 
-    def paint(self, painter, option, index):
+    def paint(self, painter, option, index):   [REF:94-122]
         ...
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option, index):   [REF:124-129] → andaime/qt/table.py:208 data
         ...
 
 
@@ -1335,7 +1327,7 @@ _PADDING_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 @dataclass(frozen=True)
-class ColumnSpec:
+class ColumnSpec:   [REF:141-165]
     """Declarative column definition for ``TableViewModel``.
 
     Attributes:
@@ -1362,7 +1354,7 @@ class ColumnSpec:
     padding: int = 0
 
 
-class TableViewModel(QAbstractTableModel):
+class TableViewModel(QAbstractTableModel):   [REF:168-249]
     """Generic table model backed by a list of plain data objects.
 
     Each row is a data object (dataclass, namedtuple, dict, etc.).
@@ -1375,50 +1367,49 @@ class TableViewModel(QAbstractTableModel):
     manual signal blocking or resize freezing is needed.
     """
 
-    def __init__(
+    def __init__(   [REF:181-189]
         self,
         columns: list[ColumnSpec],
         id_getter: Callable[[Any], Any] | None = None,
     ) -> None:
         ...
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:   [REF:191-192]
         ...
 
-    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:   [REF:194-195]
         ...
 
-    def headerData(
+    def headerData(   [REF:197-206]
         self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole
     ) -> Any:
         ...
 
-    def data(
+    def data(   [REF:208-225]
         self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole
     ) -> Any:
         ...
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+    def flags(self, index: QModelIndex) -> Qt.ItemFlag:   [REF:227-230]
         ...
 
-    def set_rows(self, rows: list[Any]) -> None:
+    def set_rows(self, rows: list[Any]) -> None:   [REF:232-236]
         ...
 
-    def row_id(self, row: int) -> Any:
+    def row_id(self, row: int) -> Any:   [REF:238-242]
         ...
 
-    def find_row_by_id(self, id_value: Any) -> int | None:
+    def find_row_by_id(self, id_value: Any) -> int | None:   [REF:244-249]
         ...
 
 
-def configure_table_view(
+def configure_table_view(   [REF:252-263]
     view: QTableView, columns: list[ColumnSpec]
 ) -> None:
     ...
 ```
 
 ## andaime/qt/theme_model.py
-_symbols: 10_ 
 ```python
 """Modelo de tema baseado em rampa + níveis (andaime).
 
@@ -1444,38 +1435,38 @@ from andaime.qt.theme import (
 # ---- Helpers de cor ----
 
 
-def clamp(v: int) -> int:
+def clamp(v: int) -> int:   [REF:25-27]
     ...
 
 
-def shift(hex_color: str, channel: int, delta: int) -> str:
+def shift(hex_color: str, channel: int, delta: int) -> str:   [REF:30-35] → andaime/qt/theme_model.py:25 clamp
     ...
 
 
-def to_rgb(hex_color: str) -> list[int]:
+def to_rgb(hex_color: str) -> list[int]:   [REF:38-41]
     ...
 
 
-def to_hex(rgb: list[float]) -> str:
+def to_hex(rgb: list[float]) -> str:   [REF:44-47] → andaime/qt/theme_model.py:25 clamp
     ...
 
 
-def lerp(lo: str, hi: str, t: float) -> str:
+def lerp(lo: str, hi: str, t: float) -> str:   [REF:50-53] → andaime/qt/theme_model.py:44 to_hex → andaime/qt/theme_model.py:38 to_rgb
     ...
 
 
-def luminance(hex_color: str) -> float:
+def luminance(hex_color: str) -> float:   [REF:56-64] → andaime/qt/theme_model.py:38 to_rgb
     ...
 
 
-def contrast(a: str, b: str) -> float:
+def contrast(a: str, b: str) -> float:   [REF:67-71] → andaime/qt/theme_model.py:56 luminance
     ...
 
 
 # ---- Modelo de rampa ----
 
 
-def derive_palette(
+def derive_palette(   [REF:77-97] → andaime/qt/theme_model.py:50 lerp
     ramp: dict[str, list[str]],
     levels: dict[int, float],
     roles: dict[str, dict[str, int]],
@@ -1485,7 +1476,7 @@ def derive_palette(
     ...
 
 
-def theme_block(
+def theme_block(   [REF:100-140]
     ramp: dict[str, list[str]],
     levels: dict[int, float],
     roles: dict[str, int],
@@ -1494,7 +1485,7 @@ def theme_block(
     ...
 
 
-def write_theme(
+def write_theme(   [REF:143-157] → andaime/qt/theme_model.py:100 theme_block
     theme_file: Path,
     ramp: dict[str, list[str]],
     levels: dict[int, float],
@@ -1505,7 +1496,6 @@ def write_theme(
 ```
 
 ## andaime/qt/dev_inspector.py
-_symbols: 11_ 
 ```python
 """Inspetor de widgets para desenvolvimento (andaime.qt).
 
@@ -1559,55 +1549,55 @@ _DEBOUNCE_S = 0.2
 _ATTR_KEEPALIVE = "_dev_inspector"
 
 
-def _is_qt_class(cls: type) -> bool:
+def _is_qt_class(cls: type) -> bool:   [REF:53-55]
     ...
 
 
-def _build_chain(
+def _build_chain(   [REF:58-75] → andaime/qt/dev_inspector.py:78 _source_location
     widget: object,
 ) -> list[tuple[str, Optional[str], Optional[int], bool]]:
     ...
 
 
-def _source_location(obj: object) -> tuple[Optional[str], Optional[int]]:
+def _source_location(obj: object) -> tuple[Optional[str], Optional[int]]:   [REF:78-86]
     ...
 
 
-def _show_dialog(titulo: str, corpo: str, copiar: Optional[str] = None) -> None:
+def _show_dialog(titulo: str, corpo: str, copiar: Optional[str] = None) -> None:   [REF:89-118]
     ...
 
 
-def _show_chain_dialog(
+def _show_chain_dialog(   [REF:121-173] → andaime/qt/table.py:208 data
     widget: object,
     cadeia: list[tuple[str, Optional[str], Optional[int], bool]],
 ) -> None:
     ...
 
 
-class _DevInspector(QObject):
+class _DevInspector(QObject):   [REF:176-230]
     """Observa todos os eventos da QApplication para disparar a inspeção.
 
     Instala o filtro de eventos na própria QApplication: assim o gatilho
     funciona independentemente de qual widget (ou nenhum) tem o foco.
     """
 
-    def __init__(self, app: QApplication, atalho: str = _DEFAULT_SHORTCUT) -> None:
+    def __init__(self, app: QApplication, atalho: str = _DEFAULT_SHORTCUT) -> None:   [REF:183-189]
         ...
 
-    def eventFilter(self, _obj, event) -> bool:  # noqa: D401 - assinatura Qt
+    def eventFilter(self, _obj, event) -> bool:  # noqa: D401 - assinatura Qt   [REF:191-215] → andaime/qt/dev_inspector.py:217 _inspecionar
         ...
 
-    def _inspecionar(self) -> None:
+    def _inspecionar(self) -> None:   [REF:217-230] → andaime/qt/dev_inspector.py:121 _show_chain_dialog → andaime/qt/dev_inspector.py:89 _show_dialog → andaime/qt/dev_inspector.py:58 _build_chain
         ...
 
 
-def install_dev_inspector(
+def install_dev_inspector(   [REF:233-252] → andaime/qt/dev_inspector.py:176 _DevInspector
     app: Optional[QApplication] = None, atalho: str = _DEFAULT_SHORTCUT
 ) -> _DevInspector:
     ...
 
 
-def enable_if_env(
+def enable_if_env(   [REF:255-271] → andaime/qt/dev_inspector.py:233 install_dev_inspector
     app: Optional[QApplication] = None,
     var: str = _ENV_VAR,
     atalho: str = _DEFAULT_SHORTCUT,
@@ -1616,7 +1606,6 @@ def enable_if_env(
 ```
 
 ## andaime/dates.py
-_symbols: 10_ 
 ```python
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -1639,35 +1628,35 @@ from typing import cast
 from andaime.paths import get_root_directory
 
 
-class DateCalculator:
+class DateCalculator:   [REF:22-127]
     _holidays_cache: set[date] | None = None
 
     @staticmethod
-    def _load_pontos_facultativos() -> dict[str, list[str]]:
+    def _load_pontos_facultativos() -> dict[str, list[str]]:   [REF:26-58] → andaime/paths.py:11 get_root_directory
         ...
 
     @staticmethod
-    def _convert_pontos_to_dates(year: int, pontos_list: list[str]) -> set[date]:
+    def _convert_pontos_to_dates(year: int, pontos_list: list[str]) -> set[date]:   [REF:61-69]
         ...
 
     @staticmethod
-    def get_holidays() -> set[date]:
+    def get_holidays() -> set[date]:   [REF:72-99] → andaime/dates.py:26 _load_pontos_facultativos
         ...
 
     @classmethod
-    def clear_holidays_cache(cls) -> None:
+    def clear_holidays_cache(cls) -> None:   [REF:102-103]
         ...
 
     @staticmethod
-    def is_business_day(dt: date | datetime) -> bool:
+    def is_business_day(dt: date | datetime) -> bool:   [REF:106-109] → andaime/dates.py:72 get_holidays
         ...
 
     @staticmethod
-    def skip_to_previous_business_day(dt: datetime | date) -> date:
+    def skip_to_previous_business_day(dt: datetime | date) -> date:   [REF:112-118] → andaime/dates.py:72 get_holidays
         ...
 
     @staticmethod
-    def skip_to_next_business_day(dt: datetime | date) -> date:
+    def skip_to_next_business_day(dt: datetime | date) -> date:   [REF:121-127] → andaime/dates.py:72 get_holidays
         ...
 
 
@@ -1682,16 +1671,15 @@ _WEEKDAYS_PT = [
 ]
 
 
-def parse_date(text: str | None) -> date | None:
+def parse_date(text: str | None) -> date | None:   [REF:141-180]
     ...
 
 
-def format_date(dt: date, include_weekday: bool = False) -> str:
+def format_date(dt: date, include_weekday: bool = False) -> str:   [REF:183-191]
     ...
 ```
 
 ## andaime/app.py
-_symbols: 14_ 
 ```python
 """Application bootstrap for PySide6 desktop apps."""
 
@@ -1710,16 +1698,16 @@ from andaime.error_handler import ErrorHandler, ErrorLevel
 _D = TypeVar("_D", bound=BaseDatabase)
 
 
-def _is_path_reachable(path: Path) -> bool:
+def _is_path_reachable(path: Path) -> bool:   [REF:18-24]
     ...
 
 
-def _warn_network_unavailable(path: Path) -> None:
+def _warn_network_unavailable(path: Path) -> None:   [REF:27-49] → andaime/error_handler.py:139 log
     ...
 
 
-class App(Generic[_D]):
-    def __init__(
+class App(Generic[_D]):   [REF:52-157]
+    def __init__(   [REF:53-85] → andaime/app.py:27 _warn_network_unavailable → andaime/config.py:39 init → andaime/updater.py:566 signal_post_update_success → andaime/app.py:18 _is_path_reachable → andaime/app.py:91 _detect_root → andaime/config.py:28 ConfigManager
         self,
         app_name: str,
         app_folder: str,
@@ -1731,45 +1719,44 @@ class App(Generic[_D]):
         ...
 
     @property
-    def font(self) -> "FontSpec | None":
+    def font(self) -> "FontSpec | None":   [REF:88-89]
         ...
 
-    def _detect_root(self) -> Path:
-        ...
-
-    @property
-    def root(self) -> Path:
+    def _detect_root(self) -> Path:   [REF:91-120]
         ...
 
     @property
-    def db(self) -> _D:
+    def root(self) -> Path:   [REF:123-124]
         ...
 
     @property
-    def config(self) -> ConfigManager:
+    def db(self) -> _D:   [REF:127-128]
         ...
 
     @property
-    def app_name(self) -> str:
+    def config(self) -> ConfigManager:   [REF:131-132]
         ...
 
     @property
-    def app_folder(self) -> str:
+    def app_name(self) -> str:   [REF:135-136]
         ...
 
-    def get_data_root(self) -> Path:
+    @property
+    def app_folder(self) -> str:   [REF:139-140]
         ...
 
-    def shutdown(self) -> None:
+    def get_data_root(self) -> Path:   [REF:142-143]
+        ...
+
+    def shutdown(self) -> None:   [REF:145-148]
         ...
 
     @staticmethod
-    def reset() -> None:
+    def reset() -> None:   [REF:151-157] → andaime/config.py:162 _reset
         ...
 ```
 
 ## andaime/pdf.py
-_symbols: 10_ 
 ```python
 """Operações de PDF compartilhadas entre os apps (BAP, Emissor, ...).
 
@@ -1798,23 +1785,23 @@ _PDFIUM_LOCK = threading.Lock()
 # ---------------------------------------------------------------------------
 
 
-def open_pdf(src: Union[bytes, str, Path]):
+def open_pdf(src: Union[bytes, str, Path]):   [REF:28-34]
     ...
 
 
-def page_count(src: Union[bytes, str, Path]) -> int:
+def page_count(src: Union[bytes, str, Path]) -> int:   [REF:37-39]
     ...
 
 
-def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:
+def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:   [REF:42-54] → andaime/pdf.py:28 open_pdf
     ...
 
 
-def extract_page(src: Union[bytes, str, Path], page: int) -> bytes:
+def extract_page(src: Union[bytes, str, Path], page: int) -> bytes:   [REF:57-68] → andaime/pdf.py:28 open_pdf
     ...
 
 
-def merge_pdfs(conteudos: Iterable[Union[bytes, str, Path]], output_path: str) -> str:
+def merge_pdfs(conteudos: Iterable[Union[bytes, str, Path]], output_path: str) -> str:   [REF:71-82]
     ...
 
 
@@ -1823,11 +1810,11 @@ def merge_pdfs(conteudos: Iterable[Union[bytes, str, Path]], output_path: str) -
 # ---------------------------------------------------------------------------
 
 
-def _clamped_layout_fun(imgwidthpx, imgheightpx, ndpi):
+def _clamped_layout_fun(imgwidthpx, imgheightpx, ndpi):   [REF:90-112]
     ...
 
 
-def image_to_pdf(source: Union[bytes, str, Path], filetype: str = "") -> bytes:
+def image_to_pdf(source: Union[bytes, str, Path], filetype: str = "") -> bytes:   [REF:115-129]
     ...
 
 
@@ -1836,26 +1823,25 @@ def image_to_pdf(source: Union[bytes, str, Path], filetype: str = "") -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def render_page_pil(
+def render_page_pil(   [REF:137-160]
     src: Union[bytes, str, Path], page: int, scale: float = 2.0
 ):
     ...
 
 
-def render_pages_pil(
+def render_pages_pil(   [REF:163-181]
     src: Union[bytes, str, Path], scale: float = 2.0
 ):
     ...
 
 
-def render_page(
+def render_page(   [REF:184-194] → andaime/pdf.py:137 render_page_pil
     src: Union[bytes, str, Path], page: int, scale: float = 2.0
 ) -> QImage:
     ...
 ```
 
 ## andaime/paths.py
-_symbols: 3_ 
 ```python
 """
 Path management utilities.
@@ -1867,20 +1853,19 @@ import andaime
 from andaime.error_handler import ErrorHandler, ErrorLevel
 
 
-def get_root_directory() -> Path:
+def get_root_directory() -> Path:   [REF:11-12]
     ...
 
 
-def resolve_db_path(db_filename: str, create_dir: bool = True) -> str:
+def resolve_db_path(db_filename: str, create_dir: bool = True) -> str:   [REF:15-37] → andaime/error_handler.py:139 log → andaime/paths.py:11 get_root_directory
     ...
 
 
-def get_config_path() -> Path:
+def get_config_path() -> Path:   [REF:40-51] → andaime/paths.py:11 get_root_directory
     ...
 ```
 
 ## andaime/qt/fonts.py
-_symbols: 8_ 
 ```python
 """Gerenciamento unificado de fontes para apps Qt.
 
@@ -1912,7 +1897,7 @@ from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 
 
 @dataclass
-class FontSpec:
+class FontSpec:   [REF:31-48]
     """Especificação de fonte para um app.
 
     Attributes:
@@ -1932,15 +1917,15 @@ class FontSpec:
     fontsource_id: str | None = None
 
 
-def _fonts_dir() -> Path:
+def _fonts_dir() -> Path:   [REF:51-53]
     ...
 
 
-def load_bundled_fonts(fonts_dir: Path | None = None) -> list[str]:
+def load_bundled_fonts(fonts_dir: Path | None = None) -> list[str]:   [REF:56-78] → andaime/error_handler.py:139 log → andaime/qt/fonts.py:51 _fonts_dir
     ...
 
 
-def apply_font(qapp: QApplication, font: FontSpec | None) -> None:
+def apply_font(qapp: QApplication, font: FontSpec | None) -> None:   [REF:81-96] → andaime/qt/fonts.py:56 load_bundled_fonts → andaime/qt/theme.py:42 set_font_family
     ...
 
 
@@ -1953,11 +1938,11 @@ FONTSOURCE_API = "https://api.fontsource.org/v1/fonts"
 FONTSOURCE_CDN = "https://cdn.jsdelivr.net/fontsource/fonts"
 
 
-def _fontsource_id(family: str) -> str:
+def _fontsource_id(family: str) -> str:   [REF:108-110]
     ...
 
 
-def download_font(
+def download_font(   [REF:113-157]
     family_id: str,
     output_dir: Path,
     subsets: Iterable[str] = ("latin",),
@@ -1967,7 +1952,7 @@ def download_font(
     ...
 
 
-def download_bundled_font(
+def download_bundled_font(   [REF:160-170] → andaime/qt/fonts.py:108 _fontsource_id → andaime/qt/fonts.py:113 download_font → andaime/qt/fonts.py:51 _fonts_dir
     font: FontSpec,
     output_dir: Path | None = None,
     subsets: Iterable[str] = ("latin",),
@@ -1977,7 +1962,7 @@ def download_bundled_font(
     ...
 
 
-def download_font_by_name(
+def download_font_by_name(   [REF:173-183] → andaime/qt/fonts.py:108 _fontsource_id → andaime/qt/fonts.py:113 download_font
     family: str,
     output_dir: Path,
     subsets: Iterable[str] = ("latin",),
@@ -1989,7 +1974,6 @@ def download_font_by_name(
 ```
 
 ## andaime/qt/shortcuts.py
-_symbols: 8_ 
 ```python
 """Gerenciador de atalhos de teclado — andaime.qt.
 
@@ -2006,7 +1990,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QLineEdit, QPushButton, QWidget
 
 
-class ShortcutManager(QObject):
+class ShortcutManager(QObject):   [REF:16-151]
     """
     Registro de atalhos com dicas visuais (peek via Ctrl+Shift).
 
@@ -2021,10 +2005,10 @@ class ShortcutManager(QObject):
         _peek_callbacks: Callbacks notificados quando o peek muda de estado
     """
 
-    def __init__(self, window: QWidget) -> None:
+    def __init__(self, window: QWidget) -> None:   [REF:31-43]
         ...
 
-    def bind(
+    def bind(   [REF:45-65]
         self,
         key: str,
         handler: Callable[[], None],
@@ -2032,24 +2016,23 @@ class ShortcutManager(QObject):
     ) -> None:
         ...
 
-    def register_hint(self, widget: QWidget, key: str) -> None:
+    def register_hint(self, widget: QWidget, key: str) -> None:   [REF:67-79]
         ...
 
-    def on_peek(self, callback: Callable[[bool], None]) -> None:
+    def on_peek(self, callback: Callable[[bool], None]) -> None:   [REF:81-91]
         ...
 
-    def reset_peek(self) -> None:
+    def reset_peek(self) -> None:   [REF:93-95] → andaime/qt/shortcuts.py:125 _set_peek
         ...
 
-    def eventFilter(self, obj, event):
+    def eventFilter(self, obj, event):   [REF:97-123] → andaime/qt/shortcuts.py:125 _set_peek
         ...
 
-    def _set_peek(self, show: bool) -> None:
+    def _set_peek(self, show: bool) -> None:   [REF:125-151]
         ...
 ```
 
 ## andaime/text.py
-_symbols: 5_ 
 ```python
 """
 Text normalization utilities.
@@ -2058,19 +2041,19 @@ Text normalization utilities.
 import unicodedata
 
 
-def _strip_accents(text: str) -> str:
+def _strip_accents(text: str) -> str:   [REF:8-13]
     ...
 
 
-def normalize_text(text: str) -> str:
+def normalize_text(text: str) -> str:   [REF:16-19]
     ...
 
 
-def to_upper_normalized(text: str) -> str:
+def to_upper_normalized(text: str) -> str:   [REF:22-25]
     ...
 
 
-def scored_search_dict(
+def scored_search_dict(   [REF:28-43] → andaime/text.py:46 scored_search
     results: dict[str, str],
     query: str,
     limit: int = 0,
@@ -2078,7 +2061,7 @@ def scored_search_dict(
     ...
 
 
-def scored_search(
+def scored_search(   [REF:46-68] → andaime/text.py:16 normalize_text
     results: list[dict],
     query: str,
     field: str,
@@ -2088,7 +2071,6 @@ def scored_search(
 ```
 
 ## andaime/qt/toggle_group.py
-_symbols: 6_ 
 ```python
 """Grupo de botões tipo "toggle" (controle segmentado) — andaime.qt.
 
@@ -2110,12 +2092,12 @@ from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
 from andaime.qt.theme import make_button
 
 
-class ToggleGroup(QWidget):
+class ToggleGroup(QWidget):   [REF:21-81]
     """Controle segmentado: uma opção ativa por vez."""
 
     selection_changed = Signal(str)  # chave da opção ativa
 
-    def __init__(
+    def __init__(   [REF:26-56] → andaime/qt/toggle_group.py:64 _apply → andaime/qt/theme.py:709 make_button
         self,
         parent: QWidget | None = None,
         options: Optional[list[tuple[str, str]]] = None,
@@ -2124,21 +2106,20 @@ class ToggleGroup(QWidget):
     ) -> None:
         ...
 
-    def _on_click(self, key: str) -> None:
+    def _on_click(self, key: str) -> None:   [REF:58-62] → andaime/qt/toggle_group.py:72 set_selected
         ...
 
-    def _apply(self) -> None:
+    def _apply(self) -> None:   [REF:64-70]
         ...
 
-    def set_selected(self, key: Optional[str], emit: bool = False) -> None:
+    def set_selected(self, key: Optional[str], emit: bool = False) -> None:   [REF:72-78] → andaime/qt/toggle_group.py:64 _apply
         ...
 
-    def selected(self) -> Optional[str]:
+    def selected(self) -> Optional[str]:   [REF:80-81]
         ...
 ```
 
 ## andaime/qt/splash.py
-_symbols: 6_ 
 ```python
 """Splash screen shown during app startup."""
 
@@ -2162,7 +2143,7 @@ _ACCENT = QColor("#89b4fa")
 _W, _H = 480, 280
 
 
-class SplashScreen:
+class SplashScreen:   [REF:23-119]
     """Branded splash screen shown while the app initializes.
 
     Usage::
@@ -2175,29 +2156,28 @@ class SplashScreen:
         splash.finish(window)
     """
 
-    def __init__(
+    def __init__(   [REF:36-43]
         self,
         app_name: str,
         icon_path: Path | None = None,
     ) -> None:
         ...
 
-    def show(self) -> None:
+    def show(self) -> None:   [REF:45-50]
         ...
 
-    def finish(self, window: "QWidget") -> None:
+    def finish(self, window: "QWidget") -> None:   [REF:52-56]
         ...
 
-    def close(self) -> None:
+    def close(self) -> None:   [REF:58-62]
         ...
 
     # ------------------------------------------------------------------
-    def _make_pixmap(self) -> QPixmap:
+    def _make_pixmap(self) -> QPixmap:   [REF:65-119]
         ...
 ```
 
 ## andaime/qt/db_runner.py
-_symbols: 5_ 
 ```python
 """
 DbAsyncRunner — executa ops num worker e devolve o resultado na thread Qt principal.
@@ -2219,7 +2199,7 @@ from PySide6.QtCore import QObject, Signal
 from andaime.db_worker import DatabaseWorker
 
 
-class DbAsyncRunner(QObject):
+class DbAsyncRunner(QObject):   [REF:21-77]
     """
     Ponte entre o DatabaseWorker (stdlib) e a thread principal do Qt.
 
@@ -2230,10 +2210,10 @@ class DbAsyncRunner(QObject):
     # Carrega um thunk () -> None para ser executado na thread principal.
     _dispatch = Signal(object)
 
-    def __init__(self, worker: DatabaseWorker, parent: QObject | None = None) -> None:
+    def __init__(self, worker: DatabaseWorker, parent: QObject | None = None) -> None:   [REF:32-36]
         ...
 
-    def run(
+    def run(   [REF:38-72] → andaime/error_handler.py:139 log → andaime/db_worker.py:49 submit
         self,
         fn: Callable[..., Any],
         *args: Any,
@@ -2243,11 +2223,11 @@ class DbAsyncRunner(QObject):
         ...
 
     @staticmethod
-    def _run_thunk(thunk: Callable[[], None]) -> None:
+    def _run_thunk(thunk: Callable[[], None]) -> None:   [REF:75-77]
         ...
 
 
-def run_or_sync(
+def run_or_sync(   [REF:80-102] → andaime/qt/db_runner.py:38 run
     runner: DbAsyncRunner | None,
     fn: Callable[..., Any],
     *,
@@ -2258,7 +2238,6 @@ def run_or_sync(
 ```
 
 ## andaime/db_worker.py
-_symbols: 5_ 
 ```python
 """
 Database worker — executa operações de banco numa única thread dedicada.
@@ -2283,7 +2262,7 @@ from typing import Any, Callable, TypeVar
 _R = TypeVar("_R")
 
 
-class DatabaseWorker:
+class DatabaseWorker:   [REF:24-85]
     """
     Executa operações de banco numa thread dedicada e serializada.
 
@@ -2291,22 +2270,21 @@ class DatabaseWorker:
         db: A instância do banco (tipicamente um BaseDatabase).
     """
 
-    def __init__(self, db: Any) -> None:
+    def __init__(self, db: Any) -> None:   [REF:32-42]
         ...
 
     @property
-    def db(self) -> Any:
+    def db(self) -> Any:   [REF:45-47]
         ...
 
-    def submit(self, fn: Callable[..., _R], *args: Any, **kwargs: Any) -> Future[_R]:
+    def submit(self, fn: Callable[..., _R], *args: Any, **kwargs: Any) -> Future[_R]:   [REF:49-71]
         ...
 
-    def shutdown(self, wait: bool = True) -> None:
+    def shutdown(self, wait: bool = True) -> None:   [REF:73-85]
         ...
 ```
 
 ## andaime/qt/bottom_bar.py
-_symbols: 5_ 
 ```python
 """Barra inferior genérica (andaime.qt).
 
@@ -2336,10 +2314,10 @@ _COL_CENTER = 8
 _COL_RIGHT = 2
 
 
-class BottomBar(QFrame):
+class BottomBar(QFrame):   [REF:29-127]
     """Barra inferior: quatro colunas (esquerda / status / centro / direita)."""
 
-    def __init__(
+    def __init__(   [REF:32-96] → andaime/qt/top_bar.py:44 coerce_actions
         self,
         parent: QFrame | None = None,
         actions: Optional[list] = None,
@@ -2357,18 +2335,17 @@ class BottomBar(QFrame):
     ) -> None:
         ...
 
-    def add_action(self, action) -> None:
+    def add_action(self, action) -> None:   [REF:98-105] → andaime/qt/top_bar.py:44 coerce_actions
         ...
 
-    def action_button(self, text: str) -> QPushButton | None:
+    def action_button(self, text: str) -> QPushButton | None:   [REF:107-123]
         ...
 
-    def add_right_widget(self, widget: QWidget) -> None:
+    def add_right_widget(self, widget: QWidget) -> None:   [REF:125-127]
         ...
 ```
 
 ## andaime/__init__.py
-_symbols: 4_ 
 ```python
 """
 andaime — shared toolkit for PySide6 desktop apps
@@ -2382,19 +2359,19 @@ _app_folder: str = ""
 _app_root: Path | None = None
 
 
-def init(app_name: str, app_folder: str, root: Path) -> None:
+def init(app_name: str, app_folder: str, root: Path) -> None:   [REF:13-22] → andaime/error_handler.py:71 init
     ...
 
 
-def get_app_name() -> str:
+def get_app_name() -> str:   [REF:25-26]
     ...
 
 
-def get_app_folder() -> str:
+def get_app_folder() -> str:   [REF:29-30]
     ...
 
 
-def get_root_directory() -> Path:
+def get_root_directory() -> Path:   [REF:33-38]
     ...
 
 
@@ -2403,7 +2380,6 @@ from andaime.qt.splash import SplashScreen
 ```
 
 ## andaime/qt/status_line.py
-_symbols: 4_ 
 ```python
 """Linha de status transiente (andaime.qt).
 
@@ -2421,17 +2397,17 @@ from andaime.qt.fs import reveal_path
 from andaime.qt.theme import colors
 
 
-class StatusLine(QLabel):
+class StatusLine(QLabel):   [REF:17-59]
     """Linha de status transiente (texto centralizado, cor/acao opcional).
 
     Quando ``set_status`` recebe ``path``, o texto fica sublinhado e o cursor
     vira "mão"; um clique emite ``reveal_path(path)``.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None):   [REF:24-28]
         ...
 
-    def set_status(
+    def set_status(   [REF:30-54]
         self,
         text: str,
         color: str | None = None,
@@ -2439,12 +2415,11 @@ class StatusLine(QLabel):
     ) -> None:
         ...
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event):   [REF:56-59] → andaime/qt/fs.py:13 reveal_path
         ...
 ```
 
 ## andaime/shutdown.py
-_symbols: 4_ 
 ```python
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -2470,24 +2445,23 @@ Handler = Callable[[], None]
 _cleanup_handlers: List[Tuple[Handler, str]] = []
 
 
-def register_cleanup(handler: Handler, name: Optional[str] = None) -> None:
+def register_cleanup(handler: Handler, name: Optional[str] = None) -> None:   [REF:25-37] → andaime/error_handler.py:139 log
     ...
 
 
-def _run_cleanup_handlers() -> None:
+def _run_cleanup_handlers() -> None:   [REF:40-56]
     ...
 
 
-def setup_shutdown_handlers() -> None:
+def setup_shutdown_handlers() -> None:   [REF:59-73] → andaime/error_handler.py:139 log
     ...
 
 
-def _signal_handler(signum: int, _frame: Any) -> None:
+def _signal_handler(signum: int, _frame: Any) -> None:   [REF:76-83] → andaime/error_handler.py:139 log
     ...
 ```
 
 ## andaime/qt/fs.py
-_symbols: 2_ 
 ```python
 """Utilitários de sistema de arquivos para a interface Qt (andaime)."""
 
@@ -2501,17 +2475,15 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 
 
-def reveal_path(path: str) -> None:
+def reveal_path(path: str) -> None:   [REF:13-34]
     ...
 
 
-def relative_path(root: str | Path | None, path: str | Path) -> str:
+def relative_path(root: str | Path | None, path: str | Path) -> str:   [REF:37-49]
     ...
-
 ```
 
 ## andaime/brasao.py
-_symbols: 2_ 
 ```python
 """Helpers de renderização do brasão (andaime).
 
@@ -2532,7 +2504,7 @@ from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 
-def render_brasao_silhouette(
+def render_brasao_silhouette(   [REF:20-56]
     svg_path: str | Path,
     height: int,
     supersample: int = 1,
@@ -2540,12 +2512,11 @@ def render_brasao_silhouette(
     ...
 
 
-def recolor_brasao(silhouette: QPixmap, ink: str) -> QPixmap:
+def recolor_brasao(silhouette: QPixmap, ink: str) -> QPixmap:   [REF:59-76]
     ...
 ```
 
 ## andaime/win32.py
-_symbols: 1_ 
 ```python
 """Windows taskbar identity helpers."""
 
@@ -2555,10 +2526,10 @@ import sys
 from pathlib import Path
 
 
-def register_taskbar_identity(
+def register_taskbar_identity(   [REF:9-50]
     app_id: str, display_name: str, icon_path: Path | str | None = None
 ) -> None:
     ...
 ```
 
-<!-- 28/28 files, ~15051 tokens -->
+<!-- 28/28 files, ~17960 tokens -->
