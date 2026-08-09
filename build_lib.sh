@@ -246,11 +246,9 @@ prepare_wine_python() {
 
     echo -e "\n${YELLOW}Preparing Wine Python dependencies...${NC}"
 
-    wine "$WINE_PYTHON" -m pip install --upgrade \
-        pyside6_essentials==6.7.3 pypdfium2 pypdf holidays typing_extensions \
-        openpyxl pywin32 \
-        google-api-python-client google-auth-oauthlib google-auth rapidfuzz \
-        reportlab svglib python-dotenv requests \
+    local req_file="$ANDAIME_REPO/requirements.txt"
+
+    wine "$WINE_PYTHON" -m pip install --upgrade -r "$req_file" \
         > /dev/null 2>&1 && \
     wine "$WINE_PYTHON" -m pip install --no-deps img2pdf \
         > /dev/null 2>&1

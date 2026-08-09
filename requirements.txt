@@ -1,0 +1,24 @@
+# Shared
+pyside6_essentials==6.7.3
+pypdfium2>=4.0
+pypdf>=4.0.0
+pillow>=10.0.0
+holidays>=0.38
+typing_extensions>=4.8.0
+
+# BAP
+openpyxl>=3.1.0
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.2.0
+google-auth>=2.30.0
+rapidfuzz>=3.6.0
+pywin32>=306
+
+# Emissor
+reportlab>=4.0.0
+svglib>=1.6.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# img2pdf must install without deps (pulls in a conflicting pypdf)
+# Handled separately in build_lib.sh
