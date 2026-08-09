@@ -69,6 +69,11 @@ for app_key in "${APP_ORDER[@]}"; do
         continue
     fi
 
+    if ! git -C "$src" rev-parse --git-dir >/dev/null 2>&1; then
+        echo -e "  ${YELLOW}!${NC} $display: not a git repo, skipping"
+        continue
+    fi
+
     cd "$src"
     if ! git diff --quiet || ! git diff --cached --quiet; then
         git add -A
