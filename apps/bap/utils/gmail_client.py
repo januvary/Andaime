@@ -299,7 +299,7 @@ def upload_drive_file(
     service = drive_service_from_credentials(creds)
     file_metadata = {"name": name, "mimeType": "application/pdf"}
     if parent_id:
-        file_metadata["parents"] = parent_id
+        file_metadata["parents"] = [parent_id]
     media = MediaFileUpload(path, mimetype="application/pdf", resumable=True)
     try:
         file = (

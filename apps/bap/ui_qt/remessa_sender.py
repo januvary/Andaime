@@ -417,7 +417,6 @@ class RemessaSender(QObject):
             "rascunhos depois.",
             confirm_label="Marcar como enviada",
             cancel_label="Cancelar",
-            modal=True,
             no_close_button=True,
             min_width=420,
         ):

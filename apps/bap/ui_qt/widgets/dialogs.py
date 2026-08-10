@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Diálogos no padrão do RAC (QDialog custom com HeadingLabel + botões flat/primary)."""
+"""Diálogos no padrão compartilhado (andaime.qt.dialogs).
+
+Primitivas compartilhadas (RAC/Emissor/SS-54) vêm de ``andaime.qt.dialogs``;
+apenas o seletor de lista ``pick_from_list`` é específico da SS-54.
+"""
+
+from __future__ import annotations
 
 from typing import Callable, Sequence
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLineEdit,
-    QTextEdit,
     QDialog,
-    QPushButton,
+    QWidget,
+    QLabel,
     QListWidget,
     QListWidgetItem,
-    QLabel,
 )
 
-from bap.ui_qt.widgets.buttons import make_button
+from andaime.qt.dialogs import (  # noqa: F401
+    confirm_dialog,
+    make_dialog_button_row,
+    open_input_dialog,
+    scaffold_dialog,
+)
 
 
 def pick_from_list(
@@ -71,7 +77,7 @@ def pick_from_list(
 
     list_widget.itemDoubleClicked.connect(_on_dbl)
     btn_row, [cancel, selecionar] = make_dialog_button_row([
-        ("Cancelar", "flat-fill"),
+        ("Cancelar", "flat"),
         (confirm_label, "primary"),
     ])
     cancel.clicked.connect(dlg.reject)
@@ -81,122 +87,3 @@ def pick_from_list(
     if dlg.exec() != QDialog.DialogCode.Accepted:
         return None
     return selected["data"]
-
-
-def confirm_dialog(
-    parent: QWidget,
-    title: str,
-    message: str,
-    confirm_label: str = "Confirmar",
-    cancel_label: str = "Cancelar",
-    *,
-    danger: bool = False,
-    cancel_role: str = "flat-fill",
-    modal: bool = False,
-    min_width: int = 380,
-    no_close_button: bool = False,
-) -> bool:
-    """Diálogo de confirmação de dois botões. Retorna ``True`` se aceito.
-
-    ``danger`` usa o papel vermelho no botão de confirmação; ``cancel_role``
-    define o papel do cancelar; ``modal=True`` bloqueia a aplicação.
-    ``no_close_button=True`` desabilita o botão X e a tecla Esc.
-    """
-    from PySide6.QtCore import Qt as _Qt
-
-    dlg, layout = scaffold_dialog(parent, title, min_width=min_width)
-    dlg.setMinimumHeight(160)
-    if modal:
-        dlg.setWindowModality(_Qt.WindowModality.ApplicationModal)
-    if no_close_button:
-        dlg.setWindowFlags(
-            _Qt.WindowType.Dialog
-            | _Qt.WindowType.CustomizeWindowHint
-            | _Qt.WindowType.WindowTitleHint
-        )
-
-    label = QLabel(message)
-    label.setWordWrap(True)
-    layout.addWidget(label)
-
-    confirm_role = "danger" if danger else "primary"
-    btn_row, [cancel, confirm] = make_dialog_button_row([
-        (cancel_label, cancel_role),
-        (confirm_label, confirm_role),
-    ])
-    cancel.clicked.connect(dlg.reject)
-    confirm.clicked.connect(dlg.accept)
-    layout.addLayout(btn_row)
-
-    return dlg.exec() == QDialog.DialogCode.Accepted
-
-
-def scaffold_dialog(parent, title, spacing=12, min_width=340):
-    dlg = QDialog(parent)
-    dlg.setWindowTitle(title)
-    dlg.setMinimumWidth(min_width)
-    layout = QVBoxLayout(dlg)
-    layout.setSpacing(spacing)
-    return dlg, layout
-
-
-def make_dialog_button_row(
-    actions: list[tuple[str, str]]
-) -> tuple[QHBoxLayout, list[QPushButton]]:
-    btn_row = QHBoxLayout()
-    btn_row.addStretch()
-    buttons = []
-    for label, role in actions:
-        btn = make_button(label, role)
-        btn_row.addWidget(btn)
-        buttons.append(btn)
-    return btn_row, buttons
-
-
-def open_input_dialog(
-    parent: QWidget,
-    title: str,
-    placeholder: str = "",
-    initial: str = "",
-    confirm_label: str = "Confirmar",
-    multiline: bool = False,
-    min_height: int = 220,
-) -> str | None:
-    dlg, layout = scaffold_dialog(parent, title, spacing=16)
-    layout.addSpacing(4)
-
-    if multiline:
-        input_field = QTextEdit()
-        input_field.setPlaceholderText(placeholder)
-        input_field.setPlainText(initial)
-        input_field.setAcceptRichText(False)
-        dlg.setMinimumHeight(min_height)
-        layout.addWidget(input_field, stretch=1)
-    else:
-        input_field = QLineEdit()
-        input_field.setPlaceholderText(placeholder)
-        input_field.setText(initial)
-        if initial:
-            input_field.selectAll()
-        layout.addWidget(input_field)
-
-    btn_row, [cancel, confirm] = make_dialog_button_row([
-        ("Cancelar", "flat-fill"),
-        (confirm_label, "primary"),
-    ])
-    cancel.clicked.connect(dlg.reject)
-    layout.addLayout(btn_row)
-
-    if not multiline and isinstance(input_field, QLineEdit):
-        input_field.returnPressed.connect(dlg.accept)
-    confirm.clicked.connect(dlg.accept)
-
-    if dlg.exec() != QDialog.DialogCode.Accepted:
-        return None
-    if multiline and isinstance(input_field, QTextEdit):
-        text = input_field.toPlainText().strip()
-    elif isinstance(input_field, QLineEdit):
-        text = input_field.text().strip()
-    else:
-        text = ""
-    return text or None
