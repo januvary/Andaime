@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QWidget,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 
 if TYPE_CHECKING:
     from rac.gui.main_window import MainWindow
@@ -33,6 +33,7 @@ from rac.gui.widgets import (
     BasePage,
     export_with_fallback,
     confirm_past_malote,
+    MaloteDecision,
     _load_material_icon,
 )
 from rac.gui.constants import (
@@ -51,6 +52,17 @@ from rac.gui.styles import get_theme
 
 
 from rac import __version__
+
+
+class _ClickableLabel(QLabel):
+    """QLabel that emits ``clicked`` on left-click."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class StartPage(BasePage):
@@ -164,11 +176,11 @@ class StartPage(BasePage):
         
         # USAFA name
         usafa_name = self._config().get("usafa_name") or "Sua unidade de saúde"
-        self._usafa_label = QLabel(usafa_name)
+        self._usafa_label = _ClickableLabel(usafa_name)
         self._usafa_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._usafa_label.setStyleSheet(f"{style_base} font-size: {self.USAFA_FONT_SIZE};")
         self._usafa_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._usafa_label.mousePressEvent = lambda event: self._on_usafa_click(event)  # type: ignore[method-assign]
+        self._usafa_label.clicked.connect(self._on_usafa_click)
         layout.addWidget(self._usafa_label)
 
     def _build_columns(self, layout: QVBoxLayout):
@@ -227,7 +239,7 @@ class StartPage(BasePage):
             _, label = SHORTCUT_LABELS[key]
             icon_name = RIGHT_BUTTON_SYMBOLS[key]
             shortcut_btn = IconButtonBase(label, icon_align="right")
-            shortcut_btn.setProperty("btnrole", "flat")
+            shortcut_btn.setProperty("class", "flat")
             shortcut_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             shortcut_btn.setFixedHeight(54)
             shortcut_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -286,9 +298,11 @@ class StartPage(BasePage):
             return
         malote = self._state().get_active_malote()
         if malote and is_malote_past(malote):
-            if not confirm_past_malote(
-                self.window(), malote, on_change=self._malote_label.open_dialog
-            ):
+            decision = confirm_past_malote(self.window(), malote)
+            if decision is MaloteDecision.CHANGE:
+                self._malote_label.open_dialog()
+                return
+            if decision is not MaloteDecision.CONTINUE:
                 return
         self._mw.navigate_to("entry", tipo=tipo_key)
 
@@ -390,7 +404,7 @@ class StartPage(BasePage):
         self._usafa_label.setStyleSheet(f"{style_base} font-size: {self.USAFA_FONT_SIZE};")
         self._version_label.setStyleSheet(f"{style_base} font-size: 7pt;")
     
-    def _on_usafa_click(self, event):
+    def _on_usafa_click(self):
         """Handle click on USAFA name to edit it."""
         from main import _show_usafa_dialog
 

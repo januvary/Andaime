@@ -53,6 +53,11 @@ _ULTIMA_RECEITA_WIDTH = 65
 _MAX_RECEITAS = 3
 _RECEITA_DATA_WIDTH = 105
 
+# Receitas tipo C (30d, controle especial): exibem "Controlado" no campo de
+# data mas não persistem nenhuma data.
+_TIPO_C = "tipo_c"
+_CONTROLADO_TEXT = "Controlado"
+
 
 class OptionsSection(QtSection):
     """Painel de opções do recibo."""
@@ -284,9 +289,21 @@ class OptionsSection(QtSection):
         self.app.refresh_dirty_state()
 
     def _update_vencimento(self, entry: dict[str, Any]) -> None:
-        """Atualiza o rótulo de vencimento da linha (data + tipo)."""
-        data = entry["date"].text().strip()
+        """Atualiza o rótulo de vencimento da linha (data + tipo).
+
+        Receitas tipo C (30d, controle especial) exibem "Controlado" no
+        campo de data e não têm vencimento; ao sair de tipo C, a data volta
+        a ficar em branco (nada é persistido para a linha).
+        """
         tipo = entry["tipo"].currentData() or ""
+        if tipo == _TIPO_C:
+            if entry["date"].text().strip() != _CONTROLADO_TEXT:
+                self._set_edit_text(entry["date"], _CONTROLADO_TEXT)
+            entry["venc"].setText("")
+            return
+        if entry["date"].text().strip() == _CONTROLADO_TEXT:
+            self._set_edit_text(entry["date"], "")
+        data = entry["date"].text().strip()
         if not data or not tipo:
             entry["venc"].setText("—")
             return
@@ -376,12 +393,23 @@ class OptionsSection(QtSection):
     def get_receitas(self) -> list[dict[str, str]]:
         """Retorna as receitas preenchidas (compactas, data + tipo)."""
         receitas = []
-        for e in self._receita_rows:
-            data = e["date"].text().strip()
-            tipo = e["tipo"].currentData() or ""
-            if data or tipo:
-                receitas.append({"data": data, "tipo": tipo})
+        for entry in self._receita_rows:
+            value = self._row_value(entry)
+            if value is not None:
+                receitas.append(value)
         return receitas
+
+    def _row_value(self, entry: dict[str, Any]) -> dict[str, str] | None:
+        """Valor persistido de uma linha de receita (``None`` se vazia).
+
+        Linhas tipo C exibem "Controlado" na UI mas não guardam data: a
+        coluna de data é descartada para não persistir o texto de exibição.
+        """
+        tipo = entry["tipo"].currentData() or ""
+        data = "" if tipo == _TIPO_C else entry["date"].text().strip()
+        if not data and not tipo:
+            return None
+        return {"data": data, "tipo": tipo}
 
     def get_periodicidade(self) -> str:
         """Retorna a periodicidade digitada."""

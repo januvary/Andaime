@@ -203,10 +203,7 @@ class ImportAnalysis:
     @property
     def default_col_spec(self) -> str:
         """Pre-fill string from per-sheet detection, e.g. '1-A; 3-B'."""
-        parts = []
-        for i, s in enumerate(self.sheets, start=1):
-            if s.patient_col:
-                parts.append(f"{i}-{s.patient_col}")
+        parts = [f"{i}-{s.patient_col}" for i, s in enumerate(self.sheets, start=1) if s.patient_col]
         return "; ".join(parts)
 
     @property
@@ -221,10 +218,7 @@ class ImportAnalysis:
     @property
     def default_malote_spec(self) -> str:
         """Pre-fill 'tab-PAC-MED' spec from detection, e.g. '1-A-B; 2-A-B'."""
-        parts = []
-        for i, s in enumerate(self.sheets, start=1):
-            if s.is_malote_tab and s.med_col:
-                parts.append(f"{i}-{s.patient_col}-{s.med_col}")
+        parts = [f"{i}-{s.patient_col}-{s.med_col}" for i, s in enumerate(self.sheets, start=1) if s.is_malote_tab and s.med_col]
         return "; ".join(parts)
 
 

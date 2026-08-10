@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
@@ -40,7 +41,12 @@ from rac.gui.styles import colors, filter_table_rows, data_view_style_qss, faded
 from rac.export.excel_exporter import ExcelExporter
 from andaime.qt.table import table_batch_populate
 
-_CANCELLED = object()
+
+class DatePickerResult(Enum):
+    """Outcome of the stats date-picker dialog."""
+
+    CANCELLED = "cancelled"
+    RESET = "reset"
 
 
 class _TipoCard(QWidget):
@@ -146,9 +152,9 @@ class StatsPage(BasePage):
 
     def _pick_date(self, side: str):
         result = _show_date_picker(self, side)
-        if result is _CANCELLED:
+        if result is DatePickerResult.CANCELLED:
             return
-        date_str = result if isinstance(result, str) else None
+        date_str = None if result is DatePickerResult.RESET else result
         if side == "from":
             self._date_from = date_str
             if self._date_to and self._date_from and self._date_from > self._date_to:
@@ -337,10 +343,10 @@ class StatsPage(BasePage):
 
 
 
-_RESET_SENTINEL = object()
 
 
-def _show_date_picker(parent_page: StatsPage, side: str) -> object:
+
+def _show_date_picker(parent_page: StatsPage, side: str) -> DatePickerResult | str:
     mw = parent_page._mw
     parent = parent_page.window()
 
@@ -353,7 +359,7 @@ def _show_date_picker(parent_page: StatsPage, side: str) -> object:
 
     reset_item = QTreeWidgetItem()
     reset_item.setText(0, reset_label)
-    reset_item.setData(0, Qt.ItemDataRole.UserRole, _RESET_SENTINEL)
+    reset_item.setData(0, Qt.ItemDataRole.UserRole, DatePickerResult.RESET)
 
     malotes = mw.services.malote.all()
     populate_malote_tree(
@@ -363,15 +369,15 @@ def _show_date_picker(parent_page: StatsPage, side: str) -> object:
         prepend_items=[reset_item],
     )
 
-    selected_date: list[str | None | object] = [None]
+    selected: list[DatePickerResult | str] = [DatePickerResult.CANCELLED]
 
     def on_item_clicked(item, _column):
         data = item.data(0, Qt.ItemDataRole.UserRole)
-        if data is _RESET_SENTINEL:
-            selected_date[0] = None
+        if data is DatePickerResult.RESET:
+            selected[0] = DatePickerResult.RESET
             dlg.accept()
         elif isinstance(data, str):
-            selected_date[0] = data
+            selected[0] = data
             dlg.accept()
         else:
             item.setExpanded(not item.isExpanded())
@@ -386,6 +392,5 @@ def _show_date_picker(parent_page: StatsPage, side: str) -> object:
     close_btn.clicked.connect(dlg.reject)
     layout.addLayout(btn_row)
 
-    dlg.rejected.connect(lambda: selected_date.__setitem__(0, _CANCELLED))
     dlg.exec()
-    return selected_date[0]
+    return selected[0]

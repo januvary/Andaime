@@ -11,6 +11,8 @@ Malote mode is selected automatically when a malote structure is detected.
 
 from __future__ import annotations
 
+from itertools import starmap
+
 from PySide6.QtCore import QThread, QTimer, Signal, Qt
 from PySide6.QtWidgets import (
     QComboBox,
@@ -477,7 +479,7 @@ class ImportPlanilhaDialog(QDialog):
 
     def _do_pac_import(self) -> None:
         if self._names:
-            self._on_import(list(self._names))
+            self._on_import(self._names.copy())
         self.accept()
 
     def closeEvent(self, event):
@@ -489,7 +491,7 @@ class ImportPlanilhaDialog(QDialog):
 def _button_row(actions: list[tuple[str, str]]):
     btn_row = QHBoxLayout()
     btn_row.addStretch()
-    buttons = [make_button(label, role) for label, role in actions]
+    buttons = list(starmap(make_button, actions))
     for btn in buttons:
         btn_row.addWidget(btn)
     return btn_row, buttons

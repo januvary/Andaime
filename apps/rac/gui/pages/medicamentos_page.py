@@ -63,20 +63,12 @@ class MedicamentosPage(BasePage):
             db_delete=self._mw.services.item_catalog.delete,
             delete_in_use_msg="Não é possível excluir: medicamento em uso",
             count_label=self._heading,
-            tertiary_header="Estoque",
-            tertiary_value=lambda item: str(item.quantidade) if hasattr(item, 'quantidade') else "0",
-            tertiary_edit_callback=self._edit_estoque,
-            quaternary_header="Unid.",
-            quaternary_value=lambda item: item.unidade if hasattr(item, 'unidade') else "un",
-            quaternary_edit_callback=self._edit_unidade,
             secondary_header="CIDs",
             secondary_value=_format_cids,
             secondary_edit_callback=self._edit_cids,
             secondary_tooltip=_full_cids,
             extra_context_items=[
                 ("Editar CIDs", self._edit_cids),
-                ("Editar Estoque", self._edit_estoque),
-                ("Editar Unidade", self._edit_unidade),
             ],
         )
         layout.addWidget(self._crud.widget, 1)
@@ -117,7 +109,7 @@ class MedicamentosPage(BasePage):
         exporter = ExcelExporter(self._require_db())
         export_with_fallback(
             self,
-            lambda: exporter.export_catalog(),
+            exporter.export_catalog,
             "Nenhum medicamento para exportar",
         )
 

@@ -60,7 +60,7 @@ class Header(QWidget):
         self._theme_btn = ThemeToggleButton(self)
         self._theme_btn.theme_toggled.connect(lambda d: self.theme_toggled.emit(d))
 
-        self._novo_btn = make_button("Novo", "flat")
+        self._novo_btn = make_button("Novo", "flat-fill")
         self._novo_btn.clicked.connect(lambda: self.novo_requested.emit())
 
         self._search = SearchableComboBox(
@@ -119,7 +119,7 @@ class Header(QWidget):
 
         self._cycle_btn = CycleButton(
             label="1",
-            role="flat",
+            role="flat-fill",
             modulus=10,
             base=1,
             initial=1,

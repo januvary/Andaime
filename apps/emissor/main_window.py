@@ -34,6 +34,7 @@ from emissor.utils.file_utils import open_file
 from andaime.qt import DbAsyncRunner, StatusLine
 from emissor.utils.paths import resolve_archive_dir
 from emissor.utils.security import sanitize_filename
+from emissor.ui_qt.pdf_list_dialog import PdfPickerDialog, collect_patient_pdfs
 from andaime.shutdown import register_cleanup
 
 from PySide6.QtGui import QCloseEvent
@@ -639,7 +640,7 @@ class QtApp(QMainWindow):
         self._generate_pdf_workflow(auto_print=False)
 
     def handle_open_pdf(self) -> None:
-        """Abre o último PDF gerado para o paciente selecionado."""
+        """Abre um seletor com todos os PDFs do paciente selecionado."""
         patient = self.state_manager.get_selected_patient()
         if not patient:
             ErrorHandler.handle_error(
@@ -647,38 +648,6 @@ class QtApp(QMainWindow):
                 context=ErrorContext.VALIDATION,
             )
             return
-
-        # Preferir o último PDF gerado nesta sessão (reflete o estado atual do
-        # formulário). Só confia no cache se for do paciente selecionado; caso
-        # contrário cai para o caminho derivado do banco.
-        last_pdf = self.state_manager.get_last_generated_pdf_for_patient(patient.id)
-        if last_pdf:
-            pdf_path = Path(last_pdf)
-            if pdf_path.exists():
-                try:
-                    open_file(str(pdf_path))
-                except Exception as e:
-                    ErrorHandler.handle_file_error(e, str(pdf_path), "open")
-                return
-            self.set_status(
-                f"Recibo não encontrado: {pdf_path.name}",
-                color="status_warning",
-            )
-            return
-
-        patient_id = patient.id
-        retiradas = self.db.get_retiradas_by_patient(patient_id)
-        if not retiradas:
-            ErrorHandler.handle_error(
-                Exception("Nenhum PDF encontrado para este paciente"),
-                context=ErrorContext.FILE_IO,
-            )
-            return
-
-        ultima_retirada = retiradas[0]
-
-        patient_nome = patient.nome
-        safe_patient_name = sanitize_filename(patient_nome)
 
         save_root = self.state_manager.get_save_root_path()
         if save_root is None:
@@ -691,25 +660,40 @@ class QtApp(QMainWindow):
             )
             return
 
-        patient_tipo = patient.tipo
         archive_dir = resolve_archive_dir(
             save_root,
-            patient_tipo,
-            safe_patient_name,
+            patient.tipo,
+            sanitize_filename(patient.nome),
             create=False,
         )
-        pdf_path = archive_dir / f"{ultima_retirada.data_retirada}.pdf"
-
-        if pdf_path.exists():
-            try:
-                open_file(str(pdf_path))
-            except Exception as e:
-                ErrorHandler.handle_file_error(e, str(pdf_path), "open")
-        else:
+        if not archive_dir.is_dir():
             self.set_status(
-                f"Recibo não encontrado: {pdf_path.name}",
+                "Nenhum PDF encontrado para este paciente",
                 color="status_warning",
             )
+            return
+
+        grupos = collect_patient_pdfs(archive_dir)
+        if not grupos:
+            self.set_status(
+                "Nenhum PDF encontrado para este paciente",
+                color="status_warning",
+            )
+            return
+
+        palette = get_palette(self._current_dark_mode)
+
+        retirada_date: str | None = None
+        if getattr(self, "dates_section", None) is not None:
+            try:
+                _, retirada_date = self.dates_section.get_data_retirada_for_pdf()
+            except Exception:
+                retirada_date = None
+
+        dialog = PdfPickerDialog(
+            self, patient.nome, grupos, palette, highlight_date=retirada_date
+        )
+        dialog.exec()
 
     def handle_scan(self) -> None:
         """Digitaliza documento e salva em RECIBOS ASSINADOS do paciente.

@@ -7,7 +7,7 @@ a secondary column (e.g. "Último registro") via a value accessor.
 """
 
 import sqlite3
-from typing import Callable
+from typing import Callable, Generic, TypeVar
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -27,6 +27,8 @@ from rac.gui.widgets.base_page import make_tab
 from rac.gui.styles import data_view_style_qss, filter_table_rows
 from andaime.qt.table import table_batch_populate
 
+_ItemT = TypeVar("_ItemT")
+
 
 class SortableTableWidgetItem(QTableWidgetItem):
     """QTableWidgetItem that sorts by an explicit sort_key when provided,
@@ -45,25 +47,26 @@ class SortableTableWidgetItem(QTableWidgetItem):
         return self.text() < other.text()
 
 
-class CrudList:
+class CrudList(Generic[_ItemT]):
     def __init__(self, page, title, search_placeholder,
                  entity_label, entity_label_lower,
-                 db_get_all, db_create, db_update, db_delete,
+                 db_get_all: Callable[[], list[_ItemT]],
+                 db_create, db_update, db_delete,
                  delete_in_use_msg, count_label: QLabel | None = None,
                  secondary_header: str | None = None,
-                 secondary_value: Callable[[object], str] | None = None,
-                 secondary_sort_key: Callable[[object], object] | None = None,
+                 secondary_value: Callable[[_ItemT], str] | None = None,
+                 secondary_sort_key: Callable[[_ItemT], object] | None = None,
                  secondary_edit_callback: Callable[[int], None] | None = None,
                  tertiary_header: str | None = None,
-                 tertiary_value: Callable[[object], str] | None = None,
+                 tertiary_value: Callable[[_ItemT], str] | None = None,
                  tertiary_edit_callback: Callable[[int], None] | None = None,
                  quaternary_header: str | None = None,
-                 quaternary_value: Callable[[object], str] | None = None,
+                 quaternary_value: Callable[[_ItemT], str] | None = None,
                  quaternary_edit_callback: Callable[[int], None] | None = None,
                  sortable: bool = True,
                  on_activate: Callable[[object], None] | None = None,
                  extra_context_items: list[tuple[str, Callable[[int], None]]] | None = None,
-                 secondary_tooltip: Callable[[object], str] | None = None):
+                 secondary_tooltip: Callable[[_ItemT], str] | None = None):
         self._page = page
         self._title = title
         self._entity_label = entity_label
@@ -88,7 +91,7 @@ class CrudList:
         self._on_activate = on_activate
         self._extra_context_items = extra_context_items or []
         self._secondary_tooltip = secondary_tooltip
-        self._all_items: list = []
+        self._all_items: list[_ItemT] = []
         self.list_widget: QTableWidget
         self.search: QLineEdit
         self.widget: QWidget
@@ -164,9 +167,7 @@ class CrudList:
             header.setVisible(False)
             header.setStretchLastSection(True)
 
-        self.list_widget.cellDoubleClicked.connect(
-            lambda row, col: self._activate_row(row, col)
-        )
+        self.list_widget.cellDoubleClicked.connect(self._activate_row)
         self._page.register_keyboard_nav(
             self.list_widget, self.search, lambda _: self._activate_current()
         )

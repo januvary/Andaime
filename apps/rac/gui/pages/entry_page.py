@@ -36,6 +36,7 @@ from rac.gui.widgets import (
     BasePage,
     delete_registro_with_undo,
     confirm_past_malote,
+    MaloteDecision,
 )
 from rac.gui.widgets.buttons import make_icon_button
 from rac.models import Registro
@@ -428,15 +429,15 @@ class EntryPage(BasePage):
             return
         self._load_items_for_context(paciente_id)
 
-    def _on_waiting_docs_toggled(self, checked: bool):
+    def _on_waiting_docs_toggled(self, _checked: bool):
         pass
 
     def _on_malote_changed(self):
         malote = self._state().get_active_malote()
         if malote and is_malote_past(malote):
-            confirm_past_malote(
-                self.window(), malote, on_change=self._malote_label.open_dialog
-            )
+            decision = confirm_past_malote(self.window(), malote)
+            if decision is MaloteDecision.CHANGE:
+                self._malote_label.open_dialog()
 
     def _resolve_current_patient(self) -> int | None:
         pid = self._paciente_combo.current_data()

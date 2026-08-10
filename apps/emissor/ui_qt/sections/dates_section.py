@@ -258,7 +258,7 @@ class DatesSection(QtSection):
             self._retirada_registered_label.setText("")
 
     def refresh_ultima_retirada(self) -> None:
-        """Carrega a última retirada (ativa) do paciente selecionado."""
+        """Carrega a última retirada ativa do paciente selecionado."""
         if (
             self._ultima_retirada_label is None
             or self._proxima_marcada_label is None
@@ -274,29 +274,24 @@ class DatesSection(QtSection):
             self._set_label(self._proxima_marcada_label, "")
             return
         self.app.db_runner.run(
-            self.app.db.get_retiradas_by_patient,
+            self.app.db.get_ultima_retirada_ativa,
             patient_id,
             on_done=self._apply_ultima_retirada,
         )
 
-    def _apply_ultima_retirada(self, retiradas: Any) -> None:
+    def _apply_ultima_retirada(self, ultima: Any) -> None:
         """
         Popula os labels com a última retirada ativa (thread principal).
 
         Args:
-            retiradas: Lista de retiradas do paciente (mais recentes primeiro).
+            ultima: Retirada retornada por db.get_ultima_retirada_ativa,
+                    ou None se não houver retirada ativa.
         """
         if (
             self._ultima_retirada_label is None
             or self._proxima_marcada_label is None
         ):
             return
-        ultima = None
-        if retiradas:
-            for r in retiradas:
-                if getattr(r, "substituida", 0) == 0:
-                    ultima = r
-                    break
         if ultima is None:
             self._set_label(self._ultima_retirada_label, "—")
             self._set_label(self._proxima_marcada_label, "")

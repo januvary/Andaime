@@ -81,8 +81,9 @@ class RegistroListPage(ListPage):
                 title = f"Registros ({len(registros)})"
             columns = [
                 ListColumn("Data", QHeaderView.ResizeMode.ResizeToContents, _CENTER),
-                ListColumn("Paciente", QHeaderView.ResizeMode.ResizeToContents, _LEFT),
+                ListColumn("Paciente", QHeaderView.ResizeMode.Stretch, _LEFT),
                 ListColumn("Medicamentos", QHeaderView.ResizeMode.Stretch, _LEFT),
+                ListColumn("Tipo", QHeaderView.ResizeMode.ResizeToContents, _CENTER),
             ]
             rows = self._registro_rows(db, registros)
 
@@ -115,18 +116,19 @@ class RegistroListPage(ListPage):
     @staticmethod
     def _registro_rows(db, registros: list[Registro]) -> list[ListRow]:
         items_map = db.get_items_by_registros([r.id for r in registros])
-        rows = []
-        for reg in registros:
-            rows.append(ListRow(
+        return [
+            ListRow(
                 cells=[
                     format_malote_date(Malote(date=reg.malote_date or "")),
                     reg.paciente_name or "",
                     format_registro_meds(items_map.get(reg.id, [])),
+                    TIPO_LABELS.get(reg.tipo, reg.tipo),
                 ],
                 data=(reg.paciente_id, reg.id),
-                sort_keys=[reg.malote_date or "", None, None],
-            ))
-        return rows
+                sort_keys=[reg.malote_date or "", None, None, None],
+            )
+            for reg in registros
+        ]
 
     @staticmethod
     def _item_rows(

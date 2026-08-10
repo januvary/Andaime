@@ -47,8 +47,10 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(8)
 
-        self.db: SS54Database | None = None
-        self.config: ConfigManager | None = None
+        # Ambos já vêm prontos do ``App`` (criados em ``App.__init__``), então
+        # são definidos aqui e nunca ficam ``None``.
+        self.db: SS54Database = self._app.db
+        self.config: ConfigManager = self._app.config
         self._db_worker = None
         self._db_runner = None
         self._selected_patient_id: int | None = None
@@ -162,8 +164,6 @@ class MainWindow(QMainWindow):
         self.navigate_to("document")
 
     def _on_enviar_remessa(self) -> None:
-        if self.db is None or self.config is None:
-            return
         lote = self._remessa_page.remessa_active() or self._resolve_active_lote()
         if lote is None:
             self._info("Nenhuma remessa ativa.")
@@ -183,9 +183,6 @@ class MainWindow(QMainWindow):
 
     def _open_config_dialog(self) -> None:
         """Abre o diálogo de configuração (menu de contexto da barra superior)."""
-        if self.config is None:
-            return
-
         from bap.ui_qt.widgets.config_dialog import QtConfigDialog
 
         cfg = self.config.get_all()
@@ -207,12 +204,9 @@ class MainWindow(QMainWindow):
 
     def _export_planilha(self, parent) -> None:
         """Exporta os processos para uma planilha Excel (botão do diálogo)."""
-        if self.db is None:
-            return
-
         from PySide6.QtWidgets import QFileDialog
 
-        cfg = self.config.get_all() if self.config else None
+        cfg = self.config.get_all()
         default_dir = resolve_arquivos_root(cfg)
         default_path = str(default_dir / "processos_export.xlsx")
 
@@ -247,8 +241,7 @@ class MainWindow(QMainWindow):
     def _on_theme_toggled(self, dark_mode: bool):
         theme = "dark" if dark_mode else "light"
         set_theme(theme)
-        if self.config:
-            self.config.set("theme", theme)
+        self.config.set("theme", theme)
         qt_app = QApplication.instance()
         if qt_app is None:
             return
@@ -268,9 +261,6 @@ class MainWindow(QMainWindow):
         )
 
     def init_backend(self):
-        self.config = self._app.config
-        self.db = self._app.db
-
         from andaime.db_worker import DatabaseWorker
         from andaime.qt.db_runner import DbAsyncRunner
         self._db_worker = DatabaseWorker(self.db)
@@ -279,10 +269,8 @@ class MainWindow(QMainWindow):
         def _load():
             from bap.utils.remessa_service import ensure_remessas
 
-            if self.config is None or self.db is None:
-                return {}, None
             root = resolve_arquivos_root(self.config.get_all())
-            ensure_remessas(self.db, root) if self.db else {}
+            ensure_remessas(self.db, root)
             pacientes = self.db.get_all_pacientes()
             active = self._resolve_active_lote()
             return pacientes, active
@@ -291,13 +279,11 @@ class MainWindow(QMainWindow):
 
     def _on_backend_loaded(self, result) -> None:
         pacientes, active = result
-        if self.db is None:
-            return
         self._init_remessa_with(active)
         if not isinstance(pacientes, list):
             pacientes = []
-        self._header.set_patientes(pacientes)
-        self._header.set_descricoes(self.db.get_distinct_descricoes() if self.db else [])
+        self._header.set_patients(pacientes)
+        self._header.set_descricoes(self.db.get_distinct_descricoes())
         self._remessa_page.refresh(force=False)
         self._sender.scan_drs_messages()
         self.set_status("")
@@ -333,8 +319,6 @@ class MainWindow(QMainWindow):
         Saved items carry only ``arquivo_id``; the PDF bytes are fetched from
         the DB on demand for thumbnail/preview and never retained in RAM.
         """
-        if self.db is None:
-            return None
         aid = item.arquivo_id
         if aid is None:
             return None
@@ -344,7 +328,7 @@ class MainWindow(QMainWindow):
         # ``set_active`` atualiza o rótulo antes de emitir, então o lote
         # anterior não pode ser lido do rótulo; comparamos com o conhecido.
         prev = self._active_lote
-        if self.config and lote is not None:
+        if lote is not None:
             current_last = self.config.get("last_lote_id")
             if current_last != lote.id:
                 self.config.set("last_lote_id", lote.id)
@@ -368,8 +352,6 @@ class MainWindow(QMainWindow):
         self._sync_grid()
 
     def _current_processo(self) -> Processo | None:
-        if self.db is None or self.config is None:
-            return None
         if not self._header.nome:
             return None
         lote = self._remessa_label.active() or self._resolve_active_lote()
@@ -497,10 +479,6 @@ class MainWindow(QMainWindow):
             self.db.add_status_observation(processo.id, observacoes)
 
     def _on_salvar(self) -> None:
-        if self.db is None or self.config is None:
-            self.set_status("Backend não inicializado.", "status_error")
-            return
-
         # Bloqueia Save concorrente (botão + Ctrl+S) e enquanto a grade monta
         # tiles: evita duplicar processo ou disparar com a grade pela metade.
         if self._grid.is_busy():
@@ -772,8 +750,6 @@ class MainWindow(QMainWindow):
             self._stack.setCurrentWidget(self._doc_page)
 
     def open_processo(self, processo_id: int) -> None:
-        if self.db is None:
-            return
         processo = self.db.get_processo_by_id(processo_id)
         if processo is None:
             return
@@ -841,7 +817,7 @@ class MainWindow(QMainWindow):
 
     def shutdown_backend(self):
         active = self._remessa_label.active()
-        if self.config and active is not None:
+        if active is not None:
             self.config.set("last_lote_id", active.id)
         # wait=False: o worker pode estar em I/O de rede (scan DRS / Gmail);
         # aguardar congelaria a janela. O close do banco roda no atexit.

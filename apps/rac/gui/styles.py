@@ -6,7 +6,7 @@ Global QSS stylesheet — native Qt feel with theme support.
 As cores neutras são mapeadas a partir da paleta compartilhada
 (``andaime.qt.theme``: rampa + níveis), mantendo o motor de tema
 centralizado. Cores de identidade do RAC (azul de acento, vermelhos
-destrutivos, sistema ``btnrole``, tipos de medicamento) continuam
+    destrutivos, sistema ``class``, tipos de medicamento) continuam
 definidas localmente neste módulo.
 """
 
@@ -47,7 +47,7 @@ def _rac_palette(shared: dict) -> dict:
 
     Os valores vêm de ``andaime.qt.theme`` (rama + níveis), centralizando o
     motor de tema. Cores de identidade do RAC (azul de acento, vermelhos
-    destrutivos, sistema ``btnrole``, tipos de medicamento) continuam locais.
+    destrutivos, sistema ``class``, tipos de medicamento) continuam locais.
     """
     return {key: shared[_RAC_TO_SHARED.get(key, key)] for key in _RAC_KEYS}
 
@@ -59,6 +59,8 @@ DARK_COLORS = _rac_palette(_SHARED_DARK)
 def set_theme(theme: str) -> None:
     global _current_theme
     _current_theme = theme
+    from andaime.qt.theme import set_theme as _shared_set_theme
+    _shared_set_theme(theme)
 
 
 def get_theme() -> str:
@@ -68,6 +70,8 @@ def get_theme() -> str:
 def toggle_theme() -> str:
     global _current_theme
     _current_theme = "light" if _current_theme == "dark" else "dark"
+    from andaime.qt.theme import set_theme as _shared_set_theme
+    _shared_set_theme(_current_theme)
     from andaime.config import ConfigManager
 
     ConfigManager().set("theme", _current_theme)
@@ -231,55 +235,71 @@ QPushButton:pressed {{
     background-color: {c["bg_pressed"]};
 }}
 
-QPushButton[btnrole="primary"], QPushButton[btnrole="positive"] {{
+QPushButton[class="primary"], QPushButton[class="positive"] {{
     background-color: {c["bg_card"]};
     border: 1px solid {c["border_light"]};
     border-radius: 6px;
     color: {c["text_primary"]};
 }}
-QPushButton[btnrole="primary"]:hover, QPushButton[btnrole="positive"]:hover {{
+QPushButton[class="primary"]:hover, QPushButton[class="positive"]:hover {{
     background-color: {c["bg_card_alt"]};
     border-color: {c["border"]};
 }}
-QPushButton[btnrole="primary"]:pressed, QPushButton[btnrole="positive"]:pressed {{
+QPushButton[class="primary"]:pressed, QPushButton[class="positive"]:pressed {{
     background-color: {c["bg_hover"]};
 }}
 
-QPushButton[btnrole="negative"] {{
+QPushButton[class="negative"] {{
     background-color: transparent;
     border-color: #FCA5A5;
     color: #DC2626;
 }}
-QPushButton[btnrole="negative"]:hover {{
+QPushButton[class="negative"]:hover {{
     background-color: #FEF2F2;
     border-color: #F87171;
 }}
-QPushButton[btnrole="negative"]:pressed {{
+QPushButton[class="negative"]:pressed {{
     background-color: #FEE2E2;
 }}
 
-QPushButton[btnrole="flat"] {{
+QPushButton[class="flat"] {{
     background-color: transparent;
     border: none;
     padding: 4px 12px;
     color: {c["text_secondary"]};
 }}
-QPushButton[btnrole="flat"]:hover {{
+QPushButton[class="flat"]:hover {{
     background-color: {c["bg_hover"]};
     color: {c["text_primary"]};
 }}
-QPushButton[btnrole="flat"]:pressed {{
+QPushButton[class="flat"]:pressed {{
     background-color: {c["bg_pressed"]};
 }}
 
-QPushButton[btnrole="destructive"] {{
+QPushButton[class="destructive"] {{
     background-color: #EF4444;
     border-color: #EF4444;
     color: white;
 }}
-QPushButton[btnrole="destructive"]:hover {{
+QPushButton[class="destructive"]:hover {{
     background-color: #DC2626;
     border-color: #DC2626;
+}}
+
+QPushButton[class="stepper"] {{
+    border: 1px solid {c["border"]};
+    padding: 0;
+}}
+QPushButton[class="stepper"]:hover {{
+    background-color: {c["bg_hover"]};
+}}
+QPushButton[class="stepper"]:pressed {{
+    background-color: {c["bg_pressed"]};
+}}
+QPushButton[class="stepper"]:disabled {{
+    color: {c["text_secondary"]};
+    border-color: {c["border_light"]};
+    background-color: transparent;
 }}
 
 /* -- Inputs / ComboBox -- */
@@ -388,7 +408,7 @@ QCheckBox::indicator:checked {{
 }}
 
 /* -- Remove Button -- */
-QPushButton[btnrole="remove"] {{
+QPushButton[class="remove"] {{
     background-color: transparent;
     border: none;
     color: {c["text_secondary"]};
@@ -396,7 +416,7 @@ QPushButton[btnrole="remove"] {{
     font-size: 16px;
     border-radius: 4px;
 }}
-QPushButton[btnrole="remove"]:hover {{
+QPushButton[class="remove"]:hover {{
     background-color: #FEF2F2;
     color: #EF4444;
 }}
@@ -450,7 +470,7 @@ QLabel[malotelabel="true"] {{
 }}
 
 /* -- Theme Toggle Button -- */
-QPushButton[btnrole="theme-toggle"] {{
+QPushButton[class="theme-toggle"] {{
     border: none;
     font-size: 16px;
     padding: 0;

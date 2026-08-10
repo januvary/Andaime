@@ -93,7 +93,7 @@ class ListPage(BasePage):
         if title_parts:
             c = colors()
             for text, align in title_parts:
-                if align == Qt.AlignmentFlag.AlignLeft or align == Qt.AlignmentFlag.AlignCenter:
+                if align in (Qt.AlignmentFlag.AlignLeft, Qt.AlignmentFlag.AlignCenter):
                     title_lbl = HeadingLabel(text)
                     title_lbl.setAlignment(align)
                     title_lbl.setWordWrap(True)

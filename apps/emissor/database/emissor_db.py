@@ -501,8 +501,8 @@ class EmissorDatabase(BaseDatabase):
         cur.execute(
             "SELECT id FROM retiradas "
             "WHERE patient_id = ? AND id != ? AND substituida = 0 "
-            "AND data_proxima_retirada >= ?",
-            (patient_id, new_retirada_id, data_retirada),
+            "AND data_retirada <= ? AND data_proxima_retirada >= ?",
+            (patient_id, new_retirada_id, data_retirada, data_retirada),
         )
         candidate_ids = [row["id"] for row in cur.fetchall()]
 
@@ -604,9 +604,11 @@ class EmissorDatabase(BaseDatabase):
                         ),
                     )
 
-                self._mark_superseded_retiradas(
-                    cur, patient_id, retirada_id, data_retirada, items
-                )
+                # Só marca como substituída em retiradas novas (edição não substitui).
+                if not existing:
+                    self._mark_superseded_retiradas(
+                        cur, patient_id, retirada_id, data_retirada, items
+                    )
 
                 self._commit()
             return cast(int | None, retirada_id)
@@ -707,6 +709,20 @@ class EmissorDatabase(BaseDatabase):
                 (patient_id,),
             )
             return [Retirada.from_row(r) for r in cur.fetchall()]
+
+    @db_op("read")
+    def get_ultima_retirada_ativa(self, patient_id: int) -> Retirada | None:
+        """Retorna a última retirada ativa (não substituída) do paciente."""
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT id, patient_id, patient_name, data_retirada, data_proxima_retirada, substituida, created_at, updated_at "
+                "FROM retiradas "
+                "WHERE patient_id = ? AND substituida = 0 "
+                "ORDER BY data_retirada DESC LIMIT 1",
+                (patient_id,),
+            )
+            row = cur.fetchone()
+            return Retirada.from_row(row) if row else None
 
     @db_op("read")
     def get_all_retiradas(self) -> list[Retirada]:

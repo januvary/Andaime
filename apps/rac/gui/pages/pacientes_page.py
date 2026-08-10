@@ -55,8 +55,8 @@ class PacientesPage(BasePage):
             delete_in_use_msg="Não é possível excluir: paciente com registros",
             count_label=self._heading,
             secondary_header="Último registro",
-            secondary_value=lambda p: _format_last_registro(p) if isinstance(p, Paciente) else "",
-            secondary_sort_key=lambda p: p.last_registro_date or "" if hasattr(p, 'last_registro_date') else "",
+            secondary_value=_format_last_registro,
+            secondary_sort_key=lambda p: p.last_registro_date or "",
             on_activate=lambda pid: self._mw.navigate_to("patient", paciente_id=pid, return_to="pacientes"),
             extra_context_items=[
                 ("Ver paciente", self._view_paciente),
@@ -74,7 +74,7 @@ class PacientesPage(BasePage):
         exporter = ExcelExporter(self._require_db())
         export_with_fallback(
             self,
-            lambda: exporter.export_pacientes(),
+            exporter.export_pacientes,
             "Nenhum paciente para exportar",
         )
 

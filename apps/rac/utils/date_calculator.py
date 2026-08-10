@@ -10,6 +10,7 @@ Arrival:  Thursday of the week following the original Monday,
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import TYPE_CHECKING
@@ -80,15 +81,11 @@ def get_candidate_days_after_arrival(arrival: date) -> list[date]:
 
 def resolve_arrival_from_malote(malote) -> date | None:
     if malote.arrival_date:
-        try:
+        with suppress(ValueError, TypeError):
             return date.fromisoformat(malote.arrival_date)
-        except (ValueError, TypeError):
-            pass
     if malote.date:
-        try:
+        with suppress(ValueError, TypeError):
             return calculate_arrival_date(date.fromisoformat(malote.date))
-        except (ValueError, TypeError):
-            pass
     return None
 
 
@@ -201,13 +198,11 @@ def _get_malote_arrivals_near(
         for a in db.get_malote_arrivals_between(
             search_start.isoformat(), search_end.isoformat()
         ):
-            try:
+            with suppress(ValueError, TypeError):
                 d = date.fromisoformat(a)
                 if d not in seen:
                     seen.add(d)
                     candidates.append(d)
-            except (ValueError, TypeError):
-                pass
 
     earliest_db = min(candidates) if candidates else runs_out
     theory_start = min(runs_out - timedelta(days=14), earliest_db - timedelta(days=7))

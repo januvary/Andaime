@@ -9,20 +9,22 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QDialog,
     QMenu,
     QTreeWidget,
     QTreeWidgetItem,
 )
 from PySide6.QtCore import Qt, Signal
 
-from rac.gui.widgets.buttons import make_button
-from rac.gui.widgets.labels import HeadingLabel
 from rac.gui.widgets.base_page import make_hbox
 from rac.gui.widgets.toast import show_toast
-from rac.gui.widgets.dialogs import confirm_delete_dialog, make_dialog_button_row, open_input_dialog, scaffold_dialog
+from rac.gui.widgets.dialogs import (
+    confirm_delete_dialog,
+    open_input_dialog,
+    scaffold_dialog,
+    prompt_dialog,
+    make_dialog_toolbar,
+    KEEP_OPEN,
+)
 from rac.gui.styles import colors
 
 def _activate_malote_if_changed(mw, malote):
@@ -100,15 +102,8 @@ def _show_malote_dialog(label: MaloteLabel):
     parent = label.window()
     mw = label._mw
 
-    dlg = QDialog(parent)
-    dlg.setWindowTitle("Malotes")
-    dlg.setMinimumWidth(340)
+    dlg, layout = scaffold_dialog(parent, "Malotes", spacing=12, min_width=340)
     dlg.setMinimumHeight(350)
-
-    layout = QVBoxLayout(dlg)
-    layout.setSpacing(12)
-
-    layout.addWidget(HeadingLabel("Malotes"))
 
     tree = _make_tree()
     tree.setColumnCount(2)
@@ -220,30 +215,21 @@ def _show_malote_dialog(label: MaloteLabel):
     tree.customContextMenuRequested.connect(_show_tree_menu)
     layout.addWidget(tree)
 
-    btn_row = QHBoxLayout()
-    new_m = make_button("Novo Malote", "flat")
-    new_m.setAutoDefault(False)
+    btn_row, [new_m, holidays_btn, close_m] = make_dialog_toolbar(
+        left=[("Novo Malote", "flat")],
+        right=[("Gerenciar feriados", "flat"), ("Fechar", "flat")],
+    )
 
     def _on_new_malote(_):
         _show_new_malote_dialog(label)
         _populate_tree()
 
     new_m.clicked.connect(_on_new_malote)
-    btn_row.addWidget(new_m)
-    btn_row.addStretch()
 
-    holidays_btn = make_button("Gerenciar feriados", "flat")
-    holidays_btn.setAutoDefault(False)
-    holidays_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    holidays_btn.setStyleSheet(holidays_btn.styleSheet() + "; font-size: 11px")
+    holidays_btn.setStyleSheet("font-size: 11px;")
     holidays_btn.clicked.connect(lambda: _show_holidays_dialog(parent))
-    btn_row.addWidget(holidays_btn)
 
-    btn_row.addStretch()
-    close_m = make_button("Fechar", "flat")
-    close_m.setAutoDefault(False)
     close_m.clicked.connect(dlg.reject)
-    btn_row.addWidget(close_m)
     layout.addLayout(btn_row)
 
     def _malote_key(m):
@@ -317,17 +303,10 @@ def _show_holidays_dialog(parent):
     _populate_tree()
     layout.addWidget(tree)
 
-    btn_row = QHBoxLayout()
-    add_btn = make_button("Adicionar", "primary")
-    add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    del_btn = make_button("Remover", "negative")
-    del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    close_btn = make_button("Fechar", "flat")
-    close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn_row.addWidget(add_btn)
-    btn_row.addWidget(del_btn)
-    btn_row.addStretch()
-    btn_row.addWidget(close_btn)
+    btn_row, [add_btn, del_btn, close_btn] = make_dialog_toolbar(
+        left=[("Adicionar", "primary"), ("Remover", "negative")],
+        right=[("Fechar", "flat")],
+    )
 
     def _on_add():
         result = open_input_dialog(
@@ -426,8 +405,6 @@ def _show_new_malote_dialog(label: MaloteLabel):
     parent = label.window()
     mw = label._mw
 
-    dlg, layout = scaffold_dialog(parent, "Novo Malote", spacing=16)
-
     date_input = DateLineEdit()
     date_input.setPlaceholderText("dd/mm ou dd/mm/aa")
     with suppress(ValueError, TypeError):
@@ -435,19 +412,12 @@ def _show_new_malote_dialog(label: MaloteLabel):
         suggested = next_send_date(existing)
         date_input.setText(suggested.strftime("%d/%m/%Y"))
     date_input.selectAll()
-    layout.addWidget(date_input)
 
-    btn_row, [cancel, create] = make_dialog_button_row([
-        ("Cancelar", "flat"),
-        ("Criar", "primary"),
-    ])
-    cancel.clicked.connect(dlg.reject)
-
-    def do_create():
-        parsed = parse_date(date_input.text())
+    def on_confirm(input_field: DateLineEdit):
+        parsed = parse_date(input_field.text())
         if not parsed:
             show_toast("Data inválida", "negative", label)
-            return
+            return KEEP_OPEN
         iso = parsed.isoformat()
         try:
             arrival_iso = None
@@ -456,7 +426,6 @@ def _show_new_malote_dialog(label: MaloteLabel):
                 arrival_iso = arrival.isoformat()
             malote = mw.services.malote.create(iso, arrival_date=arrival_iso)
             _activate_malote_if_changed(mw, malote)
-            dlg.accept()
             label.refresh()
             show_toast(
                 f"Malote criado: {format_malote_date(malote)}", "positive", label
@@ -464,12 +433,12 @@ def _show_new_malote_dialog(label: MaloteLabel):
         except Exception as e:
             ErrorHandler.handle_error(e, context=ErrorContext.BATCH, show_dialog=False)
             show_toast(f"Erro: {e}", "negative", label)
+            return KEEP_OPEN
 
-    create.clicked.connect(do_create)
-    layout.addLayout(btn_row)
-
-    date_input.returnPressed.connect(do_create)
-    dlg.exec()
+    prompt_dialog(
+        parent, "Novo Malote",
+        widget=date_input, confirm_label="Criar", on_confirm=on_confirm,
+    )
 
 
 def _show_date_dialog(label: MaloteLabel, malote, field: str, on_done):
@@ -494,9 +463,6 @@ def _show_date_dialog(label: MaloteLabel, malote, field: str, on_done):
                 send_dt = date_cls.fromisoformat(malote.date)
                 current_iso = calculate_arrival_date(send_dt).isoformat()
 
-    dlg, layout = scaffold_dialog(parent, title, spacing=16)
-    layout.addSpacing(4)
-
     date_input = DateLineEdit()
     date_input.setPlaceholderText("dd/mm ou dd/mm/aa")
     try:
@@ -508,23 +474,15 @@ def _show_date_dialog(label: MaloteLabel, malote, field: str, on_done):
         date_input.setText(current_iso or "")
     if date_input.text():
         date_input.selectAll()
-    layout.addWidget(date_input)
 
-    btn_row, [cancel, save] = make_dialog_button_row([
-        ("Cancelar", "flat"),
-        ("Salvar", "primary"),
-    ])
-    cancel.clicked.connect(dlg.reject)
-
-    def do_save():
-        parsed = parse_date(date_input.text())
+    def on_confirm(input_field: DateLineEdit):
+        parsed = parse_date(input_field.text())
         if not parsed:
             show_toast("Data inválida", "negative", label)
-            return
+            return KEEP_OPEN
         iso = parsed.isoformat()
         if iso == current_iso:
-            dlg.accept()
-            return
+            return None
         try:
             svc = mw.services.malote
             if field == "send":
@@ -542,15 +500,14 @@ def _show_date_dialog(label: MaloteLabel, malote, field: str, on_done):
             ):
                 mw.state.set_active_malote(malote)
             label.refresh()
-            dlg.accept()
             on_done()
             show_toast("Malote atualizado", "positive", label)
         except Exception as e:
             ErrorHandler.handle_error(e, context=ErrorContext.BATCH, show_dialog=False)
             show_toast(f"Erro: {e}", "negative", label)
+            return KEEP_OPEN
 
-    save.clicked.connect(do_save)
-    layout.addLayout(btn_row)
-
-    date_input.returnPressed.connect(do_save)
-    dlg.exec()
+    prompt_dialog(
+        parent, title,
+        widget=date_input, confirm_label="Salvar", on_confirm=on_confirm,
+    )

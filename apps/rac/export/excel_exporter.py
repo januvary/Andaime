@@ -103,7 +103,7 @@ class ExcelExporter:
 
     def _get_usafa_name(self) -> str:
         usafa_name = self._config.get("usafa_name")
-        return usafa_name if usafa_name else "Sua unidade de saúde"
+        return usafa_name or "Sua unidade de saúde"
 
     def _save_workbook(
         self, wb, base_filename, date_label="", log_label="Planilha exportada"
@@ -174,7 +174,7 @@ class ExcelExporter:
         for tipo, tab_name in TIPO_LABELS.items():
             ws = wb.create_sheet(title=tab_name)
 
-            ws["A1"] = f"{self._get_usafa_name()}"
+            ws["A1"] = self._get_usafa_name()
             ws.merge_cells("A1:B1")
             ws["A2"] = f"{TIPO_TITLES[tipo]} - {date_display}"
             ws.merge_cells("A2:B2")
@@ -448,7 +448,7 @@ class ExcelExporter:
 
         ws.column_dimensions["A"].width = 18
         ws.column_dimensions["B"].width = 40
-        for i, col_letter in enumerate("CDEFG"[: max(0, n_cols - 2)]):
+        for col_letter in "CDEFG"[: max(0, n_cols - 2)]:
             ws.column_dimensions[col_letter].width = 45
 
         _style_title_row(ws, 1, styles)

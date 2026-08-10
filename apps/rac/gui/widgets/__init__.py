@@ -25,7 +25,12 @@ from rac.gui.widgets.dialogs import (
     open_estoque_dialog,
     delete_registro_with_undo,
     make_dialog_button_row,
+    make_dialog_toolbar,
     confirm_past_malote,
+    MaloteDecision,
+    prompt_dialog,
+    make_message_label,
+    KEEP_OPEN,
 )
 from rac.gui.widgets.import_dialog import ImportPlanilhaDialog
 
@@ -59,6 +64,11 @@ __all__ = [
     "open_estoque_dialog",
     "delete_registro_with_undo",
     "make_dialog_button_row",
+    "make_dialog_toolbar",
     "confirm_past_malote",
+    "MaloteDecision",
+    "prompt_dialog",
+    "make_message_label",
+    "KEEP_OPEN",
     "ImportPlanilhaDialog",
 ]

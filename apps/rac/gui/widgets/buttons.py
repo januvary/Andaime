@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, Signal, QRect, QSize
 from PySide6.QtGui import QIcon, QPainter
 from pathlib import Path
 
+from andaime.qt.theme import make_button
 from rac.gui.styles import tipo_button_qss, toggle_theme, get_stylesheet, get_theme, faded_tipo_color
 from rac.gui.constants import TIPO_LABELS, TIPO_SYMBOLS, TIPO_HEX
 
@@ -26,13 +27,6 @@ def _load_material_icon(name: str, white: bool = False, color: str | None = None
     if icon_path.exists():
         return QIcon(str(icon_path))
     return QIcon()
-
-
-def make_button(text: str, role: str, parent=None) -> QPushButton:
-    btn = QPushButton(text, parent)
-    btn.setProperty("btnrole", role)
-    btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    return btn
 
 
 def make_icon_button(text: str, role: str, width: int = 40, font_size: int = 14) -> QPushButton:
@@ -120,7 +114,7 @@ class TipoButton(IconButtonBase):
 class ThemeToggleButton(QPushButton):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setProperty("btnrole", "theme-toggle")
+        self.setProperty("class", "theme-toggle")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(28, 28)
         self.clicked.connect(self._toggle)
