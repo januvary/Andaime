@@ -1,6 +1,7 @@
 """Application bootstrap for PySide6 desktop apps."""
 
 import sys
+from contextlib import suppress
 from pathlib import Path
 from typing import Generic, TypeVar, TYPE_CHECKING
 
@@ -103,19 +104,15 @@ class App(Generic[_D]):
         if getattr(sys, "frozen", False):
             return Path(sys.executable).parent
 
-        # Dev mode
-        try:
+        # Dev mode: derive from __main__ location
+        with suppress(ImportError, AttributeError):
             import __main__
-
-            main_file = getattr(__main__, "__file__", None)
+            main_file = __main__.__file__
             if main_file is not None:
                 p = Path(main_file).resolve()
-                # apps/<module>/__main__.py → install root
                 if p.parent.parent.name == "apps":
                     return p.parent.parent.parent
                 return p.parent
-        except (ImportError, AttributeError):
-            pass
 
         return Path.cwd()
 

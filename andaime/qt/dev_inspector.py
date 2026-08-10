@@ -26,9 +26,9 @@ import inspect
 import os
 import time
 import traceback
-from typing import Optional
+from typing import Optional, cast
 
-from PySide6.QtCore import QEvent, Qt, QObject
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QCursor, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -56,7 +56,7 @@ def _is_qt_class(cls: type) -> bool:
 
 
 def _build_chain(
-    widget: object,
+    widget: QObject,
 ) -> list[tuple[str, Optional[str], Optional[int], bool]]:
     """Sobe a hierarquia de widgets do leaf até a janela raiz.
 
@@ -65,13 +65,13 @@ def _build_chain(
     de biblioteca Qt (não de código da aplicação).
     """
     cadeia: list[tuple[str, Optional[str], Optional[int], bool]] = []
-    atual = widget
+    atual: QObject | None = widget
     while atual is not None:
         cls = type(atual)
         nome = f"{cls.__module__}.{cls.__name__}"
         arquivo, linha = _source_location(atual)
         cadeia.append((nome, arquivo, linha, _is_qt_class(cls)))
-        atual = atual.parent()  # type: ignore[union-attr]
+        atual = atual.parent()
     return cadeia
 
 
@@ -182,7 +182,7 @@ class _DevInspector(QObject):
 
     def __init__(self, app: QApplication, atalho: str = _DEFAULT_SHORTCUT) -> None:
         super().__init__()
-        combinacao = QKeySequence(atalho)[0]
+        combinacao = QKeySequence(atalho)[0]  # type: ignore[index]
         self._tecla = combinacao.key()
         self._mods = combinacao.keyboardModifiers()
         self._ultimo_disparo = 0.0
@@ -220,7 +220,7 @@ class _DevInspector(QObject):
             app = QApplication.instance()
             if app is None:
                 return
-            widget = app.widgetAt(QCursor.pos())
+            widget = QApplication.widgetAt(QCursor.pos())  # type: ignore[attr-defined]
             if widget is None:
                 _show_dialog("Nenhum widget", "O cursor está fora de qualquer widget.")
                 return
@@ -242,7 +242,7 @@ def install_dev_inspector(
     Returns:
         A instância do inspetor (também guardada em ``app._dev_inspector``).
     """
-    app = app or QApplication.instance()
+    app = app or cast("QApplication | None", QApplication.instance())
     if app is None:
         raise RuntimeError("QApplication precisa existir antes de install_dev_inspector")
     inst = _DevInspector(app, atalho)
@@ -264,7 +264,7 @@ def enable_if_env(
     """
     if not os.environ.get(var):
         return None
-    resolved = app or QApplication.instance()
+    resolved = app or cast("QApplication | None", QApplication.instance())
     if resolved is None:
         return None
     inst = install_dev_inspector(resolved, atalho)

@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
@@ -117,7 +117,7 @@ class NoElideDelegate(QStyledItemDelegate):
             else QPalette.ColorRole.Text
         )
         painter.setPen(opt.palette.color(role))
-        flags = int(opt.displayAlignment) | int(Qt.TextFlag.TextSingleLine)
+        flags = int(opt.displayAlignment) | Qt.TextFlag.TextSingleLine
         painter.drawText(rect, flags, opt.text)
         painter.restore()
 
@@ -188,10 +188,10 @@ class TableViewModel(QAbstractTableModel):
         self._id_getter = id_getter or (lambda row: getattr(row, "id", None))
         self._rows: list[Any] = []
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._rows)
 
-    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._columns)
 
     def headerData(
@@ -206,7 +206,7 @@ class TableViewModel(QAbstractTableModel):
         return None
 
     def data(
-        self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole
+        self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole
     ) -> Any:
         if not index.isValid():
             return None
@@ -224,7 +224,7 @@ class TableViewModel(QAbstractTableModel):
             return col.padding
         return None
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
         if not index.isValid():
             return Qt.ItemFlag.NoItemFlags
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
@@ -232,7 +232,7 @@ class TableViewModel(QAbstractTableModel):
     def set_rows(self, rows: list[Any]) -> None:
         """Replace all rows atomically (single view update pass)."""
         self.beginResetModel()
-        self._rows = list(rows)
+        self._rows = rows.copy()
         self.endResetModel()
 
     def row_id(self, row: int) -> Any:

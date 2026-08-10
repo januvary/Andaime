@@ -38,6 +38,15 @@ from andaime.qt.table import (
     configure_table_view,
     table_batch_populate,
 )
+from andaime.qt.dialogs import (  # noqa: F401
+    KEEP_OPEN,
+    confirm_dialog,
+    make_dialog_button_row,
+    make_dialog_toolbar,
+    make_message_label,
+    prompt_dialog,
+    scaffold_dialog,
+)
 
 __all__ = [
     "DARK",
@@ -69,4 +78,11 @@ __all__ = [
     "ColumnSpec",
     "TableViewModel",
     "configure_table_view",
+    "KEEP_OPEN",
+    "confirm_dialog",
+    "make_dialog_button_row",
+    "make_dialog_toolbar",
+    "make_message_label",
+    "prompt_dialog",
+    "scaffold_dialog",
 ]

@@ -117,7 +117,7 @@ class BottomBar(QFrame):
         """
         for layout in (self._action_layout, self._right_layout):
             for i in range(layout.count()):
-                widget = layout.itemAt(i).widget()
+                widget = layout.itemAt(i).widget()  # type: ignore[union-attr]
                 if isinstance(widget, QPushButton) and widget.text() == text:
                     return widget
         return None

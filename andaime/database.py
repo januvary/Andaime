@@ -88,7 +88,7 @@ def _is_network_path(path: str) -> bool:
         True se o caminho parecer estar num filesystem de rede.
         False se for local ou se não for possível determinar (default WAL).
     """
-    raw = str(path)
+    raw = path
 
     # Windows: UNC (\\server\share ou //server/share) é sempre rede.
     # Checamos o path bruto — Path.resolve() normaliza prefixes/drives.
@@ -108,17 +108,15 @@ def _is_network_path(path: str) -> bool:
                 pass
         return False
 
-    # Linux: usa /proc/mounts — match pelo número de dispositivo (st_dev),
-    # que é robusto a espaços/caracteres no caminho do mount.
-    if sys.platform.startswith("linux") and os.path.exists("/proc/mounts"):
+    if sys.platform.startswith("linux"):
         try:
             resolved = str(Path(raw).resolve())
-            target_dev = os.stat(resolved).st_dev
+            target_dev = Path(resolved).stat().st_dev
         except OSError:
             return False
         for _device, mount_point, fstype in _read_proc_mounts():
             try:
-                if os.stat(mount_point).st_dev == target_dev:
+                if Path(mount_point).stat().st_dev == target_dev:
                     if fstype in _NETWORK_FS_TYPES:
                         return True
             except OSError:

@@ -236,6 +236,9 @@ _SEMANTIC: dict[str, dict[str, str]] = {
         "toast_info_fg": "#7662af",
         "toast_info_bg": "#f3f3ff",
         "brasao_ink": "#342a2c",
+        "toggle_active": "#c2c9d4",
+        "toggle_active_hover": "#b6becb",
+        "toggle_active_text": "#1c2733",
     },
     "DARK": {
         "status_success": "#6bca86",
@@ -247,6 +250,9 @@ _SEMANTIC: dict[str, dict[str, str]] = {
         "toast_info_fg": "#bbd6ff",
         "toast_info_bg": "#2b2b49",
         "brasao_ink": "#ddf5e4",
+        "toggle_active": "#5b6270",
+        "toggle_active_hover": "#697080",
+        "toggle_active_text": "#f2f5f8",
     },
 }
 
@@ -565,7 +571,8 @@ def _build_qss(c: dict) -> str:
 
     QPushButton[class="flat"] {{
         background-color: transparent;
-        border: 1px solid {c["panel_border"]};
+        border: none;
+        padding: 8px 20px;
         color: {c["text_dim"]};
     }}
     QPushButton[class="flat"]:hover {{
@@ -577,6 +584,35 @@ def _build_qss(c: dict) -> str:
         background-color: {c["btn_flat_fill"]};
     }}
     QPushButton[class="flat-fill"]:hover {{ background-color: {c["btn_flat_fill_hover"]}; }}
+
+    QPushButton[class="negative"] {{
+        background-color: transparent;
+        border-color: #FCA5A5;
+        color: #DC2626;
+    }}
+    QPushButton[class="negative"]:hover {{
+        background-color: #FEF2F2;
+        border-color: #F87171;
+    }}
+    QPushButton[class="negative"]:pressed {{
+        background-color: #FEE2E2;
+    }}
+
+    QPushButton[class="stepper"] {{
+        border: 1px solid {c["input_border"]};
+        padding: 0;
+    }}
+    QPushButton[class="stepper"]:hover {{
+        background-color: {c["bg_hover"]};
+    }}
+    QPushButton[class="stepper"]:pressed {{
+        background-color: {c["bg_pressed"]};
+    }}
+    QPushButton[class="stepper"]:disabled {{
+        color: {c["text_dim"]};
+        border-color: {c["panel_border"]};
+        background-color: transparent;
+    }}
 
     QPushButton[class="icon"] {{
         background-color: transparent;
@@ -616,11 +652,21 @@ def _build_qss(c: dict) -> str:
         background-color: {c['panel_bg']};
     }}
     ToggleGroup QPushButton {{
+        background-color: transparent;
         border: none !important;
         border-top: 1px solid {c['panel_border']} !important;
         border-bottom: 1px solid {c['panel_border']} !important;
         border-left: 1px solid {c['panel_border']} !important;
         border-radius: 0 !important;
+        padding: 8px 20px !important;
+        color: {c['text_dim']};
+    }}
+    ToggleGroup QPushButton[class="tg-seg-active"] {{
+        background-color: {c['toggle_active']};
+        color: {c['toggle_active_text']};
+    }}
+    ToggleGroup QPushButton[class="tg-seg-active"]:hover {{
+        background-color: {c['toggle_active_hover']};
     }}
     ToggleGroup QPushButton[edge="first"] {{
         border-top-left-radius: 4px !important;
@@ -713,13 +759,13 @@ def make_button(
 ) -> QPushButton:
     """Cria QPushButton com papel visual padronizado.
 
-    Roles: "flat" (padrão, transparente + borda), "primary" (preenchimento
-    neutro), "icon" (sem borda), "flat-fill", "action-1".."action-5".
+    Roles: "flat" (padrão, transparente + sem borda), "primary" (preenchimento
+    neutro), "icon" (sem borda), "flat-fill", "action-1".."action-5",
+    "negative" (destrutivo), "stepper" (bordado, sem padding).
     """
     btn = QPushButton(text, parent)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    if role != "flat":
-        btn.setProperty("class", role)
+    btn.setProperty("class", role)
     return btn
 
 

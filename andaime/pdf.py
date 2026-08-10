@@ -62,7 +62,7 @@ def extract_page(src: Union[bytes, str, Path], page: int) -> bytes:
     if not reader.pages:
         raise ValueError("PDF vazio")
     w = PdfWriter()
-    w.add_page(reader.pages[page or 0])
+    w.add_page(reader.pages[page])
     buf = io.BytesIO()
     w.write(buf)
     return buf.getvalue()
@@ -97,7 +97,7 @@ def _clamped_layout_fun(imgwidthpx, imgheightpx, ndpi):
     preservando a proporção. Para imagens dentro do limite, o resultado é
     idêntico ao layout padrão.
     """
-    import img2pdf
+    import img2pdf  # type: ignore[import-untyped]
 
     pw, ph, iw, ih = img2pdf.default_layout_fun(imgwidthpx, imgheightpx, ndpi)
     scale = 1.0
@@ -112,18 +112,17 @@ def _clamped_layout_fun(imgwidthpx, imgheightpx, ndpi):
     return pw * scale, ph * scale, iw * scale, ih * scale
 
 
-def image_to_pdf(source: Union[bytes, str, Path], filetype: str = "") -> bytes:
+def image_to_pdf(source: Union[bytes, str, Path]) -> bytes:
     """Converte uma imagem em PDF de página única.
 
     Usa um layout que limita a página ao intervalo exigido pelo PDF
     (3–14400 unidades): imagens com DPI corrompido ou dimensões extremas
     são escaladas em vez de abortar a conversão.
     """
-    import img2pdf
+    import img2pdf  # type: ignore[import-untyped]
 
     if isinstance(source, (str, Path)):
-        with open(source, "rb") as f:
-            raw = f.read()
+        raw = Path(source).read_bytes()
     else:
         raw = source
     return img2pdf.convert(raw, layout_fun=_clamped_layout_fun)
@@ -138,7 +137,7 @@ def render_page_pil(
     src: Union[bytes, str, Path], page: int, scale: float = 2.0
 ):
     """Rasteriza uma página como ``PIL.Image`` (modo RGB)."""
-    import pypdfium2 as pdfium
+    import pypdfium2 as pdfium  # type: ignore[import-untyped]
     from PIL import Image  # noqa: F401  (garante dependência disponível)
 
     with _PDFIUM_LOCK:
@@ -146,11 +145,11 @@ def render_page_pil(
         try:
             if len(doc) == 0:
                 raise ValueError("PDF has no pages")
-            
-            page_index = page or 0
+
+            page_index = page
             if page_index >= len(doc):
                 page_index = 0
-            
+
             pil = doc[page_index].render(scale=scale).to_pil()
         finally:
             doc.close()
@@ -164,7 +163,7 @@ def render_pages_pil(
     src: Union[bytes, str, Path], scale: float = 2.0
 ):
     """Rasteriza todas as páginas como ``list[PIL.Image]`` (uma abertura)."""
-    import pypdfium2 as pdfium
+    import pypdfium2 as pdfium  # type: ignore[import-untyped]
     from PIL import Image  # noqa: F401
 
     out = []

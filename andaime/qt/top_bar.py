@@ -24,6 +24,7 @@ from typing import Any, Callable, Optional
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QLabel,
     QHBoxLayout,
     QSizePolicy,
@@ -93,6 +94,7 @@ class TopBar(QFrame):
         self._placeholder = placeholder
         self._search: SearchableComboBox | None = None
         self._theme_btn: ThemeToggleButton | None = None
+        self._search_slot: QWidget | None = None
         self._search_max_width = search_max_width
 
         self.setProperty("class", "panel-header")
@@ -133,9 +135,10 @@ class TopBar(QFrame):
 
         if show_search:
             self._search_slot = QWidget(self)
-            self._search_slot.setLayout(QHBoxLayout())
-            self._search_slot.layout().setContentsMargins(0, 0, 0, 0)
-            self._search_slot.layout().setSpacing(0)
+            search_layout = QHBoxLayout()
+            search_layout.setContentsMargins(0, 0, 0, 0)
+            search_layout.setSpacing(0)
+            self._search_slot.setLayout(search_layout)
             self._search_slot.setSizePolicy(
                 QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
             )
@@ -202,7 +205,7 @@ class TopBar(QFrame):
             )
         combo.setFixedHeight(34)
         combo.selection_changed.connect(self.selection_changed.emit)
-        self._search_slot.layout().addWidget(combo)
+        self._search_slot.layout().addWidget(combo)  # type: ignore[union-attr]
         self._search = combo
 
     def _clear_search_slot(self) -> None:
@@ -231,7 +234,7 @@ class TopBar(QFrame):
         lay = self._mid_layout
         while lay.count():
             item = lay.takeAt(0)
-            w = item.widget()
+            w = item.widget()  # type: ignore[union-attr]
             if w is not None:
                 w.setParent(None)
                 w.deleteLater()
@@ -273,11 +276,12 @@ class TopBar(QFrame):
         self._right_widget = widget
         # Reinsere centralizado (stretch dos dois lados)
         col3 = self._right_widget.parent()
-        if col3 is not None:
+        if isinstance(col3, QWidget):
             lay = col3.layout()
-            lay.insertStretch(0, 1)
-            lay.addWidget(self._right_widget)
-            lay.addStretch()
+            if isinstance(lay, QBoxLayout):
+                lay.insertStretch(0, 1)
+                lay.addWidget(self._right_widget)
+                lay.addStretch()
 
     def set_title(self, title: str) -> None:
         from PySide6.QtWidgets import QLabel as _QLabel

@@ -33,10 +33,13 @@ import hashlib
 import json
 import os
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -312,7 +315,7 @@ def _format_error_message(current_format: str, staged_format: str) -> str:
 # ============================================================================
 
 
-def _acquire_lock(lock_path: Path) -> object | None:
+def _acquire_lock(lock_path: Path) -> int | None:
     """Exclusively acquire a lockfile, or return ``None`` if held.
 
     Uses ``O_CREAT | O_EXCL`` so only one process can create it.  Stale
@@ -338,7 +341,7 @@ def _acquire_lock(lock_path: Path) -> object | None:
         return None
 
 
-def _release_lock(lock_path: Path, lock_handle: object | None) -> None:
+def _release_lock(lock_path: Path, lock_handle: int | None) -> None:
     if lock_handle is not None:
         with contextlib.suppress(OSError):
             os.close(lock_handle)
@@ -515,7 +518,7 @@ def _launch_with_monitoring(
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
-        creationflags=subprocess.CREATE_NO_WINDOW,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
     success_marker = temp_dir / SUCCESS_FILE
@@ -558,7 +561,7 @@ def _launch_with_monitoring(
     subprocess.Popen(
         [str(python_exe), "-m", app_module],
         start_new_session=True,
-        creationflags=subprocess.CREATE_NO_WINDOW,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     os._exit(1)
 
@@ -592,13 +595,13 @@ def restart_app() -> None:
         subprocess.Popen(
             [str(python_exe), "-m", app_module],
             start_new_session=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     else:
         subprocess.Popen(
             [sys.executable],
             start_new_session=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     os._exit(0)
 
@@ -669,10 +672,6 @@ class UpdateCheckWorker(QThread):
             local_manifest = get_local_manifest()
             local_app_hash = local_manifest.get(module, "")
             local_runtime = local_manifest.get("runtime", "")
-
-            import urllib.error
-            import urllib.request
-            import ssl
 
             headers = {
                 "User-Agent": "SISTEMAS-Updater",
@@ -786,7 +785,7 @@ class UpdateCheckWorker(QThread):
         zip_path = Path(tmp) / filename
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=120, context=context) as resp:
-            with open(zip_path, "wb") as f:
+            with zip_path.open("wb") as f:
                 while True:
                     chunk = resp.read(65536)
                     if not chunk:

@@ -100,7 +100,7 @@ def derive_palette(
 def theme_block(
     ramp: dict[str, list[str]],
     levels: dict[int, float],
-    roles: dict[str, int],
+    roles: dict[str, dict[str, int]],
     sem: dict[str, dict[str, str]],
 ) -> list[str]:
     """Gera as linhas de _RAMP.._SEMANTIC (formato black), inclusive."""
@@ -144,7 +144,7 @@ def write_theme(
     theme_file: Path,
     ramp: dict[str, list[str]],
     levels: dict[int, float],
-    roles: dict[str, int],
+    roles: dict[str, dict[str, int]],
     sem: dict[str, dict[str, str]],
 ) -> None:
     """Reescreve o bloco _RAMP.._SEMANTIC em andaime.qt.theme (preserva o resto)."""

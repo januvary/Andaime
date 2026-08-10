@@ -64,7 +64,7 @@ class ToggleGroup(QWidget):
     def _apply(self) -> None:
         for key, btn in self._buttons.items():
             active = key == self._selected
-            btn.setProperty("class", "flat-fill" if active else "flat")
+            btn.setProperty("class", "tg-seg-active" if active else "tg-seg")
             btn.setChecked(active)
             btn.style().unpolish(btn)
             btn.style().polish(btn)
