@@ -188,6 +188,9 @@ _ROLE_LEVEL: dict[str, dict[str, int]] = {
         "action_5": 10,
         "box_bg": 12,
         "input_bg": 12,
+        "toggle_active_text": 1,
+        "toggle_active": 6,
+        "toggle_active_hover": 5,
     },
     "DARK": {
         "text": 1,
@@ -222,6 +225,9 @@ _ROLE_LEVEL: dict[str, dict[str, int]] = {
         "btn_flat_fill": 10,
         "action_4": 10,
         "action_5": 10,
+        "toggle_active_text": 1,
+        "toggle_active": 6,
+        "toggle_active_hover": 5,
     },
 }
 
@@ -236,9 +242,11 @@ _SEMANTIC: dict[str, dict[str, str]] = {
         "toast_info_fg": "#7662af",
         "toast_info_bg": "#f3f3ff",
         "brasao_ink": "#342a2c",
-        "toggle_active": "#c2c9d4",
-        "toggle_active_hover": "#b6becb",
-        "toggle_active_text": "#1c2733",
+        "negative_text": "#DC2626",
+        "negative_border": "#FCA5A5",
+        "negative_hover_bg": "#FEF2F2",
+        "negative_hover_border": "#F87171",
+        "negative_pressed_bg": "#FEE2E2",
     },
     "DARK": {
         "status_success": "#6bca86",
@@ -250,9 +258,11 @@ _SEMANTIC: dict[str, dict[str, str]] = {
         "toast_info_fg": "#bbd6ff",
         "toast_info_bg": "#2b2b49",
         "brasao_ink": "#ddf5e4",
-        "toggle_active": "#5b6270",
-        "toggle_active_hover": "#697080",
-        "toggle_active_text": "#f2f5f8",
+        "negative_text": "#FF5376",
+        "negative_border": "#F87171",
+        "negative_hover_bg": "#5a3238",
+        "negative_hover_border": "#FF8A9B",
+        "negative_pressed_bg": "#6b3a40",
     },
 }
 
@@ -587,15 +597,15 @@ def _build_qss(c: dict) -> str:
 
     QPushButton[class="negative"] {{
         background-color: transparent;
-        border-color: #FCA5A5;
-        color: #DC2626;
+        border-color: {c['negative_border']};
+        color: {c['negative_text']};
     }}
     QPushButton[class="negative"]:hover {{
-        background-color: #FEF2F2;
-        border-color: #F87171;
+        background-color: {c['negative_hover_bg']};
+        border-color: {c['negative_hover_border']};
     }}
     QPushButton[class="negative"]:pressed {{
-        background-color: #FEE2E2;
+        background-color: {c['negative_pressed_bg']};
     }}
 
     QPushButton[class="stepper"] {{

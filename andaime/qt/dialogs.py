@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -109,13 +110,22 @@ def confirm_dialog(
     danger: bool = False,
     cancel_role: str = "flat",
     min_width: int = 380,
+    no_close_button: bool = False,
 ) -> bool:
     """Two-button confirmation. Returns ``True`` if accepted.
 
     ``danger`` styles the confirm button with the ``negative`` (destructive)
-    role instead of ``primary``.
+    role instead of ``primary``. ``no_close_button`` hides the window's close
+    (X) button and disables Esc, forcing an explicit choice — used for
+    high-stakes confirmations.
     """
     dlg, layout = scaffold_dialog(parent, title, min_width=min_width)
+    if no_close_button:
+        dlg.setWindowFlags(
+            Qt.WindowType.Dialog
+            | Qt.WindowType.CustomizeWindowHint
+            | Qt.WindowType.WindowTitleHint
+        )
     layout.addWidget(make_message_label(message))
 
     confirm_role = "negative" if danger else "primary"
@@ -181,3 +191,56 @@ def prompt_dialog(
     if dlg.exec() != QDialog.DialogCode.Accepted:
         return None
     return result[0] if result else None
+
+
+def open_input_dialog(
+    parent: QWidget,
+    title: str,
+    placeholder: str = "",
+    initial: str = "",
+    confirm_label: str = "Confirmar",
+    *,
+    multiline: bool = False,
+    min_height: int = 220,
+) -> str | None:
+    """Single-line (``QLineEdit``) or multi-line (``QTextEdit``) text prompt.
+
+    Returns the trimmed text when accepted, or ``None`` on cancel. Multi-line
+    mode grows the dialog and is meant for longer free-form text (observations).
+    """
+    dlg, layout = scaffold_dialog(parent, title, spacing=16)
+    layout.addSpacing(4)
+
+    if multiline:
+        input_field = QTextEdit()
+        input_field.setPlaceholderText(placeholder)
+        input_field.setPlainText(initial)
+        input_field.setAcceptRichText(False)
+        dlg.setMinimumHeight(min_height)
+        layout.addWidget(input_field, stretch=1)
+    else:
+        input_field = QLineEdit()
+        input_field.setPlaceholderText(placeholder)
+        input_field.setText(initial)
+        if initial:
+            input_field.selectAll()
+        layout.addWidget(input_field)
+
+    btn_row, [cancel, confirm] = make_dialog_button_row([
+        ("Cancelar", "flat"),
+        (confirm_label, "primary"),
+    ])
+    cancel.clicked.connect(dlg.reject)
+    layout.addLayout(btn_row)
+
+    if not multiline:
+        input_field.returnPressed.connect(dlg.accept)
+    confirm.clicked.connect(dlg.accept)
+
+    if dlg.exec() != QDialog.DialogCode.Accepted:
+        return None
+    if multiline:
+        text = input_field.toPlainText().strip()
+    else:
+        text = input_field.text().strip()
+    return text or None

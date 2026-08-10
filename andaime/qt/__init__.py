@@ -44,6 +44,7 @@ from andaime.qt.dialogs import (  # noqa: F401
     make_dialog_button_row,
     make_dialog_toolbar,
     make_message_label,
+    open_input_dialog,
     prompt_dialog,
     scaffold_dialog,
 )
@@ -83,6 +84,7 @@ __all__ = [
     "make_dialog_button_row",
     "make_dialog_toolbar",
     "make_message_label",
+    "open_input_dialog",
     "prompt_dialog",
     "scaffold_dialog",
 ]
