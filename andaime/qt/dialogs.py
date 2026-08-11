@@ -18,9 +18,13 @@ from typing import Any, Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
+    QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -244,3 +248,145 @@ def open_input_dialog(
     else:
         text = input_field.text().strip()
     return text or None
+
+
+class QtConfigDialog(QDialog):
+    """Shared settings dialog: a save-location row plus app-specific middle
+    content and a ``Resetar Padrão | [center action] | Salvar`` button row.
+
+    Ownership split: this class owns the scaffold, the location row (label,
+    ``QLineEdit``, browse button) and the button row; the app supplies the
+    middle content and the behaviours via hooks.
+
+    ``on_save(location)`` returns the ``result_data`` dict on success, or
+    ``None`` after showing its own error message (keeping the dialog open).
+    ``on_reset()`` runs after the location field is reset to ``reset_location``
+    (so the app can also reset its middle custom controls).
+    """
+
+    def __init__(
+        self,
+        parent: QWidget | None,
+        *,
+        initial_location: str,
+        reset_location: str,
+        on_save: Callable[[str], dict[str, Any] | None],
+        location_label: str = "Local de salvamento:",
+        center_label: str | None = None,
+        center_callback: Callable | None = None,
+        middle: QWidget | None = None,
+        on_reset: Callable | None = None,
+        title: str = "Configurações",
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+
+        self.result_data: dict[str, Any] | None = None
+        self._on_save = on_save
+        self._on_reset = on_reset
+
+        self._location_edit = QLineEdit(initial_location)
+        self._location_edit.setMinimumWidth(280)
+
+        self._build_ui(
+            location_label=location_label,
+            center_label=center_label,
+            center_callback=center_callback,
+            middle=middle,
+            reset_location=reset_location,
+        )
+
+    # ========== UI ==========
+
+    def _build_ui(
+        self,
+        *,
+        location_label: str,
+        center_label: str | None,
+        center_callback: Callable | None,
+        middle: QWidget | None,
+        reset_location: str,
+    ) -> None:
+        layout = QVBoxLayout(self)
+        # Fixa o tamanho ao conteúdo (não redimensionável) — espelha os apps.
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(22)
+
+        # === Local de salvamento ===
+        row = QGridLayout()
+        row.setHorizontalSpacing(20)
+        row.setVerticalSpacing(5)
+        row.setColumnStretch(1, 3)
+
+        row.addWidget(QLabel(location_label), 0, 1)
+
+        loc_container = QWidget()
+        loc_row = QHBoxLayout(loc_container)
+        loc_row.setContentsMargins(0, 0, 0, 0)
+        loc_row.setSpacing(6)
+        loc_row.addWidget(self._location_edit, stretch=1)
+        browse_btn = make_button("Procurar...", "flat", loc_container)
+        browse_btn.clicked.connect(self._browse_location)
+        loc_row.addWidget(browse_btn)
+        row.addWidget(loc_container, 1, 1)
+
+        layout.addLayout(row)
+
+        # === Conteúdo intermediário específico do app ===
+        if middle is not None:
+            layout.addWidget(middle)
+
+        # === Botões ===
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
+        reset_btn = make_button("Resetar Padrão", "flat", self)
+        reset_btn.clicked.connect(lambda: self._reset(reset_location))
+        btn_row.addWidget(reset_btn)
+
+        btn_row.addStretch(1)
+
+        if center_label is not None:
+            center_btn = make_button(center_label, "flat", self)
+            if center_callback is not None:
+                center_btn.clicked.connect(center_callback)
+            btn_row.addWidget(center_btn)
+            btn_row.addStretch(1)
+
+        save_btn = make_button("Salvar", "primary", self)
+        save_btn.clicked.connect(self._save)
+        btn_row.addWidget(save_btn)
+
+        layout.addLayout(btn_row)
+
+    # ========== Handlers ==========
+
+    def _browse_location(self) -> None:
+        """Abre seletor de diretório para o local de salvamento."""
+        current = self._location_edit.text()
+        path = QFileDialog.getExistingDirectory(
+            self, "Selecionar local de salvamento", current
+        )
+        if path:
+            self._location_edit.setText(path)
+
+    def _reset(self, reset_location: str) -> None:
+        """Restaura o local de salvamento (e o middle, via on_reset)."""
+        self._location_edit.setText(reset_location)
+        if self._on_reset is not None:
+            self._on_reset()
+
+    def _save(self) -> None:
+        """Delega a construção do resultado ao app; aceita se retornar dict."""
+        location_str = self._location_edit.text().strip()
+        if not location_str:
+            QMessageBox.warning(
+                self, "Inválido", "O local de salvamento é obrigatório."
+            )
+            return
+        result = self._on_save(location_str)
+        if result is None:
+            return
+        self.result_data = result
+        self.accept()

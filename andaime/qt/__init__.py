@@ -40,6 +40,7 @@ from andaime.qt.table import (
 )
 from andaime.qt.dialogs import (  # noqa: F401
     KEEP_OPEN,
+    QtConfigDialog,
     confirm_dialog,
     make_dialog_button_row,
     make_dialog_toolbar,
@@ -80,6 +81,7 @@ __all__ = [
     "TableViewModel",
     "configure_table_view",
     "KEEP_OPEN",
+    "QtConfigDialog",
     "confirm_dialog",
     "make_dialog_button_row",
     "make_dialog_toolbar",

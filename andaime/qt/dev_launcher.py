@@ -163,6 +163,11 @@ class ProjectRow(QWidget):
         self.btn_console.clicked.connect(self._show_console)
         layout.addWidget(self.btn_console)
 
+        self.btn_commit = make_button("Commit", role="flat", parent=self)
+        self.btn_commit.setFixedWidth(90)
+        self.btn_commit.clicked.connect(self._commit_assistant)
+        layout.addWidget(self.btn_commit)
+
         self._update_status(False)
 
     # ---- process management ----
@@ -225,6 +230,16 @@ class ProjectRow(QWidget):
             self.console = ConsoleDialog(self.name, self)
         self.console.show()
         self.console.raise_()
+
+    def _commit_assistant(self) -> None:
+        from andaime.qt.commit_assistant import find_repo_root, present_commit
+
+        repo = find_repo_root(self.path)
+        if repo is None:
+            self._append_to_console(f"[commit] {self.name}: not a git repository\n")
+            return
+        committed, detail = present_commit(self.name, repo, self)
+        self._append_to_console(f"[commit] {self.name}: {detail}\n")
 
     def _append_to_console(self, text: str) -> None:
         if self.console is not None:
