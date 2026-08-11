@@ -34,7 +34,7 @@ from emissor.utils.file_utils import open_file
 from andaime.qt import DbAsyncRunner, StatusLine
 from emissor.utils.paths import resolve_archive_dir
 from emissor.utils.security import sanitize_filename
-from emissor.ui_qt.pdf_list_dialog import PdfPickerDialog, collect_patient_pdfs
+from emissor.ui_qt.pdf_list_dialog import show_pdf_picker_dialog, collect_patient_pdfs
 from andaime.shutdown import register_cleanup
 
 from PySide6.QtGui import QCloseEvent
@@ -53,7 +53,7 @@ from emissor.ui_qt.theme import get_palette, qpalette, set_theme, stylesheet
 # Pesos do grid
 # ============================================================================
 
-_COL_PATIENT = 5
+_COL_PATIENT = 4
 _COL_OPTIONS = 6
 _COL_RIGHT = 3
 _ROW_TOP = 5
@@ -690,10 +690,9 @@ class QtApp(QMainWindow):
             except Exception:
                 retirada_date = None
 
-        dialog = PdfPickerDialog(
+        show_pdf_picker_dialog(
             self, patient.nome, grupos, palette, highlight_date=retirada_date
         )
-        dialog.exec()
 
     def handle_scan(self) -> None:
         """Digitaliza documento e salva em RECIBOS ASSINADOS do paciente.

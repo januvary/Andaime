@@ -17,17 +17,18 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
-    QHBoxLayout,
-    QInputDialog,
     QMessageBox,
     QTreeWidget,
     QTreeWidgetItem,
-    QVBoxLayout,
     QWidget,
 )
 
-from emissor.ui_qt.theme import make_button
+from andaime.qt.dialogs import (
+    confirm_dialog,
+    make_dialog_toolbar,
+    open_input_dialog,
+    scaffold_dialog,
+)
 
 
 _DAY_NAMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
@@ -51,13 +52,8 @@ def show_holidays_dialog(parent: QWidget) -> None:
 
     pontos_set = _extract_pontos_dates(pontos_data)
 
-    dlg = QDialog(parent)
-    dlg.setWindowTitle("Feriados")
-    dlg.setMinimumWidth(310)
+    dlg, layout = scaffold_dialog(parent, "Feriados", spacing=12, min_width=310)
     dlg.setMinimumHeight(420)
-
-    layout = QVBoxLayout(dlg)
-    layout.setSpacing(12)
 
     tree = QTreeWidget()
     tree.setHeaderHidden(True)
@@ -81,35 +77,30 @@ def show_holidays_dialog(parent: QWidget) -> None:
 
     _populate_tree()
 
-    btn_row = QHBoxLayout()
-    add_btn = make_button("Adicionar", "primary")
-    del_btn = make_button("Remover", "flat-fill")
-    close_btn = make_button("Fechar", "flat-fill")
-    btn_row.addWidget(add_btn)
-    btn_row.addWidget(del_btn)
-    btn_row.addStretch()
-    btn_row.addWidget(close_btn)
-    layout.addLayout(btn_row)
+    btn_row, [add_btn, del_btn, close_btn] = make_dialog_toolbar(
+        left=[("Adicionar", "primary"), ("Remover", "negative")],
+        right=[("Fechar", "flat")],
+    )
 
     def _on_add() -> None:
-        result, ok = QInputDialog.getText(
-            dlg, "Adicionar facultativo", f"dd/mm (ano {year})"
+        result = open_input_dialog(
+            parent, "Adicionar facultativo", f"dd/mm (ano {year})"
         )
-        if not ok or not result.strip():
+        if not result:
             return
         try:
             parts = result.strip().split("/")
             d, m = int(parts[0]), int(parts[1])
             new_date = date_cls(year, m, d)
         except (ValueError, IndexError):
-            QMessageBox.warning(dlg, "Inválido", "Data inválida (use dd/mm)")
+            QMessageBox.warning(parent, "Inválido", "Data inválida (use dd/mm)")
             return
 
         yr_str = str(year)
         entry = f"{int(parts[0]):02d}/{int(parts[1]):02d}"
         current = pontos_data.get(yr_str, [])
         if entry in current:
-            QMessageBox.warning(dlg, "Duplicado", "Feriado facultativo já existe")
+            QMessageBox.warning(parent, "Duplicado", "Feriado facultativo já existe")
             return
 
         current.append(entry)
@@ -128,29 +119,31 @@ def show_holidays_dialog(parent: QWidget) -> None:
         is_ponto = item.data(0, Qt.ItemDataRole.UserRole + 1)
         if not is_ponto:
             QMessageBox.warning(
-                dlg,
+                parent,
                 "Não removível",
                 "Apenas feriados facultativos podem ser removidos",
             )
             return
 
         h: date_cls = item.data(0, Qt.ItemDataRole.UserRole)
-        confirm = QMessageBox.question(
-            dlg,
+        if not confirm_dialog(
+            parent,
             "Remover facultativo",
             f'Remover "{h.strftime("%d/%m")}" dos facultativos?',
-        )
-        if confirm == QMessageBox.StandardButton.Yes:
-            _remove_ponto(h, pontos_path)
-            pontos_set.discard(h)
-            all_holidays.discard(h)
-            yr_str = str(h.year)
-            if yr_str in pontos_data:
-                entry = f"{h.day:02d}/{h.month:02d}"
-                if entry in pontos_data[yr_str]:
-                    pontos_data[yr_str].remove(entry)
-            DateCalculator.clear_holidays_cache()
-            _populate_tree()
+            confirm_label="Remover",
+            danger=True,
+        ):
+            return
+        _remove_ponto(h, pontos_path)
+        pontos_set.discard(h)
+        all_holidays.discard(h)
+        yr_str = str(h.year)
+        if yr_str in pontos_data:
+            entry = f"{h.day:02d}/{h.month:02d}"
+            if entry in pontos_data[yr_str]:
+                pontos_data[yr_str].remove(entry)
+        DateCalculator.clear_holidays_cache()
+        _populate_tree()
 
     add_btn.clicked.connect(_on_add)
     del_btn.clicked.connect(_on_remove)

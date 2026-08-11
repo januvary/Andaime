@@ -1,8 +1,9 @@
 import hashlib
 import sqlite3
 import json
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 from datetime import datetime
 
 from andaime.database import BaseDatabase, db_op
@@ -35,6 +36,9 @@ class SS54Database(BaseDatabase):
         self._arquivos_db_path = self._compute_arquivos_db_path(db_path)
         super().__init__(db_path=db_path, entity_name="ss54")
         self._backup_retention = 2
+        # VACUUM pendente: setado pelas deleções e executado só após o commit
+        # da transação mais externa (VACUUM não roda dentro de transação).
+        self._vacuum_pending = False
 
     @staticmethod
     def _compute_arquivos_db_path(db_path: str) -> str:
@@ -616,21 +620,61 @@ class SS54Database(BaseDatabase):
             "processos", processo_id, is_archived=1 if archived else 0
         )
 
+    def _request_vacuum(self) -> None:
+        """Marca que os bancos precisam ser compactados após o commit."""
+        self._vacuum_pending = True
+
+    def _flush_pending_vacuum(self) -> None:
+        """Executa o VACUUM pendente, fora de qualquer transação.
+
+        Chamado automaticamente ao fim da transação mais externa (ver
+        ``transaction``). Falhas são registradas, mas não derrubam a operação
+        de escrita que originou a deleção.
+        """
+        if not self._vacuum_pending or self._in_transaction:
+            return
+        self._vacuum_pending = False
+        try:
+            with self._cursor() as cur:
+                cur.execute(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
+            with self._cursor() as cur:
+                cur.execute("VACUUM")
+        except Exception as e:
+            ErrorHandler.handle_database_error(
+                e, operation="compactar bancos de dados (VACUUM)"
+            )
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Mesma semântica da base, mais a compactação adiada.
+
+        Ao concluir a transação mais externa (committed), executa o VACUUM
+        que ficou pendente nas deleções feitas dentro dela. Transações
+        aninhadas apenas delegam à base.
+        """
+        with self._lock:
+            already = self._in_transaction
+        try:
+            with super().transaction():
+                yield
+            if not already:
+                self._flush_pending_vacuum()
+        finally:
+            pass
+
     @db_op("write")
     def delete_conteudos_for_processo(self, processo_id: int) -> int:
         """Remove os BLOBs de todos os arquivos de um processo (idempotente)."""
-        with self._cursor() as cur:
-            cur.execute(
-                f"DELETE FROM {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
-                "WHERE arquivo_id IN (SELECT id FROM arquivos WHERE processo_id = ?)",
-                (processo_id,),
-            )
-            count = cur.rowcount
-            self._commit()
-        if count > 0:
-            self._commit()
-            self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
-            self._execute_write("VACUUM")
+        with self.transaction():
+            with self._cursor() as cur:
+                cur.execute(
+                    f"DELETE FROM {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
+                    "WHERE arquivo_id IN (SELECT id FROM arquivos WHERE processo_id = ?)",
+                    (processo_id,),
+                )
+                count = cur.rowcount
+            if count > 0:
+                self._request_vacuum()
         return count
 
     @db_op("write")
@@ -681,10 +725,8 @@ class SS54Database(BaseDatabase):
                     tuple(ids),
                 )
             deleted = self._delete_row("processos", processo_id)
-        if deleted:
-            self._commit()
-            self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
-            self._execute_write("VACUUM")
+            if deleted:
+                self._request_vacuum()
         return deleted
 
     @db_op("read")
@@ -884,10 +926,8 @@ class SS54Database(BaseDatabase):
                 (arquivo_id,),
             )
             deleted = self._delete_row("arquivos", arquivo_id)
-        if deleted:
-            self._commit()
-            self._execute_write(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
-            self._execute_write("VACUUM")
+            if deleted:
+                self._request_vacuum()
         return deleted
 
     # ========== STATS ==========

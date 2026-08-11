@@ -90,11 +90,11 @@ class Arquivo(RowModel):
     created_at: str = ""
 
 
-def image_to_pdf_bytes(source: str | bytes, filetype: str = "") -> bytes:
+def image_to_pdf_bytes(source: str | bytes) -> bytes:
     """Converte uma imagem (caminho ou bytes) em um PDF de página única."""
     from andaime.pdf import image_to_pdf
 
-    return image_to_pdf(source, filetype)
+    return image_to_pdf(source)
 
 
 @dataclass

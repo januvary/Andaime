@@ -421,7 +421,7 @@ def _archive_to_items(path: str) -> list[GridItem]:
                         GridItem(data=pdf_bytes, page=0, arquivo_original=name)
                     )
             elif ext in IMAGE_EXT:
-                pdf_bytes = image_to_pdf_bytes(raw, ext[1:])
+                pdf_bytes = image_to_pdf_bytes(raw)
                 items.append(
                     GridItem(data=pdf_bytes, page=0, arquivo_original=name)
                 )
@@ -795,7 +795,7 @@ class DocumentGrid(QWidget):
             finally:
                 os.unlink(tmp_path)
             from bap.models import image_to_pdf_bytes
-            pdf_bytes = image_to_pdf_bytes(png_bytes, "png")
+            pdf_bytes = image_to_pdf_bytes(png_bytes)
             item = GridItem(data=pdf_bytes, page=0, arquivo_original="clipboard.png")
             self._add_new_items([item])
 

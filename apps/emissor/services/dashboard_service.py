@@ -20,23 +20,6 @@ class DashboardService:
         "medications": lambda: Path(resolve_db_path("medications.db", create_dir=True)),
     }
 
-    DATABASE_TABLES: dict[str, list[str]] = {
-        "emissor": [
-            "pacientes",
-            "items_catalog",
-            "patient_items",
-            "retiradas",
-            "retirada_items",
-        ],
-        "medications": [
-            "medications",
-            "medications_itanhaem",
-            "cartilhas",
-            "dispensation_locations",
-            "dispensation_locations_itanhaem",
-        ],
-    }
-
     NON_EDITABLE_COLUMNS: dict[str, list[str]] = {
         "pacientes": ["id"],
         "items_catalog": ["created_at"],
@@ -48,17 +31,16 @@ class DashboardService:
         "dispensation_locations": ["id"],
         "medications_itanhaem": ["id", "code", "created_at"],
         "dispensation_locations_itanhaem": ["id"],
+        "profissionais": ["id"],
     }
 
     def __init__(
         self,
         database_paths: dict[str, Callable[[], Path]] | None = None,
-        database_tables: dict[str, list[str]] | None = None,
         non_editable_columns: dict[str, list[str]] | None = None,
     ) -> None:
         """Inicializa o serviço do Dashboard."""
         self._database_paths = database_paths or self.DATABASE_PATHS
-        self._database_tables = database_tables or self.DATABASE_TABLES
         self._non_editable_columns = (
             non_editable_columns or self.NON_EDITABLE_COLUMNS
         )
@@ -97,26 +79,35 @@ class DashboardService:
         return conn
 
     def _validate_table(self, db_name: str, table_name: str) -> None:
-        """Valida se a tabela está na whitelist do banco."""
-        allowed_tables = self._database_tables.get(db_name, [])
+        """Valida se a tabela existe no banco de dados."""
+        allowed_tables = self._get_db_tables(db_name)
         if table_name not in allowed_tables:
             raise ValueError(
-                f"Tabela '{table_name}' não permitida no banco '{db_name}'"
+                f"Tabela '{table_name}' não encontrada no banco '{db_name}'"
             )
 
+    def _get_db_tables(self, db_name: str) -> set[str]:
+        """Obtém conjunto de tabelas reais no banco (usado para validação)."""
+        conn = self._get_connection(db_name)
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            return {row[0] for row in cursor.fetchall() if row[0] != "sqlite_sequence"}
+        finally:
+            conn.close()
+
     def get_tables(self, db_name: str) -> list[tuple[str, int]]:
-        """Retorna tabelas permitidas e suas contagens de registros."""
+        """Retorna todas as tabelas do banco e suas contagens de registros (exclui sqlite_sequence)."""
         conn = self._get_connection(db_name)
         try:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
             )
-            allowed_tables = self._database_tables.get(db_name, [])
             result: list[tuple[str, int]] = []
             for row in cursor.fetchall():
                 table_name = row[0]
-                if table_name not in allowed_tables:
+                if table_name == "sqlite_sequence":
                     continue
                 cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
                 count = cursor.fetchone()[0]

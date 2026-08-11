@@ -144,6 +144,7 @@ class OptionsSection(QtSection):
         atend_col.setContentsMargins(0, 0, 0, 0)
         self._atendido_por_edit = QLineEdit()
         self._atendido_por_edit.setPlaceholderText("Atendido por...")
+        self._atendido_por_edit.setFixedWidth(180)
         atend_col.addWidget(self._atendido_por_edit)
         period_row.addLayout(atend_col)
         content.addLayout(period_row)
@@ -214,6 +215,7 @@ class OptionsSection(QtSection):
         tipo_combo.setFixedWidth(_ULTIMA_RECEITA_WIDTH)
 
         venc_label = QLabel("—")
+        venc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Botão "+" na primeira linha; "−" nas demais.
         if len(self._receita_rows) == 0:
@@ -596,7 +598,7 @@ class _CenteredCombo(QComboBox):
         self.initStyleOption(option)
         painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, option)
         if self.currentText():
-            rect = self.rect().adjusted(4, 0, -26, 0)
+            rect = self.rect().adjusted(0, 0, 0, 0)
             painter.drawItemText(
                 rect,
                 Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter,
