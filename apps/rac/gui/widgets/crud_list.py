@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLineEdit,
     QLabel,
-    QMenu,
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -25,6 +24,7 @@ from rac.gui.widgets.buttons import make_button
 from rac.gui.widgets.dialogs import confirm_delete_dialog, open_input_dialog
 from rac.gui.widgets.base_page import make_tab
 from rac.gui.styles import data_view_style_qss, filter_table_rows
+from andaime.qt import styled_menu
 from andaime.qt.table import table_batch_populate
 
 _ItemT = TypeVar("_ItemT")
@@ -310,7 +310,7 @@ class CrudList(Generic[_ItemT]):
         if item is None:
             return
         self.list_widget.selectRow(row)
-        menu = QMenu(self._page)
+        menu = styled_menu(self._page)
         edit_action = menu.addAction(f"Editar {self._entity_label_lower}")
         edit_action.triggered.connect(
             lambda _checked=False, it=item: self._edit_item(it)

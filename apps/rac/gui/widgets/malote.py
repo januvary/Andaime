@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QWidget,
-    QMenu,
     QTreeWidget,
     QTreeWidgetItem,
 )
@@ -26,6 +25,7 @@ from rac.gui.widgets.dialogs import (
     KEEP_OPEN,
 )
 from rac.gui.styles import colors
+from andaime.qt import styled_menu
 
 def _activate_malote_if_changed(mw, malote):
     current = mw.state.get_active_malote()
@@ -173,7 +173,7 @@ def _show_malote_dialog(label: MaloteLabel):
         if not malote:
             return
 
-        menu = QMenu(tree)
+        menu = styled_menu(tree)
         edit_menu = menu.addMenu("Editar")
         envio_action = edit_menu.addAction("Data de envio")
         retorno_action = edit_menu.addAction("Data de retorno")

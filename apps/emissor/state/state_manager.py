@@ -80,7 +80,7 @@ class StateManager:
             if observer in self._observers:
                 self._observers.remove(observer)
 
-    def _notify_observers(self, event: StateEvent) -> None:
+    def notify_observers(self, event: StateEvent) -> None:
         """Notifica todos os observadores sobre mudança de estado."""
         # Create a copy of observers list to avoid modification during iteration
         with self._lock:
@@ -103,7 +103,7 @@ class StateManager:
     def notify_processo_count_changed(self, count: int) -> None:
         """Notifica observadores sobre mudança na contagem de processos."""
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.PROCESSO_COUNT_CHANGED, data={"count": count}
             )
@@ -111,7 +111,7 @@ class StateManager:
 
     def notify_tipo_changed(self, tipo: str) -> None:
         """Notifica observadores sobre mudança no tipo do paciente."""
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(StateEventType.TIPO_CHANGED, data={"tipo": tipo})
         )
 
@@ -137,7 +137,7 @@ class StateManager:
         with self._lock:
             self._selected_patient = copy.deepcopy(patient_data)
 
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.PATIENT_SELECTED,
                 data={"patient": patient_data, "batch_mode": True},
@@ -157,7 +157,7 @@ class StateManager:
             self._selected_patient = None
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(event_type=StateEventType.PATIENT_CLEARED, data={})
         )
 
@@ -183,7 +183,7 @@ class StateManager:
                 if key in _PATIENT_WRITABLE_FIELDS:
                     setattr(self._selected_patient, key, value)
 
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.PATIENT_UPDATED, data={"updates": normalized}
             )
@@ -202,7 +202,7 @@ class StateManager:
         with self._lock:
             self._search_results = results.copy()
 
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.SEARCH_RESULTS_UPDATED,
                 data={"results": results, "count": len(results)},
@@ -223,7 +223,7 @@ class StateManager:
             self._save_root_path = path
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.CONFIG_CHANGED,
                 data={"key": "save_location", "value": str(path)},
@@ -244,7 +244,7 @@ class StateManager:
             self._print_copies = copies
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.CONFIG_CHANGED,
                 data={"key": "print_copies", "value": copies},
@@ -263,7 +263,7 @@ class StateManager:
             self._dark_mode = dark_mode
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.CONFIG_CHANGED,
                 data={"key": "dark_mode", "value": dark_mode},
@@ -299,7 +299,7 @@ class StateManager:
             self._last_generated_pdf_patient_id = patient_id
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.PDF_GENERATED, data={"pdf_path": pdf_path}
             )
@@ -319,7 +319,7 @@ class StateManager:
             self._periodicidade = value
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(event_type=StateEventType.DATE_RECALCULATION_NEEDED, data={})
         )
 
@@ -345,7 +345,7 @@ class StateManager:
             self._receitas = normalized
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.DATE_RECALCULATION_NEEDED,
                 data={"calculation_mode": "proxima_vez_only"},
@@ -364,7 +364,7 @@ class StateManager:
             self._bloquear_balanco = bool(value)
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.DATE_RECALCULATION_NEEDED,
                 data={"calculation_mode": "proxima_vez_only"},
@@ -391,7 +391,7 @@ class StateManager:
         Args:
             calculation_mode: 'full' ou 'proxima_vez_only'
         """
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.DATE_RECALCULATION_NEEDED,
                 data={"calculation_mode": calculation_mode},
@@ -440,7 +440,7 @@ class StateManager:
         )
 
         # Single notification for all fields, carrying the calculation mode
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.DATE_RECALCULATION_NEEDED,
                 data={"calculation_mode": _calculation_mode},
@@ -497,7 +497,7 @@ class StateManager:
             self._calculated_dates = dates.copy()
 
         # Single notification call - error handling centralized
-        self._notify_observers(
+        self.notify_observers(
             StateEvent(
                 event_type=StateEventType.RETIRADA_DATE_CALCULATED,
                 data={"dates": dates},

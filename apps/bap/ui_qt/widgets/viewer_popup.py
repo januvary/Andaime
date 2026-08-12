@@ -16,31 +16,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from bap.ui_qt.styles import colors, context_menu_stylesheet
+from andaime.qt import build_checkable_menu
 from bap.constants import DOC_TYPE_LABELS
 from bap.models import GridItem
-
-
-def _build_classify_menu(parent, *, current: str, exclusions: set[str],
-                         on_classify: "Callable[[str], None]") -> QMenu:
-    """Constrói o menu de classificação de tipo de documento.
-
-    Lista ``DOC_TYPE_LABELS`` (exceto ``exclusions``), marca o tipo atual
-    como selecionado e chama ``on_classify`` com a chave escolhida.
-    Compartilhado entre a tile da grade e o visualizador (preview).
-    """
-    menu = QMenu(parent)
-    menu.setStyleSheet(context_menu_stylesheet())
-    for key, label in DOC_TYPE_LABELS.items():
-        if key in exclusions:
-            continue
-        action = menu.addAction(label)
-        action.setCheckable(True)
-        action.setChecked(key == current)
-        action.triggered.connect(
-            lambda checked=False, k=key: on_classify(k)
-        )
-    return menu
 
 
 @contextmanager
@@ -135,11 +113,12 @@ class ViewerPopup(QDialog):
             return
         current = self._items[self._index].tipo_documento
         exclusions = getattr(self._grid, "_doc_exclusions", set())
-        menu = _build_classify_menu(
+        menu = build_checkable_menu(
             self,
+            items=DOC_TYPE_LABELS,
             current=current,
+            on_select=self._classify_current,
             exclusions=exclusions,
-            on_classify=self._classify_current,
         )
         menu.exec(event.globalPos())
 

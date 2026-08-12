@@ -57,7 +57,13 @@ class QtSection(QFrame, StateObserver):
         try:
             state_manager.register_observer(self)
             self._is_registered = True
-        except Exception:
+        except Exception as e:
+            from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+            ErrorHandler.log(
+                f"Falha ao registrar observer: {e}",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.UI,
+            )
             self._is_registered = False
 
     def on_state_changed(self, event: StateEvent) -> None:

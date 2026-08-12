@@ -665,9 +665,8 @@ class ObservationsBoxBuilder(TableBuilderBase):
 class SignatureSectionBuilder(TableBuilderBase):
     """Builder para a seção de assinaturas."""
 
-    def build(self, atendido_por: str = "") -> List[Table]:
-        """Cria a seção 'atendido por' (se preenchida) e as assinaturas."""
-        # Atendido por (somente se preenchido)
+    def build(self, atendido_por: str = "", telefone: str = "") -> List[Table]:
+        """Cria a seção 'atendido por' (se preenchido) e as assinaturas."""
         atendido = None
         if atendido_por:
             atendido_text = f"<b>ATENDIDO POR:</b> {atendido_por}"
@@ -681,7 +680,6 @@ class SignatureSectionBuilder(TableBuilderBase):
                 ],
             )
 
-        # Seção de assinatura
         from reportlab.lib.styles import ParagraphStyle
 
         sig_data = [
@@ -702,7 +700,7 @@ class SignatureSectionBuilder(TableBuilderBase):
                 )
             ],
             [Paragraph("NOME:", self.styles.create_normal_style())],
-            [Paragraph("TEL:", self.styles.create_normal_style())],
+            [Paragraph(f"TEL: {telefone}", self.styles.create_normal_style())],
         ]
 
         signature = self._full_width_table(
@@ -840,7 +838,7 @@ class MandadoJudicialPDF:
         else:
             elements.append(Spacer(1, self.config.SPACER_SMALL))
 
-        sig_elements = self.signature_builder.build(context.atendido_por)
+        sig_elements = self.signature_builder.build(context.atendido_por, context.paciente.get("telefone", ""))
         if sig_elements:
             elements.extend((*sig_elements, Spacer(1, self.config.SPACER_SMALL)))
 

@@ -196,12 +196,7 @@ class EmissorDatabase(BaseDatabase):
         self._commit()
 
         if self.db_path != ":memory:":
-            DatabaseMigrator.sync_definitive_catalog(cursor, self.conn, self.db_path)
-            DatabaseMigrator.flatten_patient_data(cursor, self.conn, self.db_path)
-            DatabaseMigrator.mark_superseded_retiradas(cursor, self.conn, self.db_path)
-            DatabaseMigrator.normalize_profissionais(cursor, self.conn, self.db_path)
-            DatabaseMigrator.add_olostech_ok_flag(cursor, self.conn, self.db_path)
-            DatabaseMigrator.normalize_receitas(cursor, self.conn, self.db_path)
+            DatabaseMigrator.run_all(cursor, self.conn, self.db_path)
 
     # ========================================================================
     # HELPERS
@@ -793,3 +788,13 @@ class EmissorDatabase(BaseDatabase):
         except Exception as e:
             ErrorHandler.handle_database_error(e, operation="deletar retirada")
             return False
+
+    @db_op("read")
+    def get_olostech_id(self, item_id: str) -> Optional[str]:
+        """Retorna o código Olostech (CSV code) para um item do catálogo."""
+        row = self._fetch_one(
+            "SELECT olostech_id FROM items_catalog "
+            "WHERE item_id = ? AND olostech_id IS NOT NULL AND olostech_id != ''",
+            (item_id,),
+        )
+        return row["olostech_id"] if row else None

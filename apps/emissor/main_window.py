@@ -98,7 +98,7 @@ class QtApp(QMainWindow):
         self.state_manager.set_dark_mode(self._current_dark_mode)
         set_theme("dark" if self._current_dark_mode else "light")
 
-        self.dirty_tracker = DirtyTracker()
+        self.dirty_tracker = DirtyTracker(self.state_manager)
         self._workflow_service = RetiradaWorkflowService(
             self._retirada_service,
             self.state_manager,
@@ -236,9 +236,6 @@ class QtApp(QMainWindow):
 
         self.actions_section = ActionsSection(right_panel, self)
         right_layout.addWidget(self.actions_section, stretch=_STRETCH_ACTIONS)
-
-        # Actions observa o dirty tracker (atualiza contador do botão Salvar)
-        self.dirty_tracker.add_observer(self.actions_section)
 
         grid.addWidget(right_panel, 0, 2, 2, 1)
 

@@ -21,7 +21,6 @@ class OlostechConfig:
     environment: str = ""
     role: str = ""
     aceite_chave: str = ""
-    mapping_file: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -32,7 +31,6 @@ class OlostechConfig:
             "environment": self.environment,
             "role": self.role,
             "aceite_chave": self.aceite_chave,
-            "mapping_file": self.mapping_file,
         }
 
     @staticmethod
@@ -47,7 +45,6 @@ class OlostechConfig:
             environment=data.get("environment", ""),
             role=data.get("role", ""),
             aceite_chave=data.get("aceite_chave", ""),
-            mapping_file=data.get("mapping_file", ""),
         )
 
 

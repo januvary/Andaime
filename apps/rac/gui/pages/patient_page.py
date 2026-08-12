@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
-    QMenu,
 )
 from PySide6.QtCore import Qt
 
@@ -31,6 +30,7 @@ from rac.gui.styles import (
     data_view_style_qss,
     faded_tipo_color,
 )
+from andaime.qt import styled_menu
 from rac.utils.text_utils import format_malote_date, format_registro_meds
 from rac.models import Malote
 from andaime.qt.table import table_batch_populate
@@ -254,7 +254,7 @@ class PatientPage(BasePage):
 
         self._table.selectRow(row)
 
-        menu = QMenu(self)
+        menu = styled_menu(self)
         edit_action = menu.addAction("Editar")
         edit_action.triggered.connect(
             lambda _checked=False, rid=reg_id: self._edit_registro(rid)

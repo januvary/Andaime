@@ -17,7 +17,6 @@ from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtWidgets import (
     QDialog,
     QLabel,
-    QMenu,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -34,7 +33,7 @@ import operator
 from bap.database.ss54_database import SS54Database
 from bap.models import Lote
 from bap.utils.date_utils import format_date_display
-from bap.ui_qt.styles import context_menu_stylesheet
+from andaime.qt import styled_menu
 
 
 class RemessaLabel(QWidget):
@@ -239,8 +238,7 @@ def _show_tree_menu(tree, pos, db, active, on_done, on_select) -> None:
     if not lote:
         return
 
-    menu = QMenu(tree)
-    menu.setStyleSheet(context_menu_stylesheet())
+    menu = styled_menu(tree)
     edit_action = menu.addAction("Editar")
     action = menu.exec(tree.viewport().mapToGlobal(pos))
     if action == edit_action:

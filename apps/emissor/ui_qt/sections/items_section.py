@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMenu,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -32,6 +31,7 @@ if TYPE_CHECKING:
     from emissor.main_window import QtApp
 
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+from andaime.qt import styled_menu
 from andaime.widgets import SearchableComboBox, static_search_fn
 
 from emissor.services.item_sufficiency_service import ItemSufficiencyService
@@ -524,7 +524,7 @@ class ItemsSection(QtSection):
         entry = next((e for e in self._item_rows if e["widget"] is row_widget), None)
         if entry is None:
             return
-        menu = QMenu(self)
+        menu = styled_menu(self)
         reset_action = menu.addAction("Resetar")
         reset_action.setCheckable(True)
         reset_action.setChecked(self._suficiencia_reset.get(row_widget, False))

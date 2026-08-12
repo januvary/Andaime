@@ -38,14 +38,6 @@ def _normalize_date_display(value: str) -> str:
         return ""
     parsed = parse_date(value)
     return parsed.strftime("%d/%m/%Y") if parsed else value
-    """Convert a stored date (ISO or BR) to BR ``DD/MM/YYYY`` for display.
-
-    Unparseable or empty values are returned unchanged.
-    """
-    if not value:
-        return ""
-    parsed = parse_date(value)
-    return parsed.strftime("%d/%m/%Y") if parsed else value
 
 
 def _normalize_bool(value: Any) -> bool:

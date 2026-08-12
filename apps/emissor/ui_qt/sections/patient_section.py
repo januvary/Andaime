@@ -595,6 +595,7 @@ class PatientSection(QtSection):
             return
         edit.blockSignals(True)
         edit.setText(value)
+        edit.setCursorPosition(0)
         edit.blockSignals(False)
 
     @staticmethod
@@ -623,8 +624,13 @@ class PatientSection(QtSection):
         if callable(fn):
             try:
                 return int(cast(int, fn()))
-            except Exception:
-                pass
+            except Exception as e:
+                from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+                ErrorHandler.log(
+                    f"processo_count() falhou: {e}",
+                    level=ErrorLevel.WARNING,
+                    context=ErrorContext.UI,
+                )
         return 1 if get_field_str(patient_data, "processo_n") else 0
 
     @staticmethod
@@ -634,6 +640,11 @@ class PatientSection(QtSection):
         if callable(fn):
             try:
                 return str(fn(index))
-            except Exception:
-                pass
+            except Exception as e:
+                from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+                ErrorHandler.log(
+                    f"get_processo() falhou: {e}",
+                    level=ErrorLevel.WARNING,
+                    context=ErrorContext.UI,
+                )
         return get_field_str(patient_data, f"processo_{index}_n")

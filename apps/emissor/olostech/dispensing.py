@@ -561,8 +561,8 @@ class Dispensing:
                         f.write(f"{k}={v}\n")
                     f.write("-->\n")
                     f.write(html)
-            except Exception:
-                pass
+            except Exception as e:
+                self._log(f"Falha ao salvar debug HTML: {e}", "WARN")
 
         def _extract_errors(html):
             """Pull meaningful error text from HTML responses."""

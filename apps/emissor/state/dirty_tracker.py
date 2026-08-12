@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+from .state_events import StateEvent, StateEventType
 
-from .state_events import StateEvent, StateEventType, StateObserver
+if TYPE_CHECKING:
+    from .state_manager import StateManager
 
 
 def _snapshot(payload: dict[str, Any]) -> dict[str, Any]:
@@ -48,15 +49,11 @@ class DirtyTracker:
     são comparados por linha+campo, gerando chaves como "itens[0].dias".
     """
 
-    def __init__(self) -> None:
+    def __init__(self, state_manager: "StateManager") -> None:
+        self._state_manager = state_manager
         self._baseline: dict[str, Any] = {}
         self._dirty_keys: set[str] = set()
-        self._observers: list[StateObserver] = []
         self._last_notified_count: int = 0
-
-    def add_observer(self, observer: StateObserver) -> None:
-        """Registra observador para receber notificações de mudança."""
-        self._observers.append(observer)
 
     def set_baseline(self, payload: dict[str, Any]) -> None:
         """Registra o estado limpo (após carga ou salvamento)."""
@@ -105,21 +102,14 @@ class DirtyTracker:
         return dirty
 
     def _notify(self) -> None:
-        """Notifica observadores sobre mudança no estado dirty."""
+        """Emite DIRTY_STATE_CHANGED via StateManager (observer único)."""
         count = self.dirty_count
         if count == self._last_notified_count:
             return
         self._last_notified_count = count
-        event = StateEvent(
-            event_type=StateEventType.DIRTY_STATE_CHANGED,
-            data={"dirty_count": count},
+        self._state_manager.notify_observers(
+            StateEvent(
+                event_type=StateEventType.DIRTY_STATE_CHANGED,
+                data={"dirty_count": count},
+            )
         )
-        for observer in self._observers:
-            try:
-                observer.on_state_changed(event)
-            except Exception as e:
-                ErrorHandler.log(
-                    f"Erro ao notificar observador dirty: {e}",
-                    level=ErrorLevel.ERROR,
-                    context=ErrorContext.UI,
-                )

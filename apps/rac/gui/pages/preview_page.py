@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QLineEdit,
     QHeaderView,
-    QMenu,
 )
 from PySide6.QtCore import Qt
 
@@ -37,6 +36,7 @@ from rac.gui.styles import faded_tipo_color, tab_style_qss, filter_table_rows, d
 from rac.utils.text_utils import format_malote_date, format_item
 from rac.services.exceptions import DuplicateRecordError
 from rac.services.registro_service import DeleteSnapshot
+from andaime.qt import styled_menu
 from andaime.qt.table import table_batch_populate
 
 
@@ -253,7 +253,7 @@ class PreviewPage(BasePage):
             selected_ids = self._get_selected_ids(table)
             is_multi = len(selected_ids) > 1
 
-        menu = QMenu(self)
+        menu = styled_menu(self)
         editar_menu = menu.addMenu("Editar")
 
         tipo_menu = editar_menu.addMenu("Tipo")

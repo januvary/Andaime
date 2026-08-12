@@ -129,21 +129,15 @@ def show_olostech_dialog(
 
     items = getattr(retirada, "itens", []) or []
 
-    mapping: dict[str, str] = {}
-    mapping_file = _cfg_value(olostech_cfg, "mapping_file")
-    if mapping_file:
-        try:
-            from emissor.olostech.item_mapping import load_mapping
-
-            mapping = load_mapping(mapping_file)
-        except Exception:
-            mapping = {}
+    # Obtem DB via parent (MainWindow tem atributo db)
+    db_obj = getattr(parent, "db", None)
 
     for idx, item in enumerate(items):
         descricao = getattr(item, "descricao", "") or ""
         quantidade = getattr(item, "quantidade", "") or ""
         db_id = str(getattr(item, "item_id", "") or "").strip()
-        mapped_codes[idx] = mapping.get(db_id, "")
+        csv_code = db_obj.get_olostech_id(db_id) if db_obj and db_id else None or ""
+        mapped_codes[idx] = csv_code
 
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)

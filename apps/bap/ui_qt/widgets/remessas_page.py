@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QListWidget,
     QListWidgetItem,
-    QMenu,
     QFrame,
     QTableView,
     QTabWidget,
@@ -31,7 +30,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from bap.ui_qt.styles import colors, context_menu_stylesheet, get_theme
+from bap.ui_qt.styles import colors, get_theme
+from andaime.qt import styled_menu
 from bap.models import Processo
 from bap.ui_qt.widgets.remessa import RemessaLabel
 from bap.constants import (
@@ -557,8 +557,7 @@ class RemessasPage(QWidget):
             return
         table.selectRow(row)
 
-        menu = QMenu(self)
-        menu.setStyleSheet(context_menu_stylesheet())
+        menu = styled_menu(self)
 
         processo = self._processo_cache.get(processo_id)
         if processo is None:

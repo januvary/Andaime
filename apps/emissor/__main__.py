@@ -18,7 +18,7 @@ from andaime.shutdown import setup_shutdown_handlers  # noqa: E402
 from andaime.qt.fonts import FontSpec, apply_font  # noqa: E402
 from emissor.database.emissor_db import EmissorDatabase  # noqa: E402
 from emissor.utils.config import AppConfig  # noqa: E402
-from emissor.utils.updater import get_shared_root  # noqa: E402
+from andaime.updater import get_shared_root  # noqa: E402
 from emissor.main_window import QtApp  # noqa: E402
 
 from PySide6.QtGui import QFont  # noqa: E402

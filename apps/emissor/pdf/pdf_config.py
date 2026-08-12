@@ -137,6 +137,7 @@ class PDFDataContext:
             "profissional_nome": data.get("profissional_nome", ""),
             "profissional_crm": data.get("profissional_crm", ""),
             "matricula": data.get("matricula", ""),
+            "telefone": data.get("telefone", ""),
         }
 
         # Dados dos itens (validar estrutura)

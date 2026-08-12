@@ -18,7 +18,10 @@ import hashlib
 import os
 import platform
 import re
+import socket
 import subprocess
+import time
+import uuid
 from datetime import datetime
 from typing import Any
 
@@ -37,15 +40,23 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BLACKLISTED_MACS = {"000000000000", "020054554e01", "000100012f9b"}
 
 
-def get_physical_mac_addresses() -> list[str]:
+def get_physical_mac_addresses(log_callback: Any | None = None) -> list[str]:
     """Coleta endereços MAC físicos (estilo Java MacAddress).
 
     Exclui MACs da blacklist e endereços localmente administrados (virtuais).
     Retorna lista de strings hex minúsculas sem separadores.
-    """
-    macs: list[str] = []
 
-    try:
+    Tenta até 3 vezes (com espera) — na inicialização do sistema a rede
+    pode não estar pronta, causando WinError 50. Se ipconfig falhar,
+    usa uuid.getnode() como fallback.
+    """
+    def log(msg: str) -> None:
+        if log_callback:
+            log_callback(msg)
+        else:
+            print(f"[MAC] {msg}")
+
+    def _collect_from_ipconfig() -> list[str]:
         result = subprocess.run(
             ["ipconfig", "/all"],
             capture_output=True,
@@ -53,7 +64,9 @@ def get_physical_mac_addresses() -> list[str]:
             timeout=10,
         )
         lines = result.stdout.split("\n")
+        log(f"ipconfig /all returned {len(lines)} lines")
 
+        found: list[str] = []
         for line in lines:
             mac_match = re.search(
                 r"([0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}-"
@@ -66,19 +79,51 @@ def get_physical_mac_addresses() -> list[str]:
             mac_hex = mac_match.group(1).replace("-", "").lower()
 
             if mac_hex in BLACKLISTED_MACS:
+                log(f"MAC blocked (blacklist): {mac_hex}")
                 continue
 
             # Filtra MACs localmente administrados (adaptadores virtuais)
             first_octet = int(mac_hex[:2], 16)
             if first_octet & 0x02:
+                log(f"MAC blocked (locally administered): {mac_hex}")
                 continue
 
-            if mac_hex not in macs:
-                macs.append(mac_hex)
+            if mac_hex not in found:
+                found.append(mac_hex)
+                log(f"MAC accepted: {mac_hex}")
+        return found
 
-    except Exception:
-        pass
+    macs: list[str] = []
 
+    # Tenta ipconfig até 3 vezes com espera (rede pode não estar pronta no boot)
+    for attempt in range(1, 4):
+        try:
+            macs = _collect_from_ipconfig()
+            if macs:
+                break
+            log(f"ipconfig tentativa {attempt} retornou nenhum MAC")
+        except Exception as e:
+            log(f"Exception collecting MACs (tentativa {attempt}): {e}")
+        if attempt < 3:
+            log("Aguardando 2s antes de nova tentativa...")
+            time.sleep(2)
+
+    # Fallback: uuid.getnode() usa a primeira interface não-virtual disponível
+    if not macs:
+        try:
+            node = uuid.getnode()
+            if node is not None and (node >> 40) & 0xFF != 0x02 and node not in (
+                int(b"000000000000", 16),
+                0,
+            ):
+                mac_hex = f"{node:012x}"
+                if mac_hex not in BLACKLISTED_MACS:
+                    macs.append(mac_hex)
+                    log(f"MAC via uuid.getnode(): {mac_hex}")
+        except Exception as e:
+            log(f"Exception in uuid.getnode fallback: {e}")
+
+    log(f"Final MAC list: {macs}")
     return macs
 
 
@@ -96,14 +141,14 @@ def generate_mac_hash(mac_hex: str) -> str:
     return hashlib.sha1(input_string.encode("iso-8859-1")).hexdigest()
 
 
-def build_machine_auth_params() -> tuple[str, str]:
+def build_machine_auth_params(log_callback: Any | None = None) -> tuple[str, str]:
     """Monta parâmetros macaddress e dados para conferir.asp.
 
     Retorna (macaddress_param, dados_param):
       macaddress = hash1,hash2,...
       dados = mac1|os|arch,mac2|os|arch,...
     """
-    macs = get_physical_mac_addresses()
+    macs = get_physical_mac_addresses(log_callback)
     if not macs:
         raise OlostechAuthError("Nenhum endereço MAC físico encontrado")
 
@@ -204,8 +249,7 @@ class OlostechAuth:
             return False
 
         # Passo 2: Autenticação de máquina
-        macaddress_hash, dados = build_machine_auth_params()
-        self._log(f"  MAC addresses: {get_physical_mac_addresses()}")
+        macaddress_hash, dados = build_machine_auth_params(self._log_cb)
         resp = self.session.get(
             "https://www.olostech.com.br/v4/conferir.asp",
             params={"macaddress": macaddress_hash, "dados": dados},

@@ -41,9 +41,9 @@ from bap.constants import DOC_TYPE_LABELS, DOC_TYPE_ORDER
 from bap.models import GridItem
 from bap.ui_qt.widgets.viewer_popup import (
     ViewerPopup,
-    _build_classify_menu,
     _resolve_item_page,
 )
+from andaime.qt import build_checkable_menu
 
 _ICON_DIR = Path(__file__).resolve().parent.parent / "img"
 
@@ -204,11 +204,12 @@ class _Tile(QWidget):
 
     def contextMenuEvent(self, event):
         current = self._item.tipo_documento
-        menu = _build_classify_menu(
+        menu = build_checkable_menu(
             self,
+            items=DOC_TYPE_LABELS,
             current=current,
+            on_select=self._do_classify,
             exclusions=self._grid._doc_exclusions,
-            on_classify=self._do_classify,
         )
         menu.exec(event.globalPos())
 
