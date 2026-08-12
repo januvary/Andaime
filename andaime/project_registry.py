@@ -45,9 +45,25 @@ class Capabilities:
 
 
 @dataclass
+class Session:
+    """A single opencode session launched for a project.
+
+    ``session_id`` is the opencode session id ('' for an unsaved/unnamed
+    session), used both to relaunch it later and to show its topic. ``title``
+    is the last-known window/terminal title. ``launched`` is whether the agent
+    is currently running.
+    """
+
+    session_id: str = ""
+    title: str = ""
+    launched: bool = False
+
+
+@dataclass
 class Project:
     path: Path
     capabilities: Capabilities = field(default_factory=Capabilities)
+    sessions: list[Session] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -93,6 +109,14 @@ def load_registry() -> list[Project]:
         try:
             path = Path(item["path"])
             caps = item.get("capabilities", {})
+            sessions = [
+                Session(
+                    session_id=s.get("session_id", ""),
+                    title=s.get("title", ""),
+                    launched=s.get("launched", False),
+                )
+                for s in item.get("sessions", [])
+            ]
             projects.append(
                 Project(
                     path=path,
@@ -100,6 +124,7 @@ def load_registry() -> list[Project]:
                         git=caps.get("git", False),
                         launchable=caps.get("launchable", False),
                     ),
+                    sessions=sessions,
                 )
             )
         except (KeyError, TypeError):
@@ -117,10 +142,27 @@ def save_registry(projects: list[Project]) -> None:
                 "git": p.capabilities.git,
                 "launchable": p.capabilities.launchable,
             },
+            "sessions": [
+                {
+                    "session_id": s.session_id,
+                    "title": s.title,
+                    "launched": s.launched,
+                }
+                for s in p.sessions
+            ],
         }
         for p in projects
     ]
     REGISTRY_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def find_project(path: Path) -> Project | None:
+    """Return the registered project for *path*, or None."""
+    resolved = path.expanduser().resolve()
+    for p in load_registry():
+        if p.path == resolved:
+            return p
+    return None
 
 
 def add_project(path: Path) -> None:
