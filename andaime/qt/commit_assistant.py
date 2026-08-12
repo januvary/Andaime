@@ -59,25 +59,38 @@ class CommitInfo:
         diff: str,
         staged_diff: str,
         stat: str,
+        untracked: list[str] | None = None,
     ) -> None:
         self.repo = repo
         self.status = status or "(clean)"
         self.diff = diff
         self.staged_diff = staged_diff
         self.stat = stat or "(no changes)"
+        self.untracked = untracked or []
 
     @property
     def has_changes(self) -> bool:
-        return bool(self.diff or self.staged_diff)
+        return bool(self.diff or self.staged_diff or self.untracked)
 
     @property
     def model_prompt(self) -> str:
         """Trimmed prompt for the drafting model."""
+        untracked_note = ""
+        if self.untracked:
+            untracked_note = "\n--- untracked files (new, not yet committed) ---\n" + "\n".join(
+                f"- {u}" for u in self.untracked
+            )
         combined = "\n".join(
             part for part in (self.staged_diff, self.diff) if part
         )
         if len(combined) > _DEFAULT_MAX_SUMMARY:
             combined = combined[-_DEFAULT_MAX_SUMMARY:]
+        untracked_note = ""
+        if self.untracked:
+            untracked_note = (
+                "\n--- untracked files (new, not yet committed) ---\n"
+                + "\n".join(f"- {u}" for u in self.untracked)
+            )
         return (
             "You are a git commit assistant. Read the diff below and write ONE\n"
             "concise conventional-commit line describing the change: type(scope): summary\n"
@@ -85,17 +98,25 @@ class CommitInfo:
             "Reply with only the single line — no explanation, no quotes, no prefix.\n\n"
             f"--- git status ---\n{self.status}\n\n"
             f"--- diff ---\n{combined}\n"
+            f"{untracked_note}\n"
         )
 
 
 def collect_commit_info(repo: Path) -> CommitInfo:
     """Gather the working-tree state of *repo* for a commit draft."""
+    status = _run_git(repo, "status", "--short")
+    untracked = [
+        line[3:].strip()
+        for line in status.splitlines()
+        if line.startswith("??")
+    ]
     return CommitInfo(
         repo=repo,
-        status=_run_git(repo, "status", "--short"),
+        status=status,
         diff=_run_git(repo, "diff"),
         staged_diff=_run_git(repo, "diff", "--staged"),
         stat=_run_git(repo, "diff", "--stat"),
+        untracked=untracked,
     )
 
 

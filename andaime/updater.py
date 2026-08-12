@@ -433,6 +433,7 @@ def _apply_pending_update_locked() -> bool:
         return False
 
     swaps: list[tuple[Path, Path]] = []
+    old_version_content: str | None = None
 
     try:
         # 1. Swap all apps found in staging (covers multi-app portable installs)
@@ -454,10 +455,13 @@ def _apply_pending_update_locked() -> bool:
         if new_python.is_dir():
             swaps.extend(_swap_directory(root / "python", new_python))
 
-        # 4. Update VERSION
+        # 4. Update VERSION (save old for rollback)
+        version_file = root / VERSION_FILE
         new_version = staging / VERSION_FILE
         if new_version.exists():
-            shutil.copy2(str(new_version), str(root / VERSION_FILE))
+            if version_file.exists():
+                old_version_content = version_file.read_text(encoding="utf-8")
+            shutil.copy2(str(new_version), str(version_file))
 
         # 5. Clean up staging
         shutil.rmtree(staging, ignore_errors=True)
@@ -469,7 +473,11 @@ def _apply_pending_update_locked() -> bool:
         )
 
         # 6. Launch with monitoring (monopolises this process)
-        _launch_with_monitoring(app_module, swaps)
+        # Small delay to let Windows release file handles from the swap
+        # before starting the new process. Prevents [WinError 6] on
+        # slower machines where handle release takes longer.
+        time.sleep(0.5)
+        _launch_with_monitoring(app_module, swaps, old_version_content)
         return True  # unreachable — _launch_with_monitoring exits
 
     except Exception as e:
@@ -479,6 +487,14 @@ def _apply_pending_update_locked() -> bool:
             context="Updater",
         )
         _rollback(swaps)
+
+        # Restore old VERSION so hashes match the restored code
+        if old_version_content is not None:
+            with contextlib.suppress(Exception):
+                (root / VERSION_FILE).write_text(
+                    old_version_content, encoding="utf-8"
+                )
+
         with contextlib.suppress(Exception):
             shutil.rmtree(staging)
         _show_update_error(e)
@@ -499,7 +515,9 @@ def _get_python_exe() -> Path:
 
 
 def _launch_with_monitoring(
-    app_module: str, swaps: list[tuple[Path, Path]]
+    app_module: str,
+    swaps: list[tuple[Path, Path]],
+    old_version_content: str | None = None,
 ) -> None:
     """Launch the updated app and monitor for a success signature.
 
@@ -507,19 +525,28 @@ def _launch_with_monitoring(
     On failure → rollback and relaunch the old version.
     """
     python_exe = _get_python_exe()
+    root = get_install_root()
     temp_dir = Path(tempfile.mkdtemp(prefix="andaime_update_"))
 
     env = os.environ.copy()
     env[POST_UPDATE_ENV] = str(temp_dir)
 
-    proc = subprocess.Popen(
-        [str(python_exe), "-m", app_module],
-        start_new_session=True,
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
+    for attempt in range(2):
+        try:
+            proc = subprocess.Popen(
+                [str(python_exe), "-m", app_module],
+                start_new_session=True,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            break
+        except OSError:
+            if attempt == 0:
+                time.sleep(0.5)
+            else:
+                raise
 
     success_marker = temp_dir / SUCCESS_FILE
     deadline = time.monotonic() + ROLLOUT_TIMEOUT
@@ -553,6 +580,11 @@ def _launch_with_monitoring(
     )
 
     _rollback(swaps)
+
+    # Restore old VERSION so hashes match the restored code
+    if old_version_content is not None:
+        with contextlib.suppress(Exception):
+            (root / VERSION_FILE).write_text(old_version_content, encoding="utf-8")
 
     with contextlib.suppress(Exception):
         shutil.rmtree(temp_dir)

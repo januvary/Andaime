@@ -754,6 +754,12 @@ def _build_qss(c: dict) -> str:
         color: {c["toast_info_fg"]};
         border: 1px solid {c["toast_info_fg"]}33;
     }}
+    QToolTip {{
+        background-color: {c["panel_bg"]};
+        color: {c["text"]};
+        border: 1px solid {c["text"]}40;
+        padding: 4px 6px;
+    }}
     """
 
 
