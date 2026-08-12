@@ -25,7 +25,7 @@ _SKIP_DIRS = {
     ".git", "__pycache__", "venv", "dist", ".egg-info", "node_modules",
     "_update_staging", ".mypy_cache", ".ruff_cache", "htmlcov", ".coverage",
     "python", "include", "lib", "lib64", "site-packages", "backups", "logs",
-    "data", ".codebase-memory", "test", "tests",
+    "data", ".codebase-memory", "test", "tests", "apps",
 }
 
 

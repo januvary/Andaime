@@ -38,6 +38,11 @@ from andaime.qt.table import (
     configure_table_view,
     table_batch_populate,
 )
+from andaime.qt.context_menu import (
+    build_checkable_menu,
+    context_menu_stylesheet,
+    styled_menu,
+)
 from andaime.qt.dialogs import (  # noqa: F401
     KEEP_OPEN,
     QtConfigDialog,
@@ -80,6 +85,9 @@ __all__ = [
     "ColumnSpec",
     "TableViewModel",
     "configure_table_view",
+    "build_checkable_menu",
+    "context_menu_stylesheet",
+    "styled_menu",
     "KEEP_OPEN",
     "QtConfigDialog",
     "confirm_dialog",
