@@ -14,6 +14,8 @@ Usage::
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -40,6 +42,8 @@ from PySide6.QtWidgets import (
 from andaime.qt.theme import colors, make_button
 from andaime.project_registry import Project, source_files
 
+OPENCODE_WRAPPER = os.path.expanduser("~/.local/bin/opencode-fork")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -60,6 +64,96 @@ def find_python_exe() -> str:
 def find_projects_root() -> Path:
     """Return the default projects root (the parent of the andaime dir)."""
     return Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _shq(value: str) -> str:
+    return "'" + value.replace("'", "'\\''") + "'"
+
+
+# ---------------------------------------------------------------------------
+# tmux helpers — the control surface for session management
+# ---------------------------------------------------------------------------
+
+def _tmux_session_name(project_path: Path) -> str:
+    safe = project_path.name.replace(" ", "_").replace(".", "-").replace("/", "-")
+    return f"oc_{safe}"
+
+
+def _tmux_has_session(name: str) -> bool:
+    return subprocess.run(["tmux", "has-session", "-t", name],
+                          capture_output=True).returncode == 0
+
+
+def _tmux_ensure_session(name: str, path: Path) -> bool:
+    """Create a detached tmux session if it doesn't exist. Returns True if new."""
+    if _tmux_has_session(name):
+        return False
+    shell_cmd = f"cd {_shq(str(path))} && {OPENCODE_WRAPPER}; echo 'Exit: '$?; read -p 'Press Enter to close.'"
+    subprocess.run(
+        ["tmux", "new-session", "-d", "-s", name, "-c", str(path),
+         "bash", "-lc", shell_cmd],
+        capture_output=True,
+    )
+    # Configure the session for TUI apps: truecolor passthrough, OSC renaming.
+    for opt, val in [
+        ("terminal-features", "*:RGB"),
+        ("allow-passthrough", "on"),
+        ("allow-rename", "on"),
+        ("automatic-rename", "off"),
+    ]:
+        subprocess.run(["tmux", "set-option", "-t", name, opt, val], capture_output=True)
+    return True
+
+
+def _tmux_new_window(name: str, path: Path) -> None:
+    shell_cmd = f"cd {_shq(str(path))} && {OPENCODE_WRAPPER}; echo 'Exit: '$?; read -p 'Press Enter to close.'"
+    subprocess.run(
+        ["tmux", "new-window", "-t", name, "-c", str(path),
+         "bash", "-lc", shell_cmd],
+        capture_output=True,
+    )
+
+
+def _tmux_kill_window(name: str, index: int) -> None:
+    subprocess.run(["tmux", "kill-window", "-t", f"{name}:{index}"],
+                   capture_output=True)
+
+
+def _tmux_list_windows(name: str) -> list[tuple[int, str]]:
+    """Return [(window_index, window_name)] for a tmux session."""
+    result = subprocess.run(
+        ["tmux", "list-windows", "-t", name, "-F", "#{window_index} #{window_name}"],
+        capture_output=True, text=True,
+    )
+    windows: list[tuple[int, str]] = []
+    for line in result.stdout.strip().splitlines():
+        parts = line.split(" ", 1)
+        if len(parts) == 2:
+            try:
+                windows.append((int(parts[0]), parts[1]))
+            except ValueError:
+                continue
+    return windows
+
+
+def _find_terminal() -> str | None:
+    for candidate in (os.environ.get("TERMINAL"), "ptyxis", "gnome-terminal", "kgx", "konsole"):
+        if candidate and shutil.which(candidate):
+            return candidate
+    return None
+
+
+def _tmux_attach(name: str) -> None:
+    """Open a terminal window attached to the tmux session."""
+    term = _find_terminal()
+    if not term:
+        print("[dev-launcher] no terminal emulator found (set $TERMINAL)")
+        return
+    subprocess.Popen(
+        [term, "--", "bash", "-lc", f"tmux attach -t {name}"],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -135,19 +229,39 @@ class ProjectRow(QWidget):
         self._git_stat_timer.timeout.connect(self.refresh_git_stat)
         self._git_stat_timer.start()
 
+        self._has_window = False
+        self._tmux_timer = QTimer(self)
+        self._tmux_timer.setSingleShot(False)
+        self._tmux_timer.setInterval(3000)
+        self._tmux_timer.timeout.connect(self._reconcile_tmux)
+        self._tmux_timer.start()
+
         self._build_ui()
 
     def _build_ui(self) -> None:
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ---- header row (existing buttons + new session button) ----
+        header = QHBoxLayout()
+        header.setContentsMargins(8, 4, 8, 4)
+
+        self.expand_label = QLabel("▸")
+        self.expand_label.setFixedWidth(16)
+        self.expand_label.setStyleSheet(
+            f"color: {colors()['text_dim']}; font-size: 14px; font-family: monospace;"
+        )
+        self.expand_label.mousePressEvent = lambda e: self._toggle_sessions()
+        header.addWidget(self.expand_label)
 
         self.status_label = QLabel("●")
         self.status_label.setStyleSheet("color: #444; font-size: 16px;")
-        layout.addWidget(self.status_label)
+        header.addWidget(self.status_label)
 
         self.name_label = QLabel(self.name)
         self.name_label.setMinimumWidth(200)
-        layout.addWidget(self.name_label)
+        header.addWidget(self.name_label)
         self._set_src_tooltip()
 
         if self.project.capabilities.git:
@@ -156,36 +270,122 @@ class ProjectRow(QWidget):
             self.git_stat_label.setAlignment(
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
-            layout.addWidget(self.git_stat_label)
+            header.addWidget(self.git_stat_label)
         else:
             self.git_stat_label = None
 
-        layout.addStretch()
+        header.addStretch()
 
         if self.project.capabilities.launchable:
             self.btn_toggle = make_button("Launch", parent=self)
             self.btn_toggle.setFixedWidth(90)
             self.btn_toggle.clicked.connect(self.toggle)
-            layout.addWidget(self.btn_toggle)
+            header.addWidget(self.btn_toggle)
         else:
             self.btn_toggle = None
+
+        # Session "+" button — always present, spawns an opencode session
+        self.btn_session = make_button("+", role="primary", parent=self)
+        self.btn_session.setFixedWidth(40)
+        self.btn_session.setToolTip("Open a new opencode session")
+        self.btn_session.clicked.connect(self._spawn_session)
+        header.addWidget(self.btn_session)
 
         if self.project.capabilities.git:
             self.btn_console = make_button("Console", role="flat", parent=self)
             self.btn_console.setFixedWidth(90)
             self.btn_console.clicked.connect(self._show_console)
-            layout.addWidget(self.btn_console)
+            header.addWidget(self.btn_console)
 
             self.btn_commit = make_button("Commit", role="flat", parent=self)
             self.btn_commit.setFixedWidth(90)
             self.btn_commit.clicked.connect(self._commit_assistant)
-            layout.addWidget(self.btn_commit)
+            header.addWidget(self.btn_commit)
         else:
             self.btn_console = None
             self.btn_commit = None
 
+        outer.addLayout(header)
+
+        # ---- collapsible session children (driven by tmux state) ----
+        self._sessions_expanded = False
+        self._sessions_container = QWidget()
+        self._sessions_layout = QVBoxLayout(self._sessions_container)
+        self._sessions_layout.setContentsMargins(24, 0, 8, 4)
+        self._sessions_layout.setSpacing(0)
+        self._sessions_container.setVisible(False)
+        outer.addWidget(self._sessions_container)
+
+        self._tmux_name = _tmux_session_name(self.path)
+        self._reconcile_tmux()
+
         self._update_status(False)
         self.refresh_git_stat()
+
+    # ---- session management (tmux-driven) ----
+
+    @property
+    def _tmux_session(self) -> str:
+        return self._tmux_name
+
+    def _toggle_sessions(self) -> None:
+        self._sessions_expanded = not self._sessions_expanded
+        self.expand_label.setText("▾" if self._sessions_expanded else "▸")
+        self._sessions_container.setVisible(self._sessions_expanded)
+
+    def _spawn_session(self) -> None:
+        if not self._sessions_expanded:
+            self._toggle_sessions()
+        was_new = _tmux_ensure_session(self._tmux_session, self.path)
+        if not was_new:
+            _tmux_new_window(self._tmux_session, self.path)
+        if was_new or not self._has_window:
+            _tmux_attach(self._tmux_session)
+            self._has_window = True
+        self._reconcile_tmux()
+
+    def _close_session(self, window_index: int) -> None:
+        _tmux_kill_window(self._tmux_session, window_index)
+        self._reconcile_tmux()
+
+    def _reconcile_tmux(self) -> None:
+        """Rebuild session sub-rows from live tmux state."""
+        windows = _tmux_list_windows(self._tmux_session) if _tmux_has_session(self._tmux_session) else []
+        self._has_window = bool(windows)
+
+        # Clear and rebuild — tmux is the source of truth.
+        while self._sessions_layout.count():
+            item = self._sessions_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
+
+        for index, name in windows:
+            self._add_session_sub_row(index, name)
+
+    def _add_session_sub_row(self, window_index: int, title: str) -> None:
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 1, 0, 1)
+        layout.setSpacing(8)
+
+        label = QLabel(f"  {title}")
+        label.setStyleSheet(f"color: {colors()['text']}; font-size: 12px;")
+        label.setCursor(Qt.CursorShape.PointingHandCursor)
+        label.setToolTip("Click to open this session's terminal")
+        label.mousePressEvent = lambda e: _tmux_attach(self._tmux_session)
+        layout.addWidget(label)
+
+        layout.addStretch()
+
+        btn_close = make_button("x", role="negative", parent=row)
+        btn_close.setFixedWidth(40)
+        btn_close.setToolTip("Close this session")
+        btn_close.clicked.connect(lambda _, idx=window_index: self._close_session(idx))
+        layout.addWidget(btn_close)
+
+        self._sessions_layout.addWidget(row)
 
     # ---- git diff stat ----
 
