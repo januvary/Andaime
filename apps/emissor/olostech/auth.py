@@ -62,21 +62,25 @@ def get_physical_mac_addresses(log_callback: Any | None = None) -> list[str]:
             capture_output=True,
             text=True,
             timeout=10,
+            stdin=None,
         )
         lines = result.stdout.split("\n")
         log(f"ipconfig /all returned {len(lines)} lines")
 
         found: list[str] = []
         for line in lines:
+            # Aceita ambos formatos: com traços ou sem separadores
             mac_match = re.search(
-                r"([0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}-"
-                r"[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2})",
+                r"([0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}-"
+                r"[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2})|"
+                r"([0-9A-Fa-f]{12})",
                 line,
             )
             if not mac_match:
                 continue
 
-            mac_hex = mac_match.group(1).replace("-", "").lower()
+            # Pega o grupo que teve match
+            mac_hex = (mac_match.group(1) or mac_match.group(2) or "").replace("-", "").replace(":", "").lower()
 
             if mac_hex in BLACKLISTED_MACS:
                 log(f"MAC blocked (blacklist): {mac_hex}")
@@ -112,18 +116,23 @@ def get_physical_mac_addresses(log_callback: Any | None = None) -> list[str]:
     if not macs:
         try:
             node = uuid.getnode()
-            if node is not None and (node >> 40) & 0xFF != 0x02 and node not in (
-                int(b"000000000000", 16),
-                0,
-            ):
+            if node is not None and node != 0:
                 mac_hex = f"{node:012x}"
-                if mac_hex not in BLACKLISTED_MACS:
-                    macs.append(mac_hex)
-                    log(f"MAC via uuid.getnode(): {mac_hex}")
+                # Aplica o mesmo filtro de MACs virtual/locally administered
+                if mac_hex in BLACKLISTED_MACS:
+                    log(f"uuid.getnode() blocked (blacklist): {mac_hex}")
+                else:
+                    first_octet = int(mac_hex[:2], 16)
+                    if first_octet & 0x02:
+                        log(f"uuid.getnode() blocked (locally administered): {mac_hex}")
+                    else:
+                        macs.append(mac_hex)
+                        log(f"MAC via uuid.getnode(): {mac_hex}")
         except Exception as e:
             log(f"Exception in uuid.getnode fallback: {e}")
 
     log(f"Final MAC list: {macs}")
+    log(f"Generating hashes for {len(macs)} MAC(s)")
     return macs
 
 

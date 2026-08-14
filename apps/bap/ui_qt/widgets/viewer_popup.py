@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from andaime.qt import build_checkable_menu
 from bap.constants import DOC_TYPE_LABELS
 from bap.models import GridItem
+from bap.ui_qt.styles import colors
 
 
 @contextmanager

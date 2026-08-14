@@ -31,8 +31,8 @@ if TYPE_CHECKING:
 
 from andaime.widgets import SearchableComboBox, static_search_fn
 
-from emissor.state.state_events import StateEvent, StateEventType
-from emissor.ui_qt.base import QtSection
+from emissor.state.state_events import StateEventType
+from emissor.ui_qt.base import QtSection, on
 from emissor.ui_qt.theme import make_button
 from emissor.utils.field_utils import get_field_str
 
@@ -109,14 +109,14 @@ class PatientSection(QtSection):
         self._nome_edit = QLineEdit()
         self._nome_edit.setReadOnly(True)
         self._nome_edit.textChanged.connect(
-            lambda _t="": self.app.refresh_dirty_state()
+            lambda _t="": self.field_changed.emit()
         )
         form.addRow("Nome:", self._nome_edit)
 
         # Matrícula
         self._matricula_edit = QLineEdit()
         self._matricula_edit.textChanged.connect(
-            lambda _t="": self.app.refresh_dirty_state()
+            lambda _t="": self.field_changed.emit()
         )
         form.addRow("Matrícula:", self._matricula_edit)
 
@@ -144,7 +144,7 @@ class PatientSection(QtSection):
         )
         self._profissional_combo.selection_changed.connect(self._on_profissional_key)
         self._profissional_combo.text_edited.connect(
-            lambda _t="": self.app.refresh_dirty_state()
+            lambda _t="": self.field_changed.emit()
         )
         form.addRow("Profissional:", self._profissional_combo)
 
@@ -156,7 +156,7 @@ class PatientSection(QtSection):
         )
         self._crm_combo.selection_changed.connect(self._on_profissional_key)
         self._crm_combo.text_edited.connect(
-            lambda _t="": self.app.refresh_dirty_state()
+            lambda _t="": self.field_changed.emit()
         )
         form.addRow("CRM:", self._crm_combo)
 
@@ -172,7 +172,7 @@ class PatientSection(QtSection):
     def _load_profissionais(self) -> None:
         """Carrega todos os profissionais para autocomplete local (cache)."""
         try:
-            rows = self.app.db.get_all_profissionais()
+            rows = self.db.get_all_profissionais()
         except Exception as e:
             from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 
@@ -245,7 +245,7 @@ class PatientSection(QtSection):
         """Handler do botão Adicionar processo."""
         self._add_processo_row()
         self._notify_processo_count()
-        self.app.refresh_dirty_state()
+        self.field_changed.emit()
 
     def _on_remove_processo(self, row_widget: QWidget) -> None:
         """Remove uma linha de processo."""
@@ -258,18 +258,18 @@ class PatientSection(QtSection):
         self._processo_layout.removeWidget(row_widget)
         row_widget.deleteLater()
         self._notify_processo_count()
-        self.app.refresh_dirty_state()
+        self.field_changed.emit()
 
     def _on_processo_changed(self, edit: QLineEdit) -> None:
         """Auto-formata o campo processo e recomputa o estado dirty."""
         self._format_field(edit, self._format_processo)
-        self.app.refresh_dirty_state()
+        self.field_changed.emit()
 
     def _on_telefone_changed(self) -> None:
         """Auto-formata o telefone e recomputa o estado dirty."""
         if self._telefone_edit is not None:
             self._format_field(self._telefone_edit, self._format_telefone)
-        self.app.refresh_dirty_state()
+        self.field_changed.emit()
 
     def _format_field(self, edit: QLineEdit | None, formatter: Any) -> None:
         """
@@ -331,8 +331,9 @@ class PatientSection(QtSection):
 
     def _notify_processo_count(self) -> None:
         """Notifica o StateManager sobre a contagem de processos."""
-        self.app.state_manager.notify_processo_count_changed(
-            count=len(self._processo_edits)
+        self.state.emit(
+            StateEventType.PROCESSO_COUNT_CHANGED,
+            count=len(self._processo_edits),
         )
 
     def _set_processo_visible(self, visible: bool) -> None:
@@ -374,7 +375,7 @@ class PatientSection(QtSection):
         indica texto digitado divergente da seleção — invalida o id."""
         if key is None:
             self._selected_profissional_id = None
-            self.app.refresh_dirty_state()
+            self.field_changed.emit()
             return
         if not isinstance(key, str):
             return
@@ -382,7 +383,7 @@ class PatientSection(QtSection):
             prof_id = int(key)
         except (ValueError, TypeError):
             return
-        row = self.app.db.get_profissional(prof_id)
+        row = self.db.get_profissional(prof_id)
         if row is not None:
             self._select_profissional(row)
 
@@ -403,7 +404,7 @@ class PatientSection(QtSection):
                 self._crm_combo.set_text(row.get("crm", "") or "")
         finally:
             self._syncing_combos = False
-        self.app.refresh_dirty_state()
+        self.field_changed.emit()
 
     # ========== Setters públicos ==========
 
@@ -430,9 +431,9 @@ class PatientSection(QtSection):
         self.clear_patient_fields()
         self.set_name_id_editable(False)
 
-        self._set_text(self._nome_edit, get_field_str(patient_data, "nome"))
-        self._set_text(self._matricula_edit, get_field_str(patient_data, "matricula"))
-        self._set_text(self._telefone_edit, get_field_str(patient_data, "telefone"))
+        self.set_edit_text(self._nome_edit, get_field_str(patient_data, "nome"))
+        self.set_edit_text(self._matricula_edit, get_field_str(patient_data, "matricula"))
+        self.set_edit_text(self._telefone_edit, get_field_str(patient_data, "telefone"))
         self._set_profissional(get_field_str(patient_data, "profissional_nome"))
         self._set_crm(get_field_str(patient_data, "profissional_crm"))
         self._selected_profissional_id = self._field_to_int(
@@ -468,14 +469,14 @@ class PatientSection(QtSection):
         self._clear_processo_rows()
         p1 = get_field_str(patient_data, "processo_n")
         if p1 and self._processo_edits:
-            self._set_text(self._processo_edits[0], p1)
+            self.set_edit_text(self._processo_edits[0], p1)
 
         count = self._patient_processo_count(patient_data)
         for i in range(2, count + 1):
             edit = self._add_processo_row()
             val = self._patient_get_processo(patient_data, i)
             if val:
-                self._set_text(edit, val)
+                self.set_edit_text(edit, val)
         self._notify_processo_count()
 
     # ========== Getters ==========
@@ -538,23 +539,25 @@ class PatientSection(QtSection):
 
     # ========== StateObserver ==========
 
-    def on_state_changed(self, event: StateEvent) -> None:
-        """Reage a mudanças de estado do StateManager."""
-        try:
-            if event.event_type == StateEventType.PATIENT_SELECTED:
-                self._refresh_profissional_options()
-                self.populate_patient_fields(event.data.get("patient", {}))
-            elif event.event_type == StateEventType.PATIENT_CLEARED:
-                self._refresh_profissional_options()
-                self.clear_patient_fields()
-            elif event.event_type == StateEventType.TIPO_CHANGED:
-                self._set_processo_visible(event.data.get("tipo") != "insulina")
-            elif event.event_type == StateEventType.PATIENT_UPDATED:
-                self._refresh_profissional_options()
-                for field, value in event.data.get("updates", {}).items():
-                    self._apply_update(field, str(value))
-        except Exception as e:
-            self._handle_state_change_error(e, self.__class__.__name__)
+    @on(StateEventType.PATIENT_SELECTED)
+    def _on_patient_selected(self, data: dict) -> None:
+        self._refresh_profissional_options()
+        self.populate_patient_fields(data.get("patient", {}))
+
+    @on(StateEventType.PATIENT_CLEARED)
+    def _on_patient_cleared(self, data: dict) -> None:
+        self._refresh_profissional_options()
+        self.clear_patient_fields()
+
+    @on(StateEventType.TIPO_CHANGED)
+    def _on_tipo_changed(self, data: dict) -> None:
+        self._set_processo_visible(data.get("tipo") != "insulina")
+
+    @on(StateEventType.PATIENT_UPDATED)
+    def _on_patient_updated(self, data: dict) -> None:
+        self._refresh_profissional_options()
+        for field, value in data.get("updates", {}).items():
+            self._apply_update(field, str(value))
 
     # ========== Helpers ==========
 
@@ -587,16 +590,6 @@ class PatientSection(QtSection):
         if self._crm_combo is None:
             return
         self._crm_combo.set_text(crm)
-
-    @staticmethod
-    def _set_text(edit: QLineEdit | None, value: str) -> None:
-        """Define texto de um QLineEdit sem disparar handlers."""
-        if edit is None:
-            return
-        edit.blockSignals(True)
-        edit.setText(value)
-        edit.setCursorPosition(0)
-        edit.blockSignals(False)
 
     @staticmethod
     def _clean(edit: QLineEdit | None) -> str:

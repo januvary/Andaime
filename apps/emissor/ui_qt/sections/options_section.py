@@ -40,8 +40,8 @@ from PySide6.QtWidgets import (
 if TYPE_CHECKING:
     from emissor.main_window import QtApp
 
-from emissor.state.state_events import StateEvent, StateEventType
-from emissor.ui_qt.base import QtSection
+from emissor.state.state_events import StateEventType
+from emissor.ui_qt.base import QtSection, on
 from emissor.utils.field_utils import get_field_str
 from emissor.utils.date_utils import TIPO_RECEITA_INFO, DateCalculator
 from emissor.ui_qt.theme import make_button
@@ -135,9 +135,7 @@ class OptionsSection(QtSection):
         self._bloquear_balanco_radio = QRadioButton("")
         self._bloquear_balanco_radio.setAutoExclusive(False)
         self._bloquear_balanco_radio.setProperty("value", "bloquear_balanco")
-        self._bloquear_balanco_radio.clicked.connect(
-            self._on_bloquear_balanco_clicked
-        )
+        self._bloquear_balanco_radio.clicked.connect(self._on_bloquear_balanco_clicked)
         period_row.addWidget(self._bloquear_balanco_radio)
         period_row.addStretch()
         atend_col = QVBoxLayout()
@@ -287,8 +285,8 @@ class OptionsSection(QtSection):
         """Qualquer mudança numa linha recalcula vencimentos e sincroniza."""
         for entry in self._receita_rows:
             self._update_vencimento(entry)
-        self.app.state_manager.set_receitas(self.get_receitas())
-        self.app.refresh_dirty_state()
+        self.state.set_receitas(self.get_receitas())
+        self.field_changed.emit()
 
     def _update_vencimento(self, entry: dict[str, Any]) -> None:
         """Atualiza o rótulo de vencimento da linha (data + tipo).
@@ -300,11 +298,11 @@ class OptionsSection(QtSection):
         tipo = entry["tipo"].currentData() or ""
         if tipo == _TIPO_C:
             if entry["date"].text().strip() != _CONTROLADO_TEXT:
-                self._set_edit_text(entry["date"], _CONTROLADO_TEXT)
+                self.set_edit_text(entry["date"], _CONTROLADO_TEXT)
             entry["venc"].setText("")
             return
         if entry["date"].text().strip() == _CONTROLADO_TEXT:
-            self._set_edit_text(entry["date"], "")
+            self.set_edit_text(entry["date"], "")
         data = entry["date"].text().strip()
         if not data or not tipo:
             entry["venc"].setText("—")
@@ -321,8 +319,8 @@ class OptionsSection(QtSection):
             return
         value = self._tipo_combo.currentData() or ""
         self._last_tipo = value
-        self.app.refresh_dirty_state()
-        self.app.state_manager.notify_tipo_changed(self._last_tipo)
+        self.field_changed.emit()
+        self.state.emit(StateEventType.TIPO_CHANGED, tipo=self._last_tipo)
 
     # ========== Handlers de campos ==========
 
@@ -330,26 +328,25 @@ class OptionsSection(QtSection):
         """Periodicidade mudou → afeta próxima retirada (com distribuição)."""
         if self._periodicidade_edit is None:
             return
-        self.app.state_manager.update_date_field(
+        self.state.update_date_field(
             "periodicidade",
             self._periodicidade_edit.text().strip(),
-            calculation_mode="proxima_vez_only",
         )
-        self.app.refresh_dirty_state()
+        self.field_changed.emit()
 
     def _on_bloquear_balanco_clicked(self) -> None:
         """Toggle do bloqueio de balanço (clicar no ativo desliga)."""
         if self._bloquear_balanco_radio is None:
             return
         self._bloquear_balanco_active = self._bloquear_balanco_radio.isChecked()
-        self.app.state_manager.set_bloquear_balanco(self._bloquear_balanco_active)
-        self.app.refresh_dirty_state()
+        self.state.set_bloquear_balanco(self._bloquear_balanco_active)
+        self.field_changed.emit()
 
     def _on_observacoes_changed(self) -> None:
         """Observações mudou."""
         if self._observacoes_edit is None:
             return
-        self.app.refresh_dirty_state()
+        self.field_changed.emit()
 
     # ========== Setters públicos ==========
 
@@ -473,45 +470,47 @@ class OptionsSection(QtSection):
         if self._bloquear_balanco_radio is not None:
             self._bloquear_balanco_radio.setChecked(False)
         self._bloquear_balanco_active = False
-        self.app.state_manager.set_bloquear_balanco(False)
-        self.app.state_manager.set_receitas([])
-        self.app.state_manager.update_date_field("periodicidade", "")
+        self.state.set_bloquear_balanco(False)
+        self.state.set_receitas([])
+        self.state.update_date_field("periodicidade", "")
 
     # ========== StateObserver ==========
 
-    def on_state_changed(self, event: StateEvent) -> None:
-        """Reage a mudanças de estado do StateManager."""
-        try:
-            if event.event_type == StateEventType.PATIENT_SELECTED:
-                self._load_from_patient(event.data.get("patient", {}))
-            elif event.event_type == StateEventType.PATIENT_CLEARED:
-                self.clear_fields()
-            elif event.event_type == StateEventType.PATIENT_UPDATED:
-                updates = event.data.get("updates", {})
-                if "tipo" in updates:
-                    self.set_tipo_values(updates.get("tipo", ""))
-                if "periodicidade" in updates:
-                    self._set_edit_text(
-                        self._periodicidade_edit, updates.get("periodicidade", "")
-                    )
-                if "receitas" in updates:
-                    self._load_receitas(updates.get("receitas") or [])
-                if "bloquear_balanco" in updates:
-                    self._apply_bloquear_balanco(
-                        bool(updates.get("bloquear_balanco", False))
-                    )
-                if "observacoes" in updates:
-                    if self._observacoes_edit is not None:
-                        self._observacoes_edit.blockSignals(True)
-                        self._observacoes_edit.setPlainText(
-                            updates.get("observacoes", "")
-                        )
-                        self._observacoes_edit.blockSignals(False)
-            elif event.event_type == StateEventType.PROCESSO_COUNT_CHANGED:
-                count = event.data.get("count", 0)
-                self.set_municipal_e_revezado_enabled(count >= 2)
-        except Exception as e:
-            self._handle_state_change_error(e, self.__class__.__name__)
+    @on(StateEventType.PATIENT_SELECTED)
+    def _on_patient_selected(self, data: dict) -> None:
+        self._load_from_patient(data.get("patient", {}))
+
+    @on(StateEventType.PATIENT_CLEARED)
+    def _on_patient_cleared(self, data: dict) -> None:
+        self.clear_fields()
+
+    @on(StateEventType.PATIENT_UPDATED)
+    def _on_patient_updated(self, data: dict) -> None:
+        updates = data.get("updates", {})
+        if "tipo" in updates:
+            self.set_tipo_values(updates.get("tipo", ""))
+        if "periodicidade" in updates:
+            self.set_edit_text(
+                self._periodicidade_edit, updates.get("periodicidade", "")
+            )
+        if "receitas" in updates:
+            self._load_receitas(updates.get("receitas") or [])
+        if "bloquear_balanco" in updates:
+            self._apply_bloquear_balanco(
+                bool(updates.get("bloquear_balanco", False))
+            )
+        if "observacoes" in updates:
+            if self._observacoes_edit is not None:
+                self._observacoes_edit.blockSignals(True)
+                self._observacoes_edit.setPlainText(
+                    updates.get("observacoes", "")
+                )
+                self._observacoes_edit.blockSignals(False)
+
+    @on(StateEventType.PROCESSO_COUNT_CHANGED)
+    def _on_processo_count_changed(self, data: dict) -> None:
+        count = data.get("count", 0)
+        self.set_municipal_e_revezado_enabled(count >= 2)
 
     # ========== Helpers ==========
 
@@ -520,7 +519,7 @@ class OptionsSection(QtSection):
         tipo = get_field_str(patient_data, "tipo")
         self.set_tipo_values(tipo)
 
-        self._set_edit_text(
+        self.set_edit_text(
             self._periodicidade_edit, get_field_str(patient_data, "periodicidade")
         )
         if self._receitas_box is None:
@@ -536,7 +535,7 @@ class OptionsSection(QtSection):
         self._apply_bloquear_balanco(
             bloquear.strip().lower() in ("1", "true", "on", "yes")
         )
-        self._set_edit_text(
+        self.set_edit_text(
             self._atendido_por_edit, get_field_str(patient_data, "atendido_por")
         )
 
@@ -550,10 +549,8 @@ class OptionsSection(QtSection):
     def _load_receitas(self, receitas: list[dict[str, str]]) -> None:
         """Reconstrói as linhas de receita a partir de uma lista compacta."""
         self._clear_receitas()
-        for r in receitas[: _MAX_RECEITAS]:
-            self._add_receita_row(
-                data=r.get("data", ""), tipo=r.get("tipo", "") or ""
-            )
+        for r in receitas[:_MAX_RECEITAS]:
+            self._add_receita_row(data=r.get("data", ""), tipo=r.get("tipo", "") or "")
         if not self._receita_rows:
             self._add_receita_row()
         self._on_receita_changed()
@@ -563,26 +560,22 @@ class OptionsSection(QtSection):
         if self._receitas_grid is None:
             return
         for entry in list(self._receita_rows):
-            for widget in (entry["date"], entry["tipo"], entry["venc"], entry["button"]):
+            for widget in (
+                entry["date"],
+                entry["tipo"],
+                entry["venc"],
+                entry["button"],
+            ):
                 self._receitas_grid.removeWidget(widget)
                 widget.deleteLater()
         self._receita_rows.clear()
-
-    @staticmethod
-    def _set_edit_text(edit: QLineEdit | None, text: str) -> None:
-        """Define texto de um QLineEdit sem disparar handlers (blockSignals)."""
-        if edit is None:
-            return
-        edit.blockSignals(True)
-        edit.setText(text)
-        edit.blockSignals(False)
 
     def _apply_bloquear_balanco(self, active: bool) -> None:
         """Define o estado do toggle e sincroniza o StateManager."""
         if self._bloquear_balanco_radio is not None:
             self._bloquear_balanco_radio.setChecked(active)
         self._bloquear_balanco_active = active
-        self.app.state_manager.set_bloquear_balanco(active)
+        self.state.set_bloquear_balanco(active)
 
 
 class _CenteredCombo(QComboBox):

@@ -35,8 +35,8 @@ from andaime.qt import styled_menu
 from andaime.widgets import SearchableComboBox, static_search_fn
 
 from emissor.services.item_sufficiency_service import ItemSufficiencyService
-from emissor.state.state_events import StateEvent, StateEventType
-from emissor.ui_qt.base import QtSection
+from emissor.state.state_events import StateEventType
+from emissor.ui_qt.base import QtSection, on
 from emissor.ui_qt.theme import make_button
 from emissor.ui_qt.widgets.clickable_label import ClickableLabel
 from emissor.utils.field_utils import get_field_str
@@ -88,7 +88,7 @@ class ItemsSection(QtSection):
     def _load_catalog(self) -> None:
         """Carrega o catálogo completo uma vez para autocomplete local."""
         try:
-            rows = self.app.db.get_all_catalog_items()
+            rows = self.db.get_all_catalog_items()
         except Exception as e:
             ErrorHandler.log(
                 f"Erro ao carregar catálogo de itens: {e}",
@@ -346,8 +346,8 @@ class ItemsSection(QtSection):
         self._history_patient_id = patient_id
         if patient_id is None:
             return
-        self.app.db_runner.run(
-            self.app.db.get_patient_item_dispensation_history,
+        self.run_db(
+            self.db.get_patient_item_dispensation_history,
             patient_id,
             on_done=self._on_history_loaded,
         )
@@ -359,7 +359,7 @@ class ItemsSection(QtSection):
         Args:
             rows: Linhas retornadas pelo banco de dados.
         """
-        current_patient_id = self.app.state_manager.get_patient_id()
+        current_patient_id = self.patient_id
         if current_patient_id != self._history_patient_id:
             return
 
@@ -615,7 +615,7 @@ class ItemsSection(QtSection):
 
     def _mark_items_dirty(self) -> None:
         """Recomputa o estado dirty a partir dos valores atuais da UI."""
-        self.app.refresh_dirty_state()
+        self.field_changed.emit()
 
     def get_items_data(self) -> list[dict[str, str]]:
         """
@@ -702,28 +702,31 @@ class ItemsSection(QtSection):
 
     # ========== StateObserver ==========
 
-    def on_state_changed(self, event: StateEvent) -> None:
-        """Reage a mudanças de estado do StateManager."""
-        try:
-            if event.event_type == StateEventType.PATIENT_SELECTED:
-                items = event.data.get("patient", {}).get("itens", [])
-                self.load_items(items)
-                self._load_history(self.app.state_manager.get_patient_id())
-            elif event.event_type == StateEventType.PATIENT_CLEARED:
-                self.clear_items()
-                self._load_history(None)
-            elif event.event_type == StateEventType.PATIENT_UPDATED:
-                self._refresh_catalog()
-                updates = event.data.get("updates", {})
-                if "itens" in updates:
-                    self.load_items(updates.get("itens", []))
-                    self._update_suficiencia_labels()
-            elif event.event_type == StateEventType.DATE_RECALCULATION_NEEDED:
-                self._update_suficiencia_labels()
-            elif event.event_type == StateEventType.PDF_GENERATED:
-                self._load_history(self.app.state_manager.get_patient_id())
-        except Exception as e:
-            self._handle_state_change_error(e, self.__class__.__name__)
+    @on(StateEventType.PATIENT_SELECTED)
+    def _on_patient_selected(self, data: dict) -> None:
+        self.load_items(data.get("patient", {}).get("itens", []))
+        self._load_history(self.patient_id)
+
+    @on(StateEventType.PATIENT_CLEARED)
+    def _on_patient_cleared(self, data: dict) -> None:
+        self.clear_items()
+        self._load_history(None)
+
+    @on(StateEventType.PATIENT_UPDATED)
+    def _on_patient_updated(self, data: dict) -> None:
+        self._refresh_catalog()
+        updates = data.get("updates", {})
+        if "itens" in updates:
+            self.load_items(updates.get("itens", []))
+            self._update_suficiencia_labels()
+
+    @on(StateEventType.DATE_RECALCULATION_NEEDED)
+    def _on_date_recalc_needed(self, data: dict) -> None:
+        self._update_suficiencia_labels()
+
+    @on(StateEventType.PDF_GENERATED)
+    def _on_pdf_generated(self, data: dict) -> None:
+        self._load_history(self.patient_id)
 
     # ========== Helpers ==========
 

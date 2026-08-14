@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from andaime.widgets import SearchableComboBox, static_search_fn
 
-from emissor.state.state_events import StateEvent, StateEventType
-from emissor.ui_qt.base import QtSection
+from emissor.state.state_events import StateEventType
+from emissor.ui_qt.base import QtSection, on
 from emissor.ui_qt.brasao import get_brasao_pixmap
 from emissor.ui_qt.theme import ThemeToggleButton, make_button
 
@@ -53,7 +53,7 @@ class SearchSection(QtSection):
     def _load_patients(self) -> None:
         """Carrega todos os pacientes para autocomplete local."""
         try:
-            rows = self.app.db.get_all_patient_names()
+            rows = self.db.get_all_patient_names()
         except Exception as e:
             ErrorHandler.log(
                 f"Erro ao carregar pacientes: {e}",
@@ -185,7 +185,7 @@ class SearchSection(QtSection):
         if self._search_combo is not None:
             self._search_combo.clear()
 
-        self.app.state_manager.clear_selected_patient()
+        self.state.clear_selected_patient()
         self.app.dirty_tracker.reset()
 
         # Habilitar edição na seção de paciente (quando existir)
@@ -210,8 +210,8 @@ class SearchSection(QtSection):
         """
         self._current_patient = patient
         self.set_status("Carregando paciente...")
-        self.app.db_runner.run(
-            self.app.db.get_patient_by_id,
+        self.run_db(
+            self.db.get_patient_by_id,
             patient["id"],
             on_done=lambda full: self._apply_selected_patient(patient, full),
         )
@@ -227,7 +227,7 @@ class SearchSection(QtSection):
             full_patient: Paciente completo retornado por db.get_patient_by_id.
         """
         patient_to_set = full_patient or patient
-        self.app.state_manager.set_selected_patient(patient_to_set)
+        self.state.set_selected_patient(patient_to_set)
         self.app.set_dirty_baseline()
 
         nome = patient_to_set.get("nome") or patient.get("nome", "")
@@ -235,19 +235,19 @@ class SearchSection(QtSection):
 
     # ========== StateObserver ==========
 
-    def on_state_changed(self, event: StateEvent) -> None:
-        """Reage a mudanças de estado do StateManager."""
-        try:
-            if event.event_type == StateEventType.PATIENT_SELECTED:
-                self._sync_combo_to_patient(event.data.get("patient", {}))
-            elif event.event_type == StateEventType.PATIENT_UPDATED:
-                updates = event.data.get("updates", {})
-                if "nome" in updates or "tipo" in updates:
-                    self._refresh_patient_options()
-            elif event.event_type == StateEventType.PATIENT_CLEARED:
-                self.clear_search()
-        except Exception as e:
-            self._handle_state_change_error(e, self.__class__.__name__)
+    @on(StateEventType.PATIENT_SELECTED)
+    def _on_patient_selected(self, data: dict) -> None:
+        self._sync_combo_to_patient(data.get("patient", {}))
+
+    @on(StateEventType.PATIENT_UPDATED)
+    def _on_patient_updated(self, data: dict) -> None:
+        updates = data.get("updates", {})
+        if "nome" in updates or "tipo" in updates:
+            self._refresh_patient_options()
+
+    @on(StateEventType.PATIENT_CLEARED)
+    def _on_patient_cleared(self, data: dict) -> None:
+        self.clear_search()
 
     def _sync_combo_to_patient(self, patient: dict[str, Any]) -> None:
         """Sincroniza o combo de busca com o paciente selecionado.

@@ -38,7 +38,6 @@ class StateManager:
         """Inicializa gerenciador de estado"""
         # Estado do paciente
         self._selected_patient: "Patient | None" = None
-        self._search_results: List[Dict[str, Any]] = []
 
         # Configuração
         self._save_root_path: Optional[Path] = None
@@ -98,33 +97,16 @@ class StateManager:
                     context=ErrorContext.UI,
                 )
 
-    # ========== Public Event Notification Methods ==========
-
-    def notify_processo_count_changed(self, count: int) -> None:
-        """Notifica observadores sobre mudança na contagem de processos."""
-        # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.PROCESSO_COUNT_CHANGED, data={"count": count}
-            )
-        )
-
-    def notify_tipo_changed(self, tipo: str) -> None:
-        """Notifica observadores sobre mudança no tipo do paciente."""
-        self.notify_observers(
-            StateEvent(StateEventType.TIPO_CHANGED, data={"tipo": tipo})
-        )
+    def emit(self, event_type: StateEventType, **data: Any) -> None:
+        """shorthand for notify_observers(StateEvent(...))"""
+        self.notify_observers(StateEvent(event_type=event_type, data=data))
 
     # ========== Patient State ==========
 
     def get_selected_patient(self) -> Any:
         """Retorna o paciente selecionado (cópia rasa)."""
         with self._lock:
-            return (
-                copy.copy(self._selected_patient)
-                if self._selected_patient
-                else None
-            )
+            return copy.copy(self._selected_patient) if self._selected_patient else None
 
     def set_selected_patient(self, patient_data: Any) -> None:
         """Define o paciente selecionado e notifica observadores."""
@@ -137,12 +119,7 @@ class StateManager:
         with self._lock:
             self._selected_patient = copy.deepcopy(patient_data)
 
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.PATIENT_SELECTED,
-                data={"patient": patient_data, "batch_mode": True},
-            )
-        )
+        self.emit(StateEventType.PATIENT_SELECTED, patient=patient_data)
 
         ErrorHandler.log(
             f"Paciente selecionado: {patient_data.nome}",
@@ -157,9 +134,7 @@ class StateManager:
             self._selected_patient = None
 
         # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(event_type=StateEventType.PATIENT_CLEARED, data={})
-        )
+        self.emit(StateEventType.PATIENT_CLEARED)
 
         ErrorHandler.log(
             "Paciente selecionado limpo (modo novo paciente)",
@@ -183,31 +158,7 @@ class StateManager:
                 if key in _PATIENT_WRITABLE_FIELDS:
                     setattr(self._selected_patient, key, value)
 
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.PATIENT_UPDATED, data={"updates": normalized}
-            )
-        )
-
-    # ========== Search State ==========
-
-    def get_search_results(self) -> List[Dict[str, Any]]:
-        """Retorna resultados da busca atual (cópia)."""
-        with self._lock:
-            # Return a shallow copy to avoid external modifications
-            return self._search_results.copy()
-
-    def set_search_results(self, results: List[Dict[str, Any]]) -> None:
-        """Define resultados da busca e notifica observadores."""
-        with self._lock:
-            self._search_results = results.copy()
-
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.SEARCH_RESULTS_UPDATED,
-                data={"results": results, "count": len(results)},
-            )
-        )
+        self.emit(StateEventType.PATIENT_UPDATED, updates=normalized)
 
     # ========== Configuration State ==========
 
@@ -218,17 +169,8 @@ class StateManager:
 
     def set_save_root_path(self, path: Path) -> None:
         """Define caminho raiz para salvar arquivos."""
-        # Thread-safe state update
         with self._lock:
             self._save_root_path = path
-
-        # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.CONFIG_CHANGED,
-                data={"key": "save_location", "value": str(path)},
-            )
-        )
 
     def get_print_copies(self) -> int:
         """Retorna número de cópias para impressão."""
@@ -237,19 +179,10 @@ class StateManager:
 
     def set_print_copies(self, copies: int) -> None:
         """Define número de cópias (1 a 4)."""
-        # Thread-safe state update
         with self._lock:
             if copies < 1 or copies > 4:
                 raise ValueError("print_copies deve estar entre 1 e 4")
             self._print_copies = copies
-
-        # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.CONFIG_CHANGED,
-                data={"key": "print_copies", "value": copies},
-            )
-        )
 
     def get_dark_mode(self) -> bool:
         """Retorna se dark mode está ativo."""
@@ -258,17 +191,8 @@ class StateManager:
 
     def set_dark_mode(self, dark_mode: bool) -> None:
         """Define dark mode."""
-        # Thread-safe state update
         with self._lock:
             self._dark_mode = dark_mode
-
-        # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.CONFIG_CHANGED,
-                data={"key": "dark_mode", "value": dark_mode},
-            )
-        )
 
     # ========== PDF State ==========
 
@@ -277,9 +201,7 @@ class StateManager:
         with self._lock:
             return self._last_generated_pdf
 
-    def get_last_generated_pdf_for_patient(
-        self, patient_id: int
-    ) -> Optional[str]:
+    def get_last_generated_pdf_for_patient(self, patient_id: int) -> Optional[str]:
         """Retorna o último PDF gerado apenas se pertencer ao paciente."""
         with self._lock:
             if (
@@ -299,11 +221,7 @@ class StateManager:
             self._last_generated_pdf_patient_id = patient_id
 
         # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.PDF_GENERATED, data={"pdf_path": pdf_path}
-            )
-        )
+        self.emit(StateEventType.PDF_GENERATED, pdf_path=pdf_path)
 
     # ========== Options State (para Date Calculations) ==========
 
@@ -319,9 +237,7 @@ class StateManager:
             self._periodicidade = value
 
         # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(event_type=StateEventType.DATE_RECALCULATION_NEEDED, data={})
-        )
+        self.emit(StateEventType.DATE_RECALCULATION_NEEDED)
 
     def get_receitas(self) -> list[dict[str, str]]:
         """Retorna a lista ordenada de receitas (data + tipo)."""
@@ -344,13 +260,7 @@ class StateManager:
         with self._lock:
             self._receitas = normalized
 
-        # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.DATE_RECALCULATION_NEEDED,
-                data={"calculation_mode": "proxima_vez_only"},
-            )
-        )
+        self.emit(StateEventType.DATE_RECALCULATION_NEEDED)
 
     def get_bloquear_balanco(self) -> bool:
         """Retorna se o bloqueio de balanço está ativo."""
@@ -363,66 +273,40 @@ class StateManager:
         with self._lock:
             self._bloquear_balanco = bool(value)
 
-        # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.DATE_RECALCULATION_NEEDED,
-                data={"calculation_mode": "proxima_vez_only"},
-            )
-        )
+        self.emit(StateEventType.DATE_RECALCULATION_NEEDED)
 
-    def update_date_field(
-        self, field_name: str, value: Any, calculation_mode: str = "full"
-    ) -> None:
+    def update_date_field(self, field_name: str, value: Any) -> None:
         """Atualiza um campo de data (normaliza None para "") e notifica.
 
         Args:
             field_name: 'periodicidade'
             value: Valor (None vira "")
-            calculation_mode: 'full' ou 'proxima_vez_only'
         """
-        self.update_date_fields(
-            _calculation_mode=calculation_mode, **{field_name: value}
-        )
+        self.update_date_fields(**{field_name: value})
 
-    def request_date_recalculation(self, calculation_mode: str = "full") -> None:
-        """Solicita recálculo de datas sem alterar campos.
+    def request_date_recalculation(self) -> None:
+        """Solicita recálculo de datas sem alterar campos."""
+        self.emit(StateEventType.DATE_RECALCULATION_NEEDED)
 
-        Args:
-            calculation_mode: 'full' ou 'proxima_vez_only'
-        """
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.DATE_RECALCULATION_NEEDED,
-                data={"calculation_mode": calculation_mode},
-            )
-        )
-
-    def update_date_fields(
-        self, _calculation_mode: str = "full", **fields: Any
-    ) -> None:
+    def update_date_fields(self, **fields: Any) -> None:
         """Atualiza múltiplos campos de data com única notificação.
 
         Args:
-            _calculation_mode: 'full' ou 'proxima_vez_only'
             **fields: pares para periodicidade
         """
         valid_fields = {"periodicidade"}
         invalid = [f for f in fields.keys() if f not in valid_fields]
         if invalid:
             raise ValueError(
-                f"Unknown date fields: {invalid}. "
-                f"Must be one of: periodicidade"
+                f"Unknown date fields: {invalid}. Must be one of: periodicidade"
             )
 
-        # Log batch update operation
         ErrorHandler.log(
             f"Batch update de {len(fields)} campos de data: {list(fields.keys())}",
             level=ErrorLevel.DEBUG,
             context=ErrorContext.STATE,
         )
 
-        # Batch update state (single lock acquisition)
         with self._lock:
             for field_name, value in fields.items():
                 normalized_value = (
@@ -431,21 +315,7 @@ class StateManager:
                 if field_name == "periodicidade":
                     self._periodicidade = normalized_value
 
-        # Log notification emission
-        ErrorHandler.log(
-            f"Emitindo único notification DATE_RECALCULATION_NEEDED para "
-            f"{len(fields)} campos (mode={_calculation_mode})",
-            level=ErrorLevel.DEBUG,
-            context=ErrorContext.STATE,
-        )
-
-        # Single notification for all fields, carrying the calculation mode
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.DATE_RECALCULATION_NEEDED,
-                data={"calculation_mode": _calculation_mode},
-            )
-        )
+        self.emit(StateEventType.DATE_RECALCULATION_NEEDED)
 
     # ========== Calculated Dates State ==========
 
@@ -453,7 +323,6 @@ class StateManager:
         self,
         data_retirada_str: str,
         periodicidade_str: str,
-        calculation_mode: str = "full",
         enable_distribution: bool = False,
         distribution_window_days: int = 3,
         retirada_count_fn: Any = None,
@@ -462,10 +331,9 @@ class StateManager:
         """Calcula a próxima retirada e armazena no estado.
 
         Args:
-            calculation_mode: 'full' ou 'proxima_vez_only'
             enable_distribution: habilita distribuição inteligente
-            distribution_window_days: janela em dias
-            retirada_count_fn: callable para contar retiradas por data
+            distribution_window_days: dias para trás na janela (1-7)
+            retirada_count_fn: callable(start, end) → dict data→contagem
             bloquear_balanco: evita últimos 5 dias úteis do mês
         """
         from emissor.utils.date_utils import DateCalculator
@@ -476,33 +344,23 @@ class StateManager:
 
         result: Dict[str, Any] = {}
 
-        if calculation_mode in ("full", "proxima_vez_only"):
-            proxima_result = DateCalculator.calculate_proxima_vez(
-                data_retirada_str,
-                periodicidade_str,
-                enable_distribution=enable_distribution,
-                distribution_window_days=distribution_window_days,
-                retirada_count_fn=retirada_count_fn,
-                bloquear_balanco=bloquear_balanco,
-            )
-            result.update(proxima_result)
+        proxima_result = DateCalculator.calculate_proxima_vez(
+            data_retirada_str,
+            periodicidade_str,
+            enable_distribution=enable_distribution,
+            distribution_window_days=distribution_window_days,
+            retirada_count_fn=retirada_count_fn,
+            bloquear_balanco=bloquear_balanco,
+        )
+        result.update(proxima_result)
 
         self.set_calculated_dates(result)
         return result
 
     def set_calculated_dates(self, dates: Dict[str, Any]) -> None:
-        """Armazena datas calculadas e emite RETIRADA_DATE_CALCULATED."""
-        # Thread-safe state update
+        """Armazena datas calculadas."""
         with self._lock:
             self._calculated_dates = dates.copy()
-
-        # Single notification call - error handling centralized
-        self.notify_observers(
-            StateEvent(
-                event_type=StateEventType.RETIRADA_DATE_CALCULATED,
-                data={"dates": dates},
-            )
-        )
 
     def get_calculated_dates(self) -> Dict[str, Any]:
         """Retorna cópia das datas calculadas."""

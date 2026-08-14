@@ -165,6 +165,21 @@ class QtApp(QMainWindow):
         root.addWidget(self._build_status_label(), stretch=0)
         root.addWidget(self._build_content_grid(), stretch=1)
 
+        self._connect_dirty_signals()
+
+    def _connect_dirty_signals(self) -> None:
+        """Conecta o sinal field_changed de todas as seções ao recompute de
+        dirty state. Assim as seções não precisam conhecer refresh_dirty_state."""
+        for section in (
+            self.patient_section,
+            self.options_section,
+            self.items_section,
+            self.dates_section,
+            self.actions_section,
+            self.search_section,
+        ):
+            section.field_changed.connect(self.refresh_dirty_state)
+
     def _build_search_bar(self) -> QWidget:
         """Constrói a barra superior (SearchSection)."""
         from emissor.ui_qt.sections.search_section import SearchSection

@@ -11,8 +11,6 @@ class StateEventType(Enum):
     PATIENT_SELECTED = "patient_selected"
     PATIENT_CLEARED = "patient_cleared"
     PATIENT_UPDATED = "patient_updated"
-    SEARCH_RESULTS_UPDATED = "search_results_updated"
-    CONFIG_CHANGED = "config_changed"
     PDF_GENERATED = "pdf_generated"
 
     # Process management events
@@ -23,7 +21,6 @@ class StateEventType(Enum):
 
     # Date calculation triggers
     DATE_RECALCULATION_NEEDED = "date_recalculation_needed"
-    RETIRADA_DATE_CALCULATED = "retirada_date_calculated"
 
     # Dirty tracking
     DIRTY_STATE_CHANGED = "dirty_state_changed"

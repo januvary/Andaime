@@ -14,8 +14,8 @@ from PySide6.QtWidgets import QGridLayout, QSizePolicy, QWidget
 if TYPE_CHECKING:
     from emissor.main_window import QtApp
 
-from emissor.state.state_events import StateEvent, StateEventType
-from emissor.ui_qt.base import QtSection
+from emissor.state.state_events import StateEventType
+from emissor.ui_qt.base import QtSection, on
 from emissor.ui_qt.theme import make_button
 
 
@@ -181,38 +181,44 @@ class ActionsSection(QtSection):
 
     # ========== StateObserver ==========
 
-    def on_state_changed(self, event: StateEvent) -> None:
-        """Reage a mudanças de estado do StateManager / DirtyTracker."""
-        try:
-            if event.event_type == StateEventType.PDF_GENERATED:
-                self.enable_open_pdf_button()
-            elif event.event_type == StateEventType.DIRTY_STATE_CHANGED:
-                count = int(event.data.get("dirty_count", 0))
-                self.update_save_button(count)
-            elif event.event_type == StateEventType.PATIENT_SELECTED:
-                patient = event.data.get("patient")
-                if patient is not None and getattr(patient, "tem_retirada", False):
-                    self.enable_open_pdf_button()
-                else:
-                    self.disable_open_pdf_button()
-                self.enable_scan_button()
-                self._check_olostech_state()
-            elif event.event_type == StateEventType.PATIENT_CLEARED:
-                self.disable_open_pdf_button()
-                self.disable_scan_button()
-                self.disable_olostech_button()
-                self._olostech_btn.setText("Olostech")
-                self._current_retirada = None
-            elif event.event_type == StateEventType.PATIENT_UPDATED:
-                self._check_olostech_state()
-            elif event.event_type == StateEventType.DATE_RECALCULATION_NEEDED:
-                self._check_olostech_state()
-        except Exception as e:
-            self._handle_state_change_error(e, self.__class__.__name__)
+    @on(StateEventType.PDF_GENERATED)
+    def _on_pdf_generated(self, data: dict) -> None:
+        self.enable_open_pdf_button()
+
+    @on(StateEventType.DIRTY_STATE_CHANGED)
+    def _on_dirty_changed(self, data: dict) -> None:
+        count = int(data.get("dirty_count", 0))
+        self.update_save_button(count)
+
+    @on(StateEventType.PATIENT_SELECTED)
+    def _on_patient_selected(self, data: dict) -> None:
+        patient = data.get("patient")
+        if patient is not None and getattr(patient, "tem_retirada", False):
+            self.enable_open_pdf_button()
+        else:
+            self.disable_open_pdf_button()
+        self.enable_scan_button()
+        self._check_olostech_state()
+
+    @on(StateEventType.PATIENT_CLEARED)
+    def _on_patient_cleared(self, data: dict) -> None:
+        self.disable_open_pdf_button()
+        self.disable_scan_button()
+        self.disable_olostech_button()
+        self._olostech_btn.setText("Olostech")
+        self._current_retirada = None
+
+    @on(StateEventType.PATIENT_UPDATED)
+    def _on_patient_updated(self, data: dict) -> None:
+        self._check_olostech_state()
+
+    @on(StateEventType.DATE_RECALCULATION_NEEDED)
+    def _on_date_recalc_needed(self, data: dict) -> None:
+        self._check_olostech_state()
 
     def _check_olostech_state(self) -> None:
         """Verifica se há retirada existente e atualiza botão Olostech."""
-        patient_id = self.app.state_manager.get_patient_id()
+        patient_id = self.patient_id
         if patient_id is None:
             self.disable_olostech_button()
             return
@@ -232,8 +238,8 @@ class ActionsSection(QtSection):
             self.disable_olostech_button()
             return
 
-        self.app.db_runner.run(
-            self.app.db.get_retirada_by_date,
+        self.run_db(
+            self.db.get_retirada_by_date,
             patient_id,
             date_str,
             on_done=self._apply_olostech_state,

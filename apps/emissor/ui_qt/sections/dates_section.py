@@ -31,8 +31,8 @@ from PySide6.QtWidgets import (
 if TYPE_CHECKING:
     from emissor.main_window import QtApp
 
-from emissor.state.state_events import StateEvent, StateEventType
-from emissor.ui_qt.base import QtSection
+from emissor.state.state_events import StateEventType
+from emissor.ui_qt.base import QtSection, on
 from emissor.ui_qt.theme import PX_LARGE
 from emissor.utils.field_utils import get_field_str
 
@@ -62,8 +62,6 @@ class DatesSection(QtSection):
         self._proxima_distribution: QLabel | None = None
         self._ultima_retirada_label: QLabel | None = None
         self._proxima_marcada_label: QLabel | None = None
-
-        self._calculation_mode: str = "full"
 
         self._build_ui()
         self.update_today_date()
@@ -160,9 +158,7 @@ class DatesSection(QtSection):
     def _on_date_changed(self, _new_date: QDate) -> None:
         """Data da retirada mudou → checa retirada existente e pede recálculo."""
         self.check_existing_retirada()
-        self.app.state_manager.request_date_recalculation(
-            calculation_mode="proxima_vez_only"
-        )
+        self.state.request_date_recalculation()
 
     def update_today_date(self) -> None:
         """Define a data da retirada para hoje (sem disparar recálculo)."""
@@ -179,22 +175,18 @@ class DatesSection(QtSection):
         if self._hoje_edit is None:
             return
 
-        calculation_mode = self._calculation_mode
-        self._calculation_mode = "full"
-
         data_retirada_str = self._hoje_edit.date().toString("dd/MM/yyyy")
-        result = self.app.state_manager.calculate_dates(
+        result = self.state.calculate_dates(
             data_retirada_str=data_retirada_str,
-            periodicidade_str=self.app.state_manager.get_periodicidade(),
-            calculation_mode=calculation_mode,
+            periodicidade_str=self.state.get_periodicidade(),
             enable_distribution=self.app.config_manager.get(
                 "distribute_retiradas", True
             ),
             distribution_window_days=self.app.config_manager.get(
                 "distribution_window_days", 3
             ),
-            retirada_count_fn=self.app.db.count_retiradas_by_proxima_date,
-            bloquear_balanco=self.app.state_manager.get_bloquear_balanco(),
+            retirada_count_fn=self.db.count_retiradas_by_proxima_date,
+            bloquear_balanco=self.state.get_bloquear_balanco(),
         )
 
         if not result:
@@ -221,7 +213,7 @@ class DatesSection(QtSection):
         """Verifica se já existe retirada para o paciente + data atual."""
         if self._retirada_registered_label is None or self._hoje_edit is None:
             return
-        if not self.app.state_manager.has_selected_patient():
+        if not self.state.has_selected_patient():
             self._retirada_registered_label.setText("")
             return
 
@@ -230,13 +222,13 @@ class DatesSection(QtSection):
             self._retirada_registered_label.setText("")
             return
 
-        patient_id = self.app.state_manager.get_patient_id()
+        patient_id = self.patient_id
         if patient_id is None:
             self._retirada_registered_label.setText("")
             return
 
-        self.app.db_runner.run(
-            self.app.db.get_retirada_by_date,
+        self.run_db(
+            self.db.get_retirada_by_date,
             patient_id,
             qd.toString("yyyy-MM-dd"),
             on_done=self._apply_existing_retirada,
@@ -259,22 +251,19 @@ class DatesSection(QtSection):
 
     def refresh_ultima_retirada(self) -> None:
         """Carrega a última retirada ativa do paciente selecionado."""
-        if (
-            self._ultima_retirada_label is None
-            or self._proxima_marcada_label is None
-        ):
+        if self._ultima_retirada_label is None or self._proxima_marcada_label is None:
             return
-        if not self.app.state_manager.has_selected_patient():
+        if not self.state.has_selected_patient():
             self._set_label(self._ultima_retirada_label, "—")
             self._set_label(self._proxima_marcada_label, "")
             return
-        patient_id = self.app.state_manager.get_patient_id()
+        patient_id = self.patient_id
         if patient_id is None:
             self._set_label(self._ultima_retirada_label, "—")
             self._set_label(self._proxima_marcada_label, "")
             return
-        self.app.db_runner.run(
-            self.app.db.get_ultima_retirada_ativa,
+        self.run_db(
+            self.db.get_ultima_retirada_ativa,
             patient_id,
             on_done=self._apply_ultima_retirada,
         )
@@ -287,10 +276,7 @@ class DatesSection(QtSection):
             ultima: Retirada retornada por db.get_ultima_retirada_ativa,
                     ou None se não houver retirada ativa.
         """
-        if (
-            self._ultima_retirada_label is None
-            or self._proxima_marcada_label is None
-        ):
+        if self._ultima_retirada_label is None or self._proxima_marcada_label is None:
             return
         if ultima is None:
             self._set_label(self._ultima_retirada_label, "—")
@@ -351,37 +337,38 @@ class DatesSection(QtSection):
 
     # ========== StateObserver ==========
 
-    def on_state_changed(self, event: StateEvent) -> None:
-        """Reage a mudanças de estado do StateManager."""
-        try:
-            if event.event_type == StateEventType.PATIENT_SELECTED:
-                patient_data = event.data.get("patient", {})
-                self.app.state_manager.update_date_fields(
-                    periodicidade=get_field_str(patient_data, "periodicidade"),
-                )
-                self.update_today_date()
-                self.check_existing_retirada()
-                self.refresh_ultima_retirada()
-            elif event.event_type == StateEventType.PATIENT_CLEARED:
-                self.update_today_date()
-                self._set_label(self._proxima_label, "—")
-                self._set_label(self._proxima_countdown, "")
-                self._set_label(self._proxima_distribution, "")
-                self._set_label(self._retirada_registered_label, "")
-                self._set_label(self._ultima_retirada_label, "—")
-                self._set_label(self._proxima_marcada_label, "")
-            elif event.event_type == StateEventType.PATIENT_UPDATED:
-                updates = event.data.get("updates", {})
-                if "periodicidade" in updates:
-                    self.app.state_manager.update_date_fields(
-                        periodicidade=updates.get("periodicidade", ""),
-                    )
-                self.refresh_ultima_retirada()
-            elif event.event_type == StateEventType.DATE_RECALCULATION_NEEDED:
-                self._calculation_mode = event.data.get("calculation_mode", "full")
-                self._recalc_timer.start()
-        except Exception as e:
-            self._handle_state_change_error(e, self.__class__.__name__)
+    @on(StateEventType.PATIENT_SELECTED)
+    def _on_patient_selected(self, data: dict) -> None:
+        patient_data = data.get("patient", {})
+        self.state.update_date_fields(
+            periodicidade=get_field_str(patient_data, "periodicidade"),
+        )
+        self.update_today_date()
+        self.check_existing_retirada()
+        self.refresh_ultima_retirada()
+
+    @on(StateEventType.PATIENT_CLEARED)
+    def _on_patient_cleared(self, data: dict) -> None:
+        self.update_today_date()
+        self._set_label(self._proxima_label, "—")
+        self._set_label(self._proxima_countdown, "")
+        self._set_label(self._proxima_distribution, "")
+        self._set_label(self._retirada_registered_label, "")
+        self._set_label(self._ultima_retirada_label, "—")
+        self._set_label(self._proxima_marcada_label, "")
+
+    @on(StateEventType.PATIENT_UPDATED)
+    def _on_patient_updated(self, data: dict) -> None:
+        updates = data.get("updates", {})
+        if "periodicidade" in updates:
+            self.state.update_date_fields(
+                periodicidade=updates.get("periodicidade", ""),
+            )
+        self.refresh_ultima_retirada()
+
+    @on(StateEventType.DATE_RECALCULATION_NEEDED)
+    def _on_date_recalc_needed(self, data: dict) -> None:
+        self._recalc_timer.start()
 
     # ========== Helpers ==========
 
@@ -408,4 +395,3 @@ class DatesSection(QtSection):
         """Define texto de label de forma segura."""
         if label is not None:
             label.setText(text)
-

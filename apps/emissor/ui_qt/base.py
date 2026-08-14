@@ -9,21 +9,45 @@ sempre via StateManager (eventos), nunca por chamadas diretas."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QLineEdit, QWidget, QVBoxLayout, QLabel, QFrame
 
 if TYPE_CHECKING:
     from emissor.main_window import QtApp
+    from emissor.database.emissor_db import EmissorDatabase
+    from emissor.state.state_manager import StateManager
 
-from emissor.state.state_events import StateEvent, StateObserver
+from emissor.state.state_events import StateEvent, StateEventType, StateObserver
+
+
+def on(event_type: StateEventType):
+    """Registra o método como handler para um tipo de evento."""
+    def decorator(fn):
+        fn._event_type = event_type
+        return fn
+    return decorator
 
 
 class QtSection(QFrame, StateObserver):
     """Painel retangular base com header opcional e área de conteúdo."""
 
+    #: Emitido quando um campo da seção muda (usado para recomputar dirty state).
+    field_changed = Signal()
+
     #: Se True, a seção não se registra como observadora (ex.: busca, só output).
     _output_only: bool = False
+
+    _on_handlers: dict[StateEventType, Any] = {}  # populated by __init_subclass__
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        handlers: dict[StateEventType, Any] = {}
+        for attr in vars(cls).values():
+            if callable(attr) and hasattr(attr, "_event_type"):
+                handlers[attr._event_type] = attr
+        cls._on_handlers = {**QtSection._on_handlers, **handlers}
 
     def __init__(self, parent: QWidget, app: QtApp) -> None:
         super().__init__(parent)
@@ -44,6 +68,43 @@ class QtSection(QFrame, StateObserver):
     def app(self) -> QtApp:
         """Retorna a referência à aplicação."""
         return self._app
+
+    @property
+    def patient_id(self) -> int | None:
+        """ID do paciente selecionado (atalho para state_manager)."""
+        return self._app.state_manager.get_patient_id()
+
+    # ========== Acesso a dados ==========
+
+    @property
+    def state(self) -> StateManager:
+        """StateManager da aplicação — estado compartilhado + eventos."""
+        return self._app.state_manager
+
+    @property
+    def db(self) -> EmissorDatabase:
+        """Banco da aplicação — leitura síncrona direta dos métodos."""
+        return self._app.db
+
+    def run_db(
+        self,
+        fn: Callable[..., Any],
+        *args: Any,
+        on_done: Callable[[Any], None],
+    ) -> None:
+        """Executa ``fn`` (método de ``self.db``) no worker thread; o
+        resultado chega em ``on_done`` na thread principal."""
+        self._app.db_runner.run(fn, *args, on_done=on_done)
+
+    @staticmethod
+    def set_edit_text(edit: QLineEdit | None, value: str) -> None:
+        """Define texto de um QLineEdit sem disparar handlers (blockSignals)."""
+        if edit is None:
+            return
+        edit.blockSignals(True)
+        edit.setText(value)
+        edit.setCursorPosition(0)
+        edit.blockSignals(False)
 
     # ========== Observer ==========
 
@@ -67,7 +128,14 @@ class QtSection(QFrame, StateObserver):
             self._is_registered = False
 
     def on_state_changed(self, event: StateEvent) -> None:
-        """Chamado quando o estado observado muda. Override nas subclasses."""
+        """Despacha eventos para handlers registrados via @on."""
+        handler = self._on_handlers.get(event.event_type)
+        if handler is None:
+            return
+        try:
+            handler(self, event.data)
+        except Exception as e:
+            self._handle_state_change_error(e, self.__class__.__name__)
 
     def _handle_state_change_error(self, e: Exception, section_name: str) -> None:
         """Trata erro de on_state_changed de forma consistente."""
