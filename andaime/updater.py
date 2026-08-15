@@ -466,6 +466,11 @@ def _apply_pending_update_locked() -> bool:
         # 5. Clean up staging
         shutil.rmtree(staging, ignore_errors=True)
 
+        # Stale error log from a previous failed attempt — the update
+        # applied now, so remove it to avoid confusion later.
+        with contextlib.suppress(Exception):
+            (root / "update_error.log").unlink(missing_ok=True)
+
         ErrorHandler.log(
             f"Update {tag} applied. Launching new version...",
             level=ErrorLevel.INFO,
@@ -481,11 +486,21 @@ def _apply_pending_update_locked() -> bool:
         return True  # unreachable — _launch_with_monitoring exits
 
     except Exception as e:
+        import traceback
+
+        tb = traceback.format_exc()
         ErrorHandler.log(
-            f"Update application failed: {e}. Rolling back...",
+            f"Update application failed: {e}. Rolling back...\n{tb}",
             level=ErrorLevel.ERROR,
             context="Updater",
         )
+        # Persist the traceback where it's easy to find and survives
+        # relaunches, regardless of stdout redirection.
+        with contextlib.suppress(Exception):
+            (root / "update_error.log").write_text(
+                f"tag: {tag}\nswaps so far: {swaps}\n\n{tb}",
+                encoding="utf-8",
+            )
         _rollback(swaps)
 
         # Restore old VERSION so hashes match the restored code
@@ -537,6 +552,7 @@ def _launch_with_monitoring(
                 [str(python_exe), "-m", app_module],
                 start_new_session=True,
                 env=env,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -572,12 +588,21 @@ def _launch_with_monitoring(
         stderr = b"timeout"
 
     # --- Failure path ---
+    stderr_text = ""
+    with contextlib.suppress(Exception):
+        stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
+
     ErrorHandler.log(
-        f"Post-update launch failed (rc={rc}). "
+        f"Post-update launch failed (rc={rc}, stderr={stderr_text}). "
         f"Rolling back to previous version.",
         level=ErrorLevel.ERROR,
         context="Updater",
     )
+    with contextlib.suppress(Exception):
+        (root / "update_error.log").write_text(
+            f"post-update launch failed: rc={rc}\n\nstderr:\n{stderr_text}",
+            encoding="utf-8",
+        )
 
     _rollback(swaps)
 
@@ -593,6 +618,9 @@ def _launch_with_monitoring(
     subprocess.Popen(
         [str(python_exe), "-m", app_module],
         start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     os._exit(1)
@@ -623,17 +651,25 @@ def restart_app() -> None:
     app_module = _get_app_module()
     python_exe = _get_python_exe()
 
+    _NO_INHERIT = dict(
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
     if app_module:
         subprocess.Popen(
             [str(python_exe), "-m", app_module],
             start_new_session=True,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **_NO_INHERIT,
         )
     else:
         subprocess.Popen(
             [sys.executable],
             start_new_session=True,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **_NO_INHERIT,
         )
     os._exit(0)
 
@@ -776,8 +812,20 @@ class UpdateCheckWorker(QThread):
 
             # ---- Download assets ----
             tmp = tempfile.mkdtemp(prefix="andaime_update_")
+            lock_handle = None
             try:
                 staging = staging_path()
+
+                # Guard against concurrent staging (another app's worker,
+                # or the launcher's staging mutex on the C side). If the
+                # lock is held, skip — that process's staging gets applied
+                # on the next launch.
+                lock_handle = _acquire_lock(staging.parent / "update.lock")
+                if lock_handle is None:
+                    self.no_update.emit()
+                    return
+                lock_path = staging.parent / "update.lock"
+
                 if staging.is_dir():
                     shutil.rmtree(staging)
 
@@ -789,12 +837,14 @@ class UpdateCheckWorker(QThread):
 
                     if need_payload and "payload" in name and name.endswith(".zip"):
                         self._download_and_stage(
-                            asset_url, tmp, "payload.zip", headers, context
+                            asset_url, tmp, "payload.zip", headers, context,
+                            keepalive=lock_path,
                         )
                         need_payload = False
                     elif need_app_update and "app-update" in name and name.endswith(".zip"):
                         self._download_and_stage(
-                            asset_url, tmp, "app-update.zip", headers, context
+                            asset_url, tmp, "app-update.zip", headers, context,
+                            keepalive=lock_path,
                         )
                         need_app_update = False
 
@@ -805,6 +855,8 @@ class UpdateCheckWorker(QThread):
                 (staging / UPDATE_TAG).write_text(tag, encoding="utf-8")
                 self.update_ready.emit(tag)
             finally:
+                if lock_handle is not None:
+                    _release_lock(staging.parent / "update.lock", lock_handle)
                 with contextlib.suppress(Exception):
                     shutil.rmtree(tmp)
 
@@ -812,17 +864,30 @@ class UpdateCheckWorker(QThread):
             self.update_failed.emit(str(e))
 
     def _download_and_stage(
-        self, url: str, tmp: str, filename: str, headers: dict, context: ssl.SSLContext
+        self,
+        url: str,
+        tmp: str,
+        filename: str,
+        headers: dict,
+        context: ssl.SSLContext,
+        keepalive: Path | None = None,
     ) -> None:
         zip_path = Path(tmp) / filename
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=120, context=context) as resp:
             with zip_path.open("wb") as f:
+                n = 0
                 while True:
                     chunk = resp.read(65536)
                     if not chunk:
                         break
                     f.write(chunk)
+                    n += 1
+                    # Refresh the staging lock's mtime every ~4MB so slow
+                    # downloads aren't mistaken for a stale (dead) holder.
+                    if keepalive is not None and n % 64 == 0:
+                        with contextlib.suppress(OSError):
+                            keepalive.touch()
 
         staging = staging_path()
         staging.mkdir(parents=True, exist_ok=True)
