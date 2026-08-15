@@ -223,6 +223,19 @@ show_progress(const char *caption)
     return hdlg;
 }
 
+/* Drain the message queue so the progress dialog keeps painting (and the
+ * marquee keeps animating) while the GUI thread does blocking work.
+ * Call from inside download/extract loops. */
+static void
+pump_messages(void)
+{
+    MSG msg;
+    while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageA(&msg);
+    }
+}
+
 static INT_PTR CALLBACK
 progress_dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -285,7 +298,7 @@ run_and_pump(HWND hdlg, const char *cmd)
  * as needed and skips entries with path-traversal components. Returns 0 on
  * success, non-zero on failure. Errors are logged to launcher.log. */
 static int
-extract_miniz(const char *zipPath, const char *destPath)
+extract_miniz(const char *zipPath, const char *destPath, HWND hdlg)
 {
     mz_zip_archive zip;
     mz_zip_zero_struct(&zip);
@@ -297,6 +310,13 @@ extract_miniz(const char *zipPath, const char *destPath)
 
     int fileCount = (int)mz_zip_reader_get_num_files(&zip);
     log_message("miniz: %d entries in %s", fileCount, zipPath);
+
+    /* Determinate progress over entries (replaces the marquee). */
+    HWND hBar = hdlg ? GetDlgItem(hdlg, IDC_PROGRESS) : NULL;
+    if (hBar && fileCount > 0) {
+        SendMessageA(hBar, PBM_SETMARQUEE, FALSE, 0);
+        SendMessageA(hBar, PBM_SETRANGE32, 0, fileCount);
+    }
 
     int errors = 0;
     for (int i = 0; i < fileCount; i++) {
@@ -340,6 +360,9 @@ extract_miniz(const char *zipPath, const char *destPath)
             errors++;
             continue;
         }
+
+        if (hBar) SendMessageA(hBar, PBM_SETPOS, i + 1, 0);
+        pump_messages();
     }
 
     mz_zip_reader_end(&zip);
@@ -545,13 +568,7 @@ http_download(const char *url, const char *destPath, HWND hdlg)
         }
 
         /* Pump messages to keep UI responsive. */
-        if (hdlg) {
-            MSG msg;
-            while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
-                TranslateMessage(&msg);
-                DispatchMessageA(&msg);
-            }
-        }
+        if (hdlg) pump_messages();
     }
 
     fclose(fp);
@@ -859,8 +876,10 @@ launcher_update_check(const char *localRoot, const char *appName,
             char zipPath[MAX_PATH * 2];
             snprintf(zipPath, sizeof(zipPath), "%s\\payload.zip", tempDir);
             SetWindowTextW(hdlg, L"Baixando atualização...");
-            if (http_download(url, zipPath, hdlg) == 0)
-                extract_miniz(zipPath, stagingPath);
+            if (http_download(url, zipPath, hdlg) == 0) {
+                SetWindowTextW(hdlg, L"Extraindo arquivos...");
+                extract_miniz(zipPath, stagingPath, hdlg);
+            }
         }
     }
 
@@ -871,8 +890,10 @@ launcher_update_check(const char *localRoot, const char *appName,
             char zipPath[MAX_PATH * 2];
             snprintf(zipPath, sizeof(zipPath), "%s\\app-update.zip", tempDir);
             SetWindowTextW(hdlg, L"Baixando atualização...");
-            if (http_download(url, zipPath, hdlg) == 0)
-                extract_miniz(zipPath, stagingPath);
+            if (http_download(url, zipPath, hdlg) == 0) {
+                SetWindowTextW(hdlg, L"Extraindo arquivos...");
+                extract_miniz(zipPath, stagingPath, hdlg);
+            }
         }
     }
 
@@ -1029,7 +1050,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
                      "SISTEMAS - Instalando...");
             HWND hdlg = show_progress(progressTitle);
 
-            if (extract_miniz(distZip, localRoot) == 0) {
+            if (extract_miniz(distZip, localRoot, hdlg) == 0) {
                 if (hdlg) DestroyWindow(hdlg);
                 log_message("Portable: extracted local dist.zip to %s", localRoot);
 
@@ -1132,18 +1153,13 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             return 1;
         }
 
-        /* Step 4: Extract to localRoot using the embedded miniz extractor. */
+        /* Step 4: Extract to localRoot using the embedded miniz extractor.
+         * extract_miniz switches the bar to determinate per-file progress. */
         snprintf(progressTitle, sizeof(progressTitle),
                  "%s - Instalando...", displayName);
         SetWindowTextA(hdlg, progressTitle);
 
-        /* Reset progress bar to marquee for extraction. */
-        HWND hBar = GetDlgItem(hdlg, IDC_PROGRESS);
-        if (hBar) {
-            SendMessageA(hBar, PBM_SETMARQUEE, TRUE, 0);
-        }
-
-        if (extract_miniz(zipPath, localRoot) != 0) {
+        if (extract_miniz(zipPath, localRoot, hdlg) != 0) {
             if (hdlg) DestroyWindow(hdlg);
             char msg[512];
             snprintf(msg, sizeof(msg),
