@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from andaime.qt.fs import reveal_path
 from andaime.qt.theme import colors, make_button
 from andaime.project_registry import Project, source_files
 
@@ -94,14 +95,20 @@ def _tmux_ensure_session(name: str, path: Path) -> bool:
          "bash", "-lc", shell_cmd],
         capture_output=True,
     )
-    # Configure the session for TUI apps: truecolor passthrough, OSC renaming.
-    for opt, val in [
-        ("terminal-features", "*:RGB"),
-        ("allow-passthrough", "on"),
-        ("allow-rename", "on"),
-        ("automatic-rename", "off"),
+    # Configure the session for TUI apps: truecolor passthrough, mouse support
+    # (clickable status-bar tabs), and name the window from the pane title.
+    for args in [
+        ["terminal-features", "*:RGB"],
+        ["allow-passthrough", "on"],
+        ["mouse", "on"],
     ]:
-        subprocess.run(["tmux", "set-option", "-t", name, opt, val], capture_output=True)
+        subprocess.run(["tmux", "set-option", "-t", name, *args], capture_output=True)
+    for args in [
+        ["allow-rename", "on"],
+        ["automatic-rename", "on"],
+        ["automatic-rename-format", "#{pane_title}"],
+    ]:
+        subprocess.run(["tmux", "set-window-option", "-t", name, *args], capture_output=True)
     return True
 
 
@@ -112,6 +119,12 @@ def _tmux_new_window(name: str, path: Path) -> None:
          "bash", "-lc", shell_cmd],
         capture_output=True,
     )
+    for args in [
+        ["allow-rename", "on"],
+        ["automatic-rename", "on"],
+        ["automatic-rename-format", "#{pane_title}"],
+    ]:
+        subprocess.run(["tmux", "set-window-option", "-t", name, *args], capture_output=True)
 
 
 def _tmux_kill_window(name: str, index: int) -> None:
@@ -143,8 +156,21 @@ def _find_terminal() -> str | None:
     return None
 
 
+def _tmux_has_client(name: str) -> bool:
+    """True if any terminal is currently attached to the session."""
+    result = subprocess.run(["tmux", "list-clients", "-t", name],
+                            capture_output=True, text=True)
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _tmux_select_window(name: str, window_index: int) -> None:
+    """Make the given window the active one in the session (all clients follow)."""
+    subprocess.run(["tmux", "select-window", "-t", f"{name}:{window_index}"],
+                   capture_output=True)
+
+
 def _tmux_attach(name: str) -> None:
-    """Open a terminal window attached to the tmux session."""
+    """Open a terminal window attached to the tmux session (once per session)."""
     term = _find_terminal()
     if not term:
         print("[dev-launcher] no terminal emulator found (set $TERMINAL)")
@@ -154,6 +180,63 @@ def _tmux_attach(name: str) -> None:
         start_new_session=True,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
+
+
+def _terminal_pid_for_session(name: str) -> int | None:
+    """PID of the ptyxis window whose command attaches to the tmux session.
+
+    Each session terminal is a standalone ``ptyxis -- bash -lc "tmux attach …"``
+    process, so matching the cmdline gives a 1:1 session -> window mapping.
+    """
+    needle = f"tmux attach -t {name}"
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return None
+    for proc in entries:
+        pid_str = proc.name
+        if not pid_str.isdigit():
+            continue
+        try:
+            comm = (proc / "comm").read_text().strip()
+            if not comm.startswith("ptyxis") or comm.startswith("ptyxis-"):
+                continue
+            cmdline = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode(
+                errors="replace"
+            )
+            if needle in cmdline:
+                return int(pid_str)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def _raise_window_by_pid(pid: int) -> bool:
+    """Raise/focus the window of ``pid`` via the devlauncher-window-raise
+    GNOME Shell extension (org.andaime.DevLauncher). No-op if unavailable."""
+    try:
+        result = subprocess.run(
+            ["gdbus", "call", "--session",
+             "--dest", "org.andaime.DevLauncher",
+             "--object-path", "/org/andaime/DevLauncher/window",
+             "--method", "org.andaime.DevLauncher.Window.RaiseByPid", str(pid)],
+            capture_output=True, text=True, timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and "true" in result.stdout.lower()
+
+
+def _raise_session_terminal(name: str, delay_ms: int = 0) -> None:
+    """Bring the ptyxis window hosting the tmux session to the foreground."""
+    def _do() -> None:
+        pid = _terminal_pid_for_session(name)
+        if pid is not None:
+            _raise_window_by_pid(pid)
+    if delay_ms > 0:
+        QTimer.singleShot(delay_ms, _do)
+    else:
+        _do()
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +312,6 @@ class ProjectRow(QWidget):
         self._git_stat_timer.timeout.connect(self.refresh_git_stat)
         self._git_stat_timer.start()
 
-        self._has_window = False
         self._tmux_timer = QTimer(self)
         self._tmux_timer.setSingleShot(False)
         self._tmux_timer.setInterval(3000)
@@ -291,6 +373,13 @@ class ProjectRow(QWidget):
         self.btn_session.clicked.connect(self._spawn_session)
         header.addWidget(self.btn_session)
 
+        # Folder button — always present, opens the project root in the file explorer
+        self.btn_folder = make_button("Folder", role="flat", parent=self)
+        self.btn_folder.setFixedWidth(90)
+        self.btn_folder.setToolTip(f"Open {self.path} in the file explorer")
+        self.btn_folder.clicked.connect(self._open_folder)
+        header.addWidget(self.btn_folder)
+
         if self.project.capabilities.git:
             self.btn_console = make_button("Console", role="flat", parent=self)
             self.btn_console.setFixedWidth(90)
@@ -333,15 +422,20 @@ class ProjectRow(QWidget):
         self.expand_label.setText("▾" if self._sessions_expanded else "▸")
         self._sessions_container.setVisible(self._sessions_expanded)
 
+    def _open_folder(self) -> None:
+        reveal_path(str(self.path))
+
     def _spawn_session(self) -> None:
         if not self._sessions_expanded:
             self._toggle_sessions()
         was_new = _tmux_ensure_session(self._tmux_session, self.path)
         if not was_new:
             _tmux_new_window(self._tmux_session, self.path)
-        if was_new or not self._has_window:
+        if not _tmux_has_client(self._tmux_session):
             _tmux_attach(self._tmux_session)
-            self._has_window = True
+            _raise_session_terminal(self._tmux_session, delay_ms=800)
+        else:
+            _raise_session_terminal(self._tmux_session)
         self._reconcile_tmux()
 
     def _close_session(self, window_index: int) -> None:
@@ -351,7 +445,6 @@ class ProjectRow(QWidget):
     def _reconcile_tmux(self) -> None:
         """Rebuild session sub-rows from live tmux state."""
         windows = _tmux_list_windows(self._tmux_session) if _tmux_has_session(self._tmux_session) else []
-        self._has_window = bool(windows)
 
         # Clear and rebuild — tmux is the source of truth.
         while self._sessions_layout.count():
@@ -373,8 +466,15 @@ class ProjectRow(QWidget):
         label = QLabel(f"  {title}")
         label.setStyleSheet(f"color: {colors()['text']}; font-size: 12px;")
         label.setCursor(Qt.CursorShape.PointingHandCursor)
-        label.setToolTip("Click to open this session's terminal")
-        label.mousePressEvent = lambda e: _tmux_attach(self._tmux_session)
+        label.setToolTip("Click to switch this terminal to this session")
+        def _focus(idx: int) -> None:
+            if not _tmux_has_client(self._tmux_session):
+                _tmux_attach(self._tmux_session)
+                _raise_session_terminal(self._tmux_session, delay_ms=800)
+            else:
+                _tmux_select_window(self._tmux_session, idx)
+                _raise_session_terminal(self._tmux_session)
+        label.mousePressEvent = lambda e, idx=window_index: _focus(idx)
         layout.addWidget(label)
 
         layout.addStretch()
