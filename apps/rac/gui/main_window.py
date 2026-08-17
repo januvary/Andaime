@@ -101,11 +101,13 @@ class MainWindow(QMainWindow):
             from rac.services.paciente_service import PacienteService
             from rac.services.malote_service import MaloteService
             from rac.services.item_catalog_service import ItemCatalogService
+            from rac.services.aviso_service import AvisoService
             self._services = type("Services", (), {
                 "registro": RegistroService(self.db),
                 "paciente": PacienteService(self.db),
                 "malote": MaloteService(self.db),
                 "item_catalog": ItemCatalogService(self.db),
+                "aviso": AvisoService(self.db),
             })()
         return self._services
 

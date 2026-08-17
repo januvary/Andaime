@@ -3,9 +3,10 @@
 """
 RAC-specific malote date calculations.
 
-Send:  next Monday, adjusted backwards for holidays/weekends.
-Arrival:  Thursday of the week following the original Monday,
-          adjusted forward for holidays/weekends.
+Send:  next Monday after a given date, adjusted backwards for holidays/weekends.
+Arrival:  Thursday of the week following the send date's week, adjusted
+          forward for holidays/weekends. A Friday (or weekend) send counts
+          as a send in the following week.
 """
 
 from __future__ import annotations
@@ -22,21 +23,41 @@ from andaime.dates import DateCalculator
 if TYPE_CHECKING:
     from rac.database.rac_database import RACDatabase
 
+_MONTH_LEN = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+
+def add_months(d: date, n: int) -> date:
+    """Calendar-correct month arithmetic; day clamps to the target month."""
+    total = d.month - 1 + n
+    carry, m = divmod(total, 12)
+    m += 1
+    year = d.year + carry
+    ml = _MONTH_LEN[m - 1]
+    if m == 2 and (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)):
+        ml = 29
+    return date(year, m, min(d.day, ml))
+
+
+def month_idx(d: date) -> int:
+    """Total months since year 0 — lets months be compared/subtracted as ints."""
+    return d.year * 12 + d.month - 1
+
+
+def _next_monday(after: date) -> date:
+    days_ahead = (7 - after.weekday()) % 7
+    return after + timedelta(days=days_ahead or 7)
+
 
 def calculate_send_date(from_date: date) -> date:
-    days_ahead = (7 - from_date.weekday()) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    next_monday = from_date + timedelta(days=days_ahead)
+    next_monday = _next_monday(from_date)
     return DateCalculator.skip_to_previous_business_day(next_monday)
 
 
 def calculate_arrival_date(send_date: date) -> date:
-    if send_date.weekday() == 0:
-        intended_monday = send_date
-    else:
-        intended_monday = send_date + timedelta(days=7 - send_date.weekday())
-    target = intended_monday + timedelta(days=10)
+    # The malote lands on the Thursday of the week containing (send + 10 days).
+    # A Friday/weekend send therefore counts as a send in the following week.
+    anchor = send_date + timedelta(days=10)
+    target = anchor - timedelta(days=anchor.weekday()) + timedelta(days=3)
     return DateCalculator.skip_to_next_business_day(target)
 
 
@@ -48,10 +69,7 @@ def next_send_date(existing_dates: set[date] | None = None) -> date:
         next_day = candidate + timedelta(days=1)
         while next_day.weekday() >= 5 or next_day in DateCalculator.get_holidays():
             next_day = next_day + timedelta(days=1)
-        days_until_monday = (7 - next_day.weekday()) % 7
-        if days_until_monday == 0:
-            days_until_monday = 7
-        next_monday = next_day + timedelta(days=days_until_monday)
+        next_monday = _next_monday(next_day)
         if next_monday in DateCalculator.get_holidays():
             candidate = DateCalculator.skip_to_previous_business_day(next_monday)
         else:
@@ -181,7 +199,10 @@ def _next_malote_arrival_after(d: date) -> date:
         arrival = calculate_arrival_date(send)
         if arrival >= d:
             return arrival
-        ref = send + timedelta(days=1)
+        # Advance from the arrival, not from `send`: when the next Monday
+        # is a holiday (e.g. Finados on 02/11/2026), calculate_send_date
+        # skips back BELOW ref and ref = send + 1 oscillates forever.
+        ref = arrival + timedelta(days=1)
 
 
 def _get_malote_arrivals_near(

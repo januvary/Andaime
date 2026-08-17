@@ -55,7 +55,9 @@ class _RowData:
     combo: SearchableComboBox | None = None
     quantidade_input: QLineEdit | None = None
     cid_combo: SearchableComboBox | None = None
+    months_btn: CycleButton | None = None
     pg: int = 1
+    months: int = 1
 
 
 class EntryPage(BasePage):
@@ -79,6 +81,7 @@ class EntryPage(BasePage):
         self._rows: list[_RowData] = []
         self._focusable_combos: list[SearchableComboBox] = []
         self._group_cids: dict[int, str] = {}
+        self._group_months: dict[int, int] = {}
         self._syncing: bool = False
         self._shortcut_widgets: dict[str, QPushButton | QLabel | QCheckBox] = {}
         self._delete_btn: QPushButton | None = None
@@ -193,12 +196,14 @@ class EntryPage(BasePage):
         layout.addWidget(add_btn)
 
         if self._edit_ctx:
+            months_map = {g: m for g, m in self._edit_ctx.processes}
             for item_id, process_group, cid, quantidade in self._edit_ctx.items:
                 self._add_item_row(
                     item_id=item_id,
                     process_group=process_group,
                     cid=cid,
                     quantidade=quantidade,
+                    months=months_map.get(process_group),
                 )
         else:
             self._add_item_row()
@@ -265,7 +270,7 @@ class EntryPage(BasePage):
             f"color: {c['text_secondary']}; font-size: 12px; font-style: italic;"
         )
 
-    def _add_item_row(self, item_id: int | None = None, process_group: int = 1, cid: str = "", quantidade: int = 0):
+    def _add_item_row(self, item_id: int | None = None, process_group: int = 1, cid: str = "", quantidade: int = 0, months: int | None = None):
         row = QWidget()
         row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         row_h = make_hbox(spacing=2)
@@ -282,6 +287,22 @@ class EntryPage(BasePage):
         )
         rd.group_btn.setToolTip("Grupo do item (clique p/ alterar)")
         row_h.addWidget(rd.group_btn)
+
+        months = months if months and months > 0 else 1
+        rd.months = months
+        rd.months_btn = CycleButton(
+            f"{months}M", "positive",
+            modulus=6, base=1, initial=months, width=44, font_size=13,
+            format_fn=lambda v: f"{v}M",
+            on_change=lambda v: self._on_months_changed(rd, v),
+        )
+        rd.months_btn.setToolTip(
+            "Meses de medicação deste recibo (1-6)\n"
+            "Clique esquerdo aumenta, direito diminui"
+        )
+        rd.months_btn.setVisible(self._show_months())
+        row_h.addWidget(rd.months_btn)
+        self._group_months.setdefault(rd.pg, months)
 
         combo = SearchableComboBox(self._search_items, "Buscar item...")
         if item_id is not None:
@@ -399,6 +420,45 @@ class EntryPage(BasePage):
             current = rd.cid_combo.current_data() if rd.cid_combo else None
             if current:
                 self._register_and_propagate_cid(rd, current)
+        group_months = self._group_months.get(new_pg)
+        if group_months and group_months != rd.months:
+            self._set_months_on_row(rd, group_months)
+        elif group_months is None and rd.months_btn is not None:
+            self._group_months[new_pg] = rd.months
+
+    def _show_months(self) -> bool:
+        return (
+            self._config().get("modo_medcasa", False)
+            and self._tipo == "retirada"
+        )
+
+    def _refresh_months_visibility(self):
+        show = self._show_months()
+        for rd in self._rows:
+            if rd.months_btn is not None:
+                rd.months_btn.setVisible(show)
+
+    def _set_months_on_row(self, rd: _RowData, months: int) -> None:
+        rd.months = months
+        if rd.months_btn is not None:
+            rd.months_btn._value = months
+            rd.months_btn._apply_label()
+
+    def _on_months_changed(self, rd: _RowData, months: int) -> None:
+        """Months are a property of the process group (one recibo per
+        group): set on one row, propagate to the group — mirroring CID
+        propagation."""
+        rd.months = months
+        self._group_months[rd.pg] = months
+        for other in self._rows:
+            if other is rd:
+                if rd.months_btn is not None and rd.months_btn._value != months:
+                    rd.months_btn._value = months
+                    rd.months_btn._apply_label()
+                continue
+            if other.pg != rd.pg:
+                continue
+            self._set_months_on_row(other, months)
 
     def _remove_item(self, widget: QWidget):
         self._rows = [rd for rd in self._rows if rd.row_widget is not widget]
@@ -424,6 +484,7 @@ class EntryPage(BasePage):
 
     def _on_context_changed(self, *_):
         self._tipo = self._tipo_combo.current_tipo()
+        self._refresh_months_visibility()
         paciente_id = self._resolve_current_patient()
         if paciente_id is None:
             return
@@ -457,6 +518,7 @@ class EntryPage(BasePage):
     def _clear_item_rows(self):
         self._rows.clear()
         self._group_cids.clear()
+        self._group_months.clear()
         while self._items_container.count():
             item = self._items_container.takeAt(0)
             w = item.widget() if item else None
@@ -481,6 +543,18 @@ class EntryPage(BasePage):
             items.append((int(data), rd.pg, cid, quantidade))
         return items
 
+    def _collect_process_months(self) -> list[tuple[int, int]] | None:
+        """(group, months) for retiradas when modo_medcasa is on; None keeps
+        the pre-feature save path (no processes written)."""
+        if not self._show_months():
+            return None
+        by_group: dict[int, int] = {}
+        for rd in self._rows:
+            data = rd.combo.current_data() if rd.combo else None
+            if data:
+                by_group[rd.pg] = rd.months
+        return sorted(by_group.items()) if by_group else None
+
     def _load_items_for_context(self, paciente_id: int):
         malote = self._state().get_active_malote()
         tipo = self._tipo_combo.current_tipo()
@@ -490,6 +564,7 @@ class EntryPage(BasePage):
         )
 
         self._clear_item_rows()
+        months_map = {g: m for g, m in ctx.processes} if ctx.processes else {}
         if ctx.registro:
             self._update_registro_status(True)
             if ctx.items:
@@ -499,6 +574,7 @@ class EntryPage(BasePage):
                         process_group=process_group,
                         cid=cid,
                         quantidade=quantidade,
+                        months=months_map.get(process_group),
                     )
             else:
                 self._add_item_row()
@@ -558,6 +634,7 @@ class EntryPage(BasePage):
                 edit_id=self._edit_id,
                 waiting_docs=waiting_docs,
                 paciente_id=paciente_id,
+                process_months=self._collect_process_months(),
             )
         except ValidationError as e:
             self._toast(str(e), "warning")

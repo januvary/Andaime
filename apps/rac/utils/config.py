@@ -11,6 +11,7 @@ class RACConfig:
     save_path: Optional[Path] = None
     usafa_id: Optional[str] = None
     usafa_name: Optional[str] = None
+    modo_medcasa: bool = False
 
     def __post_init__(self) -> None:
         if self.save_path is None:
@@ -39,12 +40,18 @@ class RACConfig:
         if self.usafa_name is not None and (not isinstance(self.usafa_name, str) or not self.usafa_name.strip()):
             raise ValueError("usafa_name must be a non-empty string or None")
 
+        if not isinstance(self.modo_medcasa, bool):
+            raise ValueError(
+                f"modo_medcasa must be bool, got {type(self.modo_medcasa).__name__}"
+            )
+
     def to_dict(self) -> dict:
         result = {
             "stay_on_page": self.stay_on_page,
             "theme": self.theme,
             "last_malote_id": self.last_malote_id,
             "save_path": str(self.save_path),
+            "modo_medcasa": self.modo_medcasa,
         }
         if self.usafa_id is not None:
             result["usafa_id"] = self.usafa_id

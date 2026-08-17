@@ -49,6 +49,7 @@ from rac.export.excel_exporter import ExcelExporter
 from rac.models import Malote
 from rac.utils.text_utils import format_malote_date, is_malote_past
 from rac.gui.styles import get_theme
+from andaime.qt import styled_menu
 
 
 from rac import __version__
@@ -248,6 +249,18 @@ class StartPage(BasePage):
             shortcut_btn.setIcon(icon)
             shortcut_btn.setProperty("shortcutKey", key)
             shortcut_btn.clicked.connect(handler)
+            if key == "export":
+                shortcut_btn.setContextMenuPolicy(
+                    Qt.ContextMenuPolicy.CustomContextMenu
+                )
+                shortcut_btn.customContextMenuRequested.connect(
+                    lambda pos, b=shortcut_btn: self._show_export_menu(b, pos)
+                )
+                if self._config().get("modo_medcasa", False):
+                    shortcut_btn.setToolTip(
+                        "Clique: exportar as listas do malote\n"
+                        "Botão direito: exportar avisos de última retirada"
+                    )
             right.addWidget(shortcut_btn)
             self._shortcut_widgets[key] = shortcut_btn
             self._shortcut_icon_names[key] = icon_name
@@ -322,6 +335,32 @@ class StartPage(BasePage):
             self,
             lambda: exporter.export_malote(malote.id),
             "Nenhum registro para exportar",
+        )
+
+    def _show_export_menu(self, btn, pos):
+        menu = styled_menu(btn)
+        listas_action = menu.addAction("Exportar Listas")
+        listas_action.triggered.connect(lambda: self._on_export())
+        if self._config().get("modo_medcasa", False):
+            avisos_action = menu.addAction("Exportar Avisos")
+            avisos_action.triggered.connect(self._on_export_avisos)
+        menu.exec(btn.mapToGlobal(pos))
+
+    def _on_export_avisos(self):
+        if not self._require_malote():
+            return
+        malote = self._state().get_active_malote()
+        if malote is None or malote.id is None:
+            return
+        labels = self._mw.services.aviso.detect_for_malote(malote.id)
+        if not labels:
+            self._toast("Nenhum aviso de última retirada neste malote", "warning")
+            return
+        exporter = ExcelExporter(self._require_db())
+        export_with_fallback(
+            self,
+            lambda: exporter.export_aviso_labels(labels),
+            "Nenhum aviso de última retirada neste malote",
         )
 
     def _on_medicamentos(self):

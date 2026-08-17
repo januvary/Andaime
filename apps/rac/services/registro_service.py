@@ -108,19 +108,25 @@ class RegistroService:
         process_months: list[tuple[int, int]],
         items: list[tuple[int, int, str, int]] | None = None,
     ) -> None:
-        arrival_date = self._resolve_arrival_date(malote_id)
-        returns = calculate_return_dates(
-            tipo=tipo,
-            arrival_date=arrival_date,
-            process_groups=process_months,
-            db=self._db,
-            current_malote_id=malote_id,
-            waiting_docs=waiting_docs,
-        )
-        processes_data = [
-            (r.group_number, r.months_supply, r.expected_return_date.isoformat() if r.expected_return_date else None)
-            for r in returns
-        ]
+        if tipo == "retirada":
+            # Retirada months are ledger data for the aviso-de-última-retirada
+            # feature: persist months_supply with no expected return date and
+            # skip return-date scheduling entirely.
+            processes_data = [(g, m, None) for g, m in process_months]
+        else:
+            arrival_date = self._resolve_arrival_date(malote_id)
+            returns = calculate_return_dates(
+                tipo=tipo,
+                arrival_date=arrival_date,
+                process_groups=process_months,
+                db=self._db,
+                current_malote_id=malote_id,
+                waiting_docs=waiting_docs,
+            )
+            processes_data = [
+                (r.group_number, r.months_supply, r.expected_return_date.isoformat() if r.expected_return_date else None)
+                for r in returns
+            ]
         new_processes = self._db.set_processes(registro_id, processes_data)
         process_by_group = {p.group_number: p.id for p in new_processes}
         if items is None:

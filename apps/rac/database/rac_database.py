@@ -559,6 +559,30 @@ class RACDatabase(BaseDatabase):
         )]
 
     @db_op("read")
+    def get_dispensation_history(self, paciente_id: int) -> list[dict]:
+        """Full registro timeline for a patient, with per-item recibo months.
+
+        One row per (registro, item): tipo, malote date, item, process group
+        and the group's months_supply (NULL when the registro has no
+        processes — pre-feature or imported retiradas). Ordered by malote
+        date then registro id, ready for the aviso ledger walk.
+        """
+        return self._fetch_all(
+            "SELECT r.id AS reg_id, r.tipo, m.date AS malote_date, "
+            "ri.item_id, ic.name AS item_name, ri.process_group AS pg, "
+            "p.months_supply "
+            "FROM registros r "
+            "JOIN malotes m ON m.id = r.malote_id "
+            "LEFT JOIN registro_items ri ON ri.registro_id = r.id "
+            "LEFT JOIN items_catalog ic ON ic.id = ri.item_id "
+            "LEFT JOIN processes p "
+            "  ON p.registro_id = r.id AND p.group_number = ri.process_group "
+            "WHERE r.paciente_id = ? "
+            "ORDER BY m.date, r.id",
+            (paciente_id,),
+        )
+
+    @db_op("read")
     def get_malote_arrivals_between(self, start_iso: str, end_iso: str) -> list[str]:
         from rac.utils.date_calculator import calculate_arrival_date
 

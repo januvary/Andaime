@@ -8,8 +8,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List
 
-from PySide6.QtCore import Qt, QTimer, QDate, QBuffer, QIODevice, QUrl
-from PySide6.QtGui import QTextCursor, QImage, QPixmap, QTextDocument, QPainter
+from PySide6.QtCore import Qt, QTimer, QDate
+
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -47,16 +47,14 @@ from negativas.ui_qt.theme import (
     ThemeToggleButton,
     colors,
 )
-from negativas.utils import svg_base64, clear_svg_cache
+
 
 from negativas.database.negativas_database import NegativasDatabase
 from negativas.config import NegativasConfig
 from negativas.models import ItemSelecionado, NegativaData
 from negativas.constants import (
     APP_DISPLAY_NAME,
-    BRASAO_SVG_PATH,
     DEBOUNCE_MS,
-    BRASAO_HEIGHT,
 )
 from negativas.services.document_builder import DocumentBuilder
 
@@ -502,7 +500,16 @@ class MainWindow(QMainWindow):
             remover_btn.setObjectName(f"remove_btn_{row}")
             self._update_remove_button_style(remover_btn)
             remover_btn.clicked.connect(lambda _, r=row: self._remover_item(r))
-            self.table.setIndexWidget(self.table_model.index(row, 3), remover_btn)
+
+            # Wrap in container to center the button vertically in the cell
+            remove_container = QWidget()
+            rc_layout = QHBoxLayout(remove_container)
+            rc_layout.setContentsMargins(5, 0, 5, 0)
+            rc_layout.setSpacing(0)
+            rc_layout.addStretch()
+            rc_layout.addWidget(remover_btn)
+            rc_layout.addStretch()
+            self.table.setIndexWidget(self.table_model.index(row, 3), remove_container)
 
         self._atualizar_altura_tabela()
         self._atualizar_preview_imediato()
@@ -563,7 +570,13 @@ class MainWindow(QMainWindow):
         self._last_preview_data = data
 
         html = self.document_builder.build_html(data)
-        self._atualizar_preview_com_svg(html)
+
+        scroll_area = self._scroll_area
+        scroll_pos = scroll_area.verticalScrollBar().value() if scroll_area else 0
+        self.resultado_text.setHtml(html)
+        self._atualizar_altura_resultado()
+        if scroll_area:
+            scroll_area.verticalScrollBar().setValue(scroll_pos)
 
     def _coletar_dados(self) -> NegativaData:
         """Lê todos os campos do formulário e retorna um snapshot."""
@@ -643,9 +656,6 @@ class MainWindow(QMainWindow):
 
         self.config.set("theme", theme)
         self._update_theme_dependent_styles()
-        
-        # Clear SVG cache to regenerate with new theme color
-        clear_svg_cache()
 
         # Clear preview cache to force regeneration with new theme colors
         self._last_preview_data = None
@@ -718,9 +728,11 @@ class MainWindow(QMainWindow):
 
         # Update remove buttons in table
         for row in range(self.table_model.rowCount()):
-            remove_btn = self.table.indexWidget(self.table_model.index(row, 3))
-            if remove_btn and isinstance(remove_btn, QPushButton):
-                self._update_remove_button_style(remove_btn)
+            container = self.table.indexWidget(self.table_model.index(row, 3))
+            if container:
+                remove_btn = container.findChild(QPushButton)
+                if remove_btn:
+                    self._update_remove_button_style(remove_btn)
 
     # ──────────────────────────── CONFIG ────────────────────────────
 
@@ -735,9 +747,6 @@ class MainWindow(QMainWindow):
             self.theme_toggle._dark = is_dark
             self.theme_toggle._update_icon()
 
-        # Clear SVG cache to ensure it uses correct theme color
-        clear_svg_cache()
-        
         # Update theme-dependent styles
         self._update_theme_dependent_styles()
 
@@ -760,63 +769,6 @@ class MainWindow(QMainWindow):
                 self.data_edit.setDate(QDate(dt.year, dt.month, dt.day))
             except ValueError:
                 pass
-
-    def _render_svg_pixmap(self, width: int, height: int) -> QPixmap:
-        """Renderiza o SVG como QPixmap com a cor do tema."""
-        import base64
-
-        try:
-            from PySide6.QtSvg import QSvgRenderer
-        except ImportError:
-            return QPixmap()
-
-        svg_data = svg_base64()
-        if not svg_data:
-            return QPixmap()
-
-        svg_bytes = base64.b64decode(svg_data)
-        svg_renderer = QSvgRenderer(svg_bytes)
-
-        pixmap = QPixmap(width, height)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        svg_renderer.render(painter)
-        painter.end()
-
-        return pixmap
-
-    def _atualizar_preview_com_svg(self, html: str):
-        """Atualiza o preview adicionando o SVG como recurso Qt."""
-        scroll_area = self._scroll_area
-        scroll_pos = scroll_area.verticalScrollBar().value() if scroll_area else 0
-
-        # Render SVG as QPixmap
-        pixmap = self._render_svg_pixmap(200, BRASAO_HEIGHT * 2)
-        if pixmap.isNull():
-            self.resultado_text.setHtml(html)
-            self._atualizar_altura_resultado()
-            if scroll_area:
-                scroll_area.verticalScrollBar().setValue(scroll_pos)
-            return
-
-        # Replace data URI with resource URL
-        html_com_svg = html.replace(
-            'src="data:image/svg+xml;base64,' + svg_base64() + '"',
-            'src="brasao://brasao"'
-        )
-
-        # Set HTML first
-        self.resultado_text.setHtml(html_com_svg)
-
-        # Add image resource to document
-        doc = self.resultado_text.document()
-        resource_url = QUrl("brasao://brasao")
-        doc.addResource(QTextDocument.ResourceType.ImageResource, resource_url, pixmap)
-
-        self._atualizar_altura_resultado()
-
-        if scroll_area:
-            scroll_area.verticalScrollBar().setValue(scroll_pos)
 
     def _save_nomes_config(self):
         """Salva os nomes das divisões no config."""

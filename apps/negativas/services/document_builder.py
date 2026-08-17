@@ -3,8 +3,7 @@
 from typing import List
 
 from negativas.models import ItemSelecionado, Medicamento, NegativaData
-from negativas.constants import BRASAO_HEIGHT
-from negativas.utils import data_por_extenso, svg_base64
+from negativas.utils import data_por_extenso
 
 try:
     from negativas.ui_qt.theme import colors
@@ -75,21 +74,17 @@ class DocumentBuilder:
     .assinatura {{ text-align: center; flex: 1; }}
     .assinatura strong {{ font-size: 11pt; color: {text_color}; }}
     .assinatura span {{ font-size: 10pt; font-weight: bold; color: {text_color}; }}
-    .header {{ display: flex; align-items: center; justify-content: center; gap: 50px; margin-bottom: 10px; }}
-    .header-title {{ text-align: center; text-decoration: underline; font-size: 17px; margin: 0; color: {text_color}; }}
+    .header {{ text-align: center; margin-bottom: 10px; }}
+    .header-title {{ text-decoration: underline; font-size: 17px; margin: 0; color: {text_color}; }}
     .divider {{ border-top: 1px solid {border_color}; margin: 20px 0; }}
-    .brasao {{ display: block; height: {BRASAO_HEIGHT}px; }}
     @media print {{ body {{ margin: 0; }} }}
   </style>
 </head>
 <body>
   <div class="header">
-    <img class="brasao" height="{BRASAO_HEIGHT}" src="data:image/svg+xml;base64,{svg_base64()}" alt="Brasão da Prefeitura">
-    <div>
-      <h1 class="header-title" style="font-size: 17px;">MUNICÍPIO DA ESTÂNCIA BALNEÁRIA DE PRAIA GRANDE</h1>
-      <h2 style="font-size: 14px;">Estado de São Paulo</h2>
-      <h3 style="font-size: 14px;">SESAP - Secretaria de Saúde Pública</h3>
-    </div>
+    <h1 class="header-title" style="font-size: 17px;">MUNICÍPIO DA ESTÂNCIA BALNEÁRIA DE PRAIA GRANDE</h1>
+    <h2 style="font-size: 14px;">Estado de São Paulo</h2>
+    <h3 style="font-size: 14px;">SESAP - Secretaria de Saúde Pública</h3>
   </div>
   <div class="divider"></div>
 

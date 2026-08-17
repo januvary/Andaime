@@ -19,6 +19,12 @@ from rac.utils.text_utils import format_item
 
 if TYPE_CHECKING:
     from rac.database.rac_database import RACDatabase
+    from rac.services.aviso_service import AvisoLabel
+
+_MESES_PT = (
+    "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
+    "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO",
+)
 
 
 class SavePathError(Exception):
@@ -72,6 +78,10 @@ def _apply_page_setup(ws):
     ws.sheet_view.showGridLines = False
     ws.print_options.horizontalCentered = True
     ws.print_options.verticalCentered = False
+    ws.page_margins.left = 0
+    ws.page_margins.right = 0
+    ws.page_margins.top = 0
+    ws.page_margins.bottom = 0
 
 
 def _style_title_row(ws, row_num, styles, font_key="title1_font", height=30, fill=None):
@@ -394,6 +404,90 @@ class ExcelExporter:
         _apply_page_setup(ws)
 
         return self._save_workbook(wb, "Catalogo", log_label="Catálogo exportado")
+
+    def export_aviso_labels(self, labels: list["AvisoLabel"]) -> Optional[str]:
+        """Sheet of warning labels for last-of-process retiradas.
+
+        Layout: 3 columns x 5 labels (15 per A4 page); each label is two
+        cells — a bold 15pt 'ATENÇÃO' header and an 8pt centered body built
+        with CellRichText so that the patient name, medication, duration,
+        and deadline appear in bold while the rest is regular weight.
+        """
+        openpyxl = _ensure_openpyxl()
+        if openpyxl is None or not labels:
+            return None
+
+        from openpyxl.cell.rich_text import CellRichText, TextBlock
+        from openpyxl.cell.text import InlineFont
+        from openpyxl.styles import Alignment, Border, Font, Side
+        from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.pagebreak import Break
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        if ws is None:
+            return None
+        ws.title = "Etiquetas"
+
+        cols = 3
+        labels_per_page = 15
+        for i in range(cols):
+            ws.column_dimensions[get_column_letter(i + 1)].width = 37
+
+        thin = Side(style="thin")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        header_font = Font(name="Arial", size=15, bold=True)
+        body_font = Font(name="Arial", size=8)
+        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        bold_run = InlineFont(rFont="Arial", sz=8, b=True)
+        normal_run = InlineFont(rFont="Arial", sz=8)
+        spacer = InlineFont(rFont="Arial", sz=4)
+
+        for idx, lab in enumerate(labels):
+            row = (idx // cols) * 2 + 1
+            col = idx % cols + 1
+
+            plural = "MÊS" if lab.n == 1 else "MESES"
+            deadline = f"{_MESES_PT[lab.deadline.month - 1]}/{lab.deadline.year}"
+
+            hc = ws.cell(row=row, column=col, value="ATENÇÃO")
+            hc.font = header_font
+            hc.alignment = center
+            hc.border = border
+            ws.row_dimensions[row].height = 25
+
+            body = CellRichText(
+                TextBlock(bold_run, lab.paciente_name),
+                TextBlock(spacer, "\n \n"),
+                TextBlock(normal_run, "ESTAMOS ENTREGANDO O MEDICAMENTO\n"),
+                TextBlock(bold_run, lab.med_name),
+                TextBlock(normal_run, "\nPARA "),
+                TextBlock(bold_run, f"{lab.n} {plural}."),
+                TextBlock(spacer, "\n \n"),
+                TextBlock(normal_run,
+                    "ENTREGAR A RENOVAÇÃO COMPLETA"
+                    "\n+ 6 CÓPIAS DA RECEITA ATÉ O FINAL DE\n"),
+                TextBlock(bold_run, deadline),
+                TextBlock(normal_run,
+                    " NA FARMÁCIA DA SUA USAFA"
+                    "\nPARA CONTINUAR RECEBENDO"
+                    "\nSEU MEDICAMENTO REGULARMENTE."),
+            )
+            bc = ws.cell(row=row + 1, column=col, value=body)
+            bc.font = body_font
+            bc.alignment = center
+            bc.border = border
+            ws.row_dimensions[row + 1].height = 105
+
+            last_on_page = (idx + 1) % labels_per_page == 0
+            if last_on_page and idx < len(labels) - 1:
+                ws.row_breaks.append(Break(id=row + 1))
+
+        _apply_page_setup(ws)
+
+        return self._save_workbook(
+            wb, "Etiquetas_Aviso", log_label="Etiquetas de aviso exportadas"
+        )
 
     def export_registro_list(
         self,
