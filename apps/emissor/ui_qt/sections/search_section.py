@@ -3,7 +3,7 @@
 """
 SearchSection — barra superior de busca de pacientes (Qt).
 
-Busca com autocomplete local usando andaime.widgets.SearchableComboBox
+Busca com autocomplete local usando andaime.qt.widgets.SearchableComboBox
 (match accent-insensitive). O catálogo de pacientes é carregado uma vez
 em memória e atualizado quando pacientes são criados/selecionados.
 """
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from emissor.main_window import QtApp
 
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
-from andaime.widgets import SearchableComboBox, static_search_fn
+from andaime.qt.widgets import SearchableComboBox, static_search_fn
 
 from emissor.state.state_events import StateEventType
 from emissor.ui_qt.base import QtSection, on

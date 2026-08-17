@@ -60,7 +60,7 @@ from andaime.qt.table import (
     TableViewModel,
     configure_table_view,
 )
-from andaime.widgets import SearchableComboBox, static_search_fn
+from andaime.qt.widgets import SearchableComboBox, static_search_fn
 from andaime.dates import parse_date
 
 # Abas: Renovação / Solicitação (campo ``solicitacao`` do processo).

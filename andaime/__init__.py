@@ -2,6 +2,8 @@
 andaime — shared toolkit for PySide6 desktop apps
 """
 
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -38,5 +40,19 @@ def get_root_directory() -> Path:
     return _app_root
 
 
-from andaime.app import App
-from andaime.qt.splash import SplashScreen
+def __getattr__(name: str):
+    """Lazily resolve public attrs so ``import andaime`` stays cheap.
+
+    ``App`` and ``SplashScreen`` pull PySide6 + the database/updater stack;
+    deferring them keeps a bare ``import andaime`` (e.g. for ``text`` or
+    ``dates`` utilities) from importing the whole runtime.
+    """
+    if name == "App":
+        from andaime.app import App
+
+        return App
+    if name == "SplashScreen":
+        from andaime.qt.splash import SplashScreen
+
+        return SplashScreen
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

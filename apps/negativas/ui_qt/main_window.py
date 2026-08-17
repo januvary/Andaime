@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QDateEdit,
 )
 
-from andaime.widgets import SearchableComboBox
+from andaime.qt.widgets import SearchableComboBox
 from andaime.qt.table import (
     ColumnSpec,
     TableViewModel,

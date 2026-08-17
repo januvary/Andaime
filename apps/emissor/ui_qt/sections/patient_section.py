@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 if TYPE_CHECKING:
     from emissor.main_window import QtApp
 
-from andaime.widgets import SearchableComboBox, static_search_fn
+from andaime.qt.widgets import SearchableComboBox, static_search_fn
 
 from emissor.state.state_events import StateEventType
 from emissor.ui_qt.base import QtSection, on

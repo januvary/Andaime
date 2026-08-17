@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 from datetime import date, datetime
-from andaime.widgets import DateLineEdit
+from andaime.qt.widgets import DateLineEdit
 from andaime.qt.theme import make_button
 from andaime.dates import parse_date, format_date
 import operator

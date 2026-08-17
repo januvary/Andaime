@@ -45,7 +45,7 @@ from emissor.ui_qt.base import QtSection, on
 from emissor.utils.field_utils import get_field_str
 from emissor.utils.date_utils import TIPO_RECEITA_INFO, DateCalculator
 from emissor.ui_qt.theme import make_button
-from andaime.widgets import DateLineEdit
+from andaime.qt.widgets import DateLineEdit
 
 # Larguras de campos (espelham constantes da app CTk)
 _PERIODICIDADE_WIDTH = 50

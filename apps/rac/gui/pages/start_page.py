@@ -22,7 +22,7 @@ from PySide6.QtCore import Qt, Signal
 if TYPE_CHECKING:
     from rac.gui.main_window import MainWindow
 
-from andaime.widgets import SearchableComboBox
+from andaime.qt.widgets import SearchableComboBox
 from rac.gui.brasao import get_brasao_pixmap, get_rac_pixmap
 from rac.gui.widgets import (
     TipoButton,

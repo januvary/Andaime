@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from andaime.qt import styled_menu
-from andaime.widgets import SearchableComboBox, static_search_fn
+from andaime.qt.widgets import SearchableComboBox, static_search_fn
 
 from emissor.services.item_sufficiency_service import ItemSufficiencyService
 from emissor.state.state_events import StateEventType

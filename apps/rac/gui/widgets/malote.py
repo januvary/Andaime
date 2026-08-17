@@ -400,7 +400,7 @@ def _show_new_malote_dialog(label: MaloteLabel):
     from rac.utils.text_utils import format_malote_date
     from rac.utils.date_calculator import next_send_date, calculate_arrival_date
     from andaime.error_handler import ErrorContext, ErrorHandler
-    from andaime.widgets import DateLineEdit
+    from andaime.qt.widgets import DateLineEdit
 
     parent = label.window()
     mw = label._mw
@@ -444,7 +444,7 @@ def _show_new_malote_dialog(label: MaloteLabel):
 def _show_date_dialog(label: MaloteLabel, malote, field: str, on_done):
     from andaime.dates import parse_date
     from andaime.error_handler import ErrorContext, ErrorHandler
-    from andaime.widgets import DateLineEdit
+    from andaime.qt.widgets import DateLineEdit
 
     parent = label.window()
     mw = label._mw

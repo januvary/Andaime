@@ -5,7 +5,7 @@ preservando o alpha. Compartilhado entre ``tools/generate_brasao.py`` (gera os
 PNG estáticos) e o editor de tema (pré-visualização ao vivo).
 
 Usage:
-    from andaime.brasao import render_brasao_silhouette, recolor_brasao
+    from andaime.qt.brasao import render_brasao_silhouette, recolor_brasao
 """
 
 from __future__ import annotations

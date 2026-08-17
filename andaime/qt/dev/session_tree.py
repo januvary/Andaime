@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from andaime.project_registry import (
+from andaime.qt.dev.project_registry import (
     Project,
     Session,
     find_project,

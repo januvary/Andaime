@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from andaime.widgets import SearchableComboBox, static_search_fn
+from andaime.qt.widgets import SearchableComboBox, static_search_fn
 from andaime.qt.theme import ThemeToggleButton, make_button
 
 

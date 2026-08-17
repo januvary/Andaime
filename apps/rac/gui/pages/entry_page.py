@@ -25,7 +25,7 @@ from PySide6.QtCore import Qt, QTimer
 if TYPE_CHECKING:
     from rac.gui.main_window import MainWindow
 
-from andaime.widgets import SearchableComboBox, CycleButton, static_search_fn
+from andaime.qt.widgets import SearchableComboBox, CycleButton, static_search_fn
 from andaime.error_handler import ErrorContext
 from rac.gui.widgets import (
     SectionLabel,

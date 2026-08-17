@@ -6,9 +6,9 @@ source files change. Per-app console output is available in a popup dialog.
 
 Usage::
 
-    python -m andaime.qt.dev_launcher
+    python -m andaime.qt.dev.dev_launcher
     # or
-    from andaime.qt.dev_launcher import DevLauncher
+    from andaime.qt.dev.dev_launcher import DevLauncher
 """
 
 from __future__ import annotations
@@ -18,6 +18,13 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+# Allow direct-script execution (e.g. the Super+/ keybinding runs
+# ``python3 …/dev_launcher.py --focus-or-launch``): ensure the project root
+# is importable before the ``andaime.*`` imports below.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 from PySide6.QtCore import (
     QFileSystemWatcher,
@@ -41,7 +48,7 @@ from PySide6.QtWidgets import (
 
 from andaime.qt.fs import reveal_path
 from andaime.qt.theme import colors, make_button
-from andaime.project_registry import Project, source_files
+from andaime.qt.dev.project_registry import Project, source_files
 
 OPENCODE_WRAPPER = os.path.expanduser("~/.local/bin/opencode-fork")
 
@@ -53,8 +60,8 @@ OPENCODE_WRAPPER = os.path.expanduser("~/.local/bin/opencode-fork")
 def find_python_exe() -> str:
     """Find the bundled Python interpreter (falls back to sys.executable)."""
     candidates = [
-        Path(__file__).resolve().parent.parent.parent / "python" / "bin" / "python",
-        Path(__file__).resolve().parent.parent.parent / "python" / "bin" / "python3",
+        Path(__file__).resolve().parent.parent.parent.parent / "python" / "bin" / "python",
+        Path(__file__).resolve().parent.parent.parent.parent / "python" / "bin" / "python3",
     ]
     for c in candidates:
         if c.is_file():
@@ -64,7 +71,7 @@ def find_python_exe() -> str:
 
 def find_projects_root() -> Path:
     """Return the default projects root (the parent of the andaime dir)."""
-    return Path(__file__).resolve().parent.parent.parent.parent
+    return Path(__file__).resolve().parent.parent.parent.parent.parent
 
 
 def _shq(value: str) -> str:
@@ -239,6 +246,52 @@ def _raise_session_terminal(name: str, delay_ms: int = 0) -> None:
         _do()
 
 
+def _devlauncher_pids(exclude: int) -> list[int]:
+    """PIDs of running DevLauncher GUI processes (python + dev_launcher)."""
+    pids: list[int] = []
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return pids
+    for proc in entries:
+        pid_str = proc.name
+        if not pid_str.isdigit():
+            continue
+        pid = int(pid_str)
+        if pid == exclude:
+            continue
+        try:
+            comm = (proc / "comm").read_text().strip()
+            if not comm.startswith("python"):
+                continue
+            cmdline = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode(
+                errors="replace"
+            )
+            if "dev_launcher" in cmdline:
+                pids.append(pid)
+        except (OSError, ValueError):
+            continue
+    return pids
+
+
+def _focus_or_launch() -> None:
+    """Raise the running DevLauncher window, or start one if none is running.
+
+    Invoked by the Super+/ custom keybinding via ``--focus-or-launch``.
+    """
+    for pid in _devlauncher_pids(exclude=os.getpid()):
+        if _raise_window_by_pid(pid):
+            return
+    if not _devlauncher_pids(exclude=os.getpid()):
+        script = Path(__file__).resolve()
+        subprocess.Popen(
+            [sys.executable, str(script)],
+            cwd=str(_PROJECT_ROOT),
+            start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Console dialog
 # ---------------------------------------------------------------------------
@@ -407,6 +460,10 @@ class ProjectRow(QWidget):
 
         self._tmux_name = _tmux_session_name(self.path)
         self._reconcile_tmux()
+        # Live sessions at startup (e.g. launcher reopened): show expanded,
+        # otherwise the repopulated rows stay hidden behind the collapsed arrow.
+        if self._sessions_layout.count() and not self._sessions_expanded:
+            self._toggle_sessions()
 
         self._update_status(False)
         self.refresh_git_stat()
@@ -566,7 +623,7 @@ class ProjectRow(QWidget):
         if self.git_stat_label is None:
             return
         try:
-            from andaime.qt.commit_assistant import find_repo_root
+            from andaime.qt.dev.commit_assistant import find_repo_root
             import subprocess
 
             repo = find_repo_root(self.path)
@@ -675,7 +732,7 @@ class ProjectRow(QWidget):
         self.console.raise_()
 
     def _commit_assistant(self) -> None:
-        from andaime.qt.commit_assistant import find_repo_root, present_commit
+        from andaime.qt.dev.commit_assistant import find_repo_root, present_commit
 
         repo = find_repo_root(self.path)
         if repo is None:
@@ -800,11 +857,11 @@ class DevLauncher(QWidget):
     def __init__(self, projects_root: Path | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Dev Launcher")
-        self.resize(640, 420)
+        self.resize(1000, 420)
 
         self.projects_root = projects_root or find_projects_root()
         self.python_exe = find_python_exe()
-        self.andaime_root = Path(__file__).resolve().parent.parent.parent
+        self.andaime_root = Path(__file__).resolve().parent.parent.parent.parent
 
         self._rows: list[ProjectRow] = []
 
@@ -846,7 +903,7 @@ class DevLauncher(QWidget):
         layout.addWidget(info)
 
     def _add_project(self) -> None:
-        from andaime.project_registry import add_project
+        from andaime.qt.dev.project_registry import add_project
 
         raw = self.path_edit.text().strip()
         if not raw:
@@ -855,7 +912,7 @@ class DevLauncher(QWidget):
         self._rebuild()
 
     def _refresh(self) -> None:
-        from andaime.project_registry import refresh_capabilities
+        from andaime.qt.dev.project_registry import refresh_capabilities
 
         refresh_capabilities()
         self._rebuild()
@@ -867,7 +924,7 @@ class DevLauncher(QWidget):
         self._rows.clear()
 
     def _rebuild(self) -> None:
-        from andaime.project_registry import load_registry
+        from andaime.qt.dev.project_registry import load_registry
 
         self._clear_rows()
         projects = load_registry()
@@ -893,6 +950,10 @@ class DevLauncher(QWidget):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    if "--focus-or-launch" in sys.argv:
+        _focus_or_launch()
+        sys.exit(0)
+
     from PySide6.QtWidgets import QApplication
     from andaime.qt.theme import stylesheet, qpalette, colors
 
