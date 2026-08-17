@@ -2,8 +2,9 @@
 
 Given a git repository, this module:
   1. Collects ``git status``, ``git diff`` (unstaged + staged), and a stat summary.
-  2. Asks a small OpenRouter model to draft a single conventional-commit line.
-  3. Presents a dialog with the diff and an editable message box.
+  2. Presents a dialog with the diff and an editable message box.
+  3. On demand (the in-dialog "Draft" button), asks a small OpenRouter model to
+     draft a single conventional-commit line — on a worker thread.
   4. On confirm, runs ``git commit -m <message>`` (local only — no push).
 
 The message is always a *suggestion*: the human approves/edits it before commit.
@@ -16,12 +17,11 @@ import os
 import subprocess
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSplitter,
     QTextEdit,
     QVBoxLayout,
@@ -193,6 +193,33 @@ def draft_commit_message(info: CommitInfo, api_key: str) -> str:
     return payload["choices"][0]["message"]["content"].strip()
 
 
+# Keep running workers alive even if the dialog closes mid-draft (a QThread
+# destroyed while running crashes the app).
+_live_draft_workers: list["DraftWorker"] = []
+
+
+class DraftWorker(QThread):
+    """Drafts a commit message off the GUI thread."""
+
+    finished_with_draft = Signal(bool, str)  # (ok, message_or_error)
+
+    def __init__(self, info: CommitInfo, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._info = info
+
+    def run(self) -> None:
+        _live_draft_workers.append(self)
+        try:
+            api_key = openrouter_api_key()
+            if not api_key:
+                self.finished_with_draft.emit(False, "No OpenRouter API key found.")
+                return
+            draft = draft_commit_message(self._info, api_key)
+            self.finished_with_draft.emit(True, draft)
+        except Exception as exc:  # noqa: BLE001 — surfaced in the dialog
+            self.finished_with_draft.emit(False, str(exc))
+
+
 # ---------------------------------------------------------------------------
 # Commit dialog
 # ---------------------------------------------------------------------------
@@ -203,6 +230,7 @@ class CommitDialog(QDialog):
     def __init__(self, name: str, info: CommitInfo, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.info = info
+        self._worker: DraftWorker | None = None
         self.setWindowTitle(f"Commit — {name}")
         self.resize(860, 560)
 
@@ -249,15 +277,46 @@ class CommitDialog(QDialog):
         self.btn_cancel.clicked.connect(self.reject)
         btn_row.addWidget(self.btn_cancel)
         btn_row.addStretch()
+        self.btn_draft = make_button("Draft", role="flat", parent=self)
+        self.btn_draft.setToolTip("Draft a commit message with the model")
+        self.btn_draft.clicked.connect(self._draft)
+        btn_row.addWidget(self.btn_draft)
         self.btn_commit = make_button("Commit", role="primary", parent=self)
         self.btn_commit.setEnabled(False)
         self.btn_commit.clicked.connect(self._commit)
         btn_row.addWidget(self.btn_commit)
         layout.addLayout(btn_row)
 
+        # Typing a manual message must enable Commit too (not just set_message).
+        self.msg_edit.textChanged.connect(
+            lambda: self.btn_commit.setEnabled(bool(self.msg_edit.toPlainText().strip()))
+        )
+
     def set_message(self, message: str) -> None:
         self.msg_edit.setPlainText(message)
         self.btn_commit.setEnabled(bool(message.strip()))
+
+    def _draft(self) -> None:
+        """Ask the model for a draft — on a worker thread, off the GUI loop."""
+        self.btn_draft.setEnabled(False)
+        self.btn_draft.setText("Drafting...")
+        self.msg_edit.setPlaceholderText("drafting a commit message...")
+        _live_draft_workers[:] = [w for w in _live_draft_workers if w.isRunning()]
+        self._worker = DraftWorker(self.info)
+        self._worker.finished_with_draft.connect(self._on_draft)
+        self._worker.start()
+
+    def _on_draft(self, ok: bool, text: str) -> None:
+        self.btn_draft.setEnabled(True)
+        self.btn_draft.setText("Draft")
+        if ok:
+            self.set_message(text)
+            self.msg_edit.setFocus()
+        else:
+            self.btn_draft.setToolTip(f"Draft failed: {text}")
+            self.msg_edit.setPlaceholderText(
+                f"Draft failed ({text}) — write your own or click Draft to retry."
+            )
 
     def _commit(self) -> None:
         message = self.msg_edit.toPlainText().strip()
@@ -289,7 +348,10 @@ class CommitDialog(QDialog):
 
 
 def present_commit(name: str, repo: Path, parent: QWidget | None = None) -> tuple[bool, str]:
-    """Gather info, draft a message, and run the commit dialog.
+    """Gather info and run the commit dialog.
+
+    Model drafting is opt-in (the in-dialog "Draft" button); the dialog opens
+    instantly with an empty message box.
 
     Returns ``(committed, detail)``.
     """
@@ -298,15 +360,6 @@ def present_commit(name: str, repo: Path, parent: QWidget | None = None) -> tupl
         return False, "No changes to commit."
 
     dialog = CommitDialog(name, info, parent)
-    try:
-        api_key = openrouter_api_key()
-        draft = draft_commit_message(info, api_key) if api_key else ""
-        dialog.set_message(draft)
-        dialog.btn_commit.setEnabled(bool(draft.strip()))
-    except Exception as exc:  # noqa: BLE001 — show a friendly status on model failure
-        dialog.set_message("")
-        dialog.msg_edit.setPlainText(f"Could not draft a message: {exc}")
-
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return False, "Cancelled by user."
     return True, getattr(dialog, "result_message", "committed.")
