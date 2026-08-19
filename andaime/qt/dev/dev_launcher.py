@@ -139,21 +139,65 @@ def _tmux_kill_window(name: str, index: int) -> None:
                    capture_output=True)
 
 
-def _tmux_list_windows(name: str) -> list[tuple[int, str]]:
-    """Return [(window_index, window_name)] for a tmux session."""
+def _tmux_list_windows(name: str) -> list[tuple[int, str, bool]]:
+    """Return [(window_index, window_name, is_active)] for a tmux session."""
     result = subprocess.run(
-        ["tmux", "list-windows", "-t", name, "-F", "#{window_index} #{window_name}"],
+        ["tmux", "list-windows", "-t", name, "-F",
+         "#{window_index} #{window_active} #{window_name}"],
         capture_output=True, text=True,
     )
-    windows: list[tuple[int, str]] = []
+    windows: list[tuple[int, str, bool]] = []
     for line in result.stdout.strip().splitlines():
-        parts = line.split(" ", 1)
-        if len(parts) == 2:
+        parts = line.split(" ", 2)
+        if len(parts) == 3:
             try:
-                windows.append((int(parts[0]), parts[1]))
+                windows.append((int(parts[0]), parts[2], parts[1] == "1"))
             except ValueError:
                 continue
     return windows
+
+
+def _tmux_window_busy(session: str, window_index: int) -> bool:
+    """True if the opencode agent in the window is actively working.
+
+    opencode's status bar shows ``esc interrupt`` only while the agent is
+    running, which makes it a reliable on-screen busy signature.
+    """
+    result = subprocess.run(
+        ["tmux", "capture-pane", "-p", "-t", f"{session}:{window_index}", "-S", "-10"],
+        capture_output=True, text=True,
+    )
+    return "esc interrupt" in result.stdout
+
+
+def _is_terminal_focused(session: str) -> bool:
+    """True if the ptyxis window hosting the session currently has keyboard
+    focus (via the devlauncher-window-raise shell extension). Degrades to
+    False when the extension method is unavailable."""
+    pid = _terminal_pid_for_session(session)
+    if pid is None:
+        return False
+    try:
+        result = subprocess.run(
+            ["gdbus", "call", "--session",
+             "--dest", "org.andaime.DevLauncher",
+             "--object-path", "/org/andaime/DevLauncher/window",
+             "--method", "org.andaime.DevLauncher.Window.IsActiveByPid", str(pid)],
+            capture_output=True, text=True, timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and "true" in result.stdout.lower()
+
+
+def _shade(hex_color: str, factor: float) -> str:
+    """Darken (factor<1) / lighten (factor>1) a #rrggbb color."""
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    clamp = lambda v: max(0, min(255, int(v)))  # noqa: E731
+    return "#{:02x}{:02x}{:02x}".format(
+        clamp(r * factor), clamp(g * factor), clamp(b * factor)
+    )
 
 
 def _find_terminal() -> str | None:
@@ -371,6 +415,16 @@ class ProjectRow(QWidget):
         self._tmux_timer.timeout.connect(self._reconcile_tmux)
         self._tmux_timer.start()
 
+        # Agent activity: per-window state ("idle" | "running" | "unseen")
+        # persists across row rebuilds; tmux window indices are the keys.
+        self._win_states: dict[int, str] = {}
+        self._dot_widgets: dict[int, QLabel] = {}
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setSingleShot(False)
+        self._pulse_timer.setInterval(700)
+        self._pulse_timer.timeout.connect(self._on_pulse)
+        self._pulse_on = True
+
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -396,8 +450,14 @@ class ProjectRow(QWidget):
 
         self.name_label = QLabel(self.name)
         self.name_label.setMinimumWidth(200)
+        self.name_label.setStyleSheet(f"font-weight: 600; color: {colors()['text']};")
         header.addWidget(self.name_label)
         self._set_src_tooltip()
+
+        # Activity badges: "●N running  ⚑N finished-unseen" (hidden when 0)
+        self.badge_label = QLabel("")
+        self.badge_label.setStyleSheet("font-size: 12px;")
+        header.addWidget(self.badge_label)
 
         if self.project.capabilities.git:
             self.git_stat_label = QLabel("")
@@ -500,8 +560,29 @@ class ProjectRow(QWidget):
         self._reconcile_tmux()
 
     def _reconcile_tmux(self) -> None:
-        """Rebuild session sub-rows from live tmux state."""
+        """Rebuild session sub-rows from live tmux state + agent activity."""
         windows = _tmux_list_windows(self._tmux_session) if _tmux_has_session(self._tmux_session) else []
+
+        # Focus check (1 subprocess) only when it can change an outcome.
+        prev_states = dict(self._win_states)
+        need_focus = any(s in ("running", "unseen") for s in prev_states.values())
+        focused = _is_terminal_focused(self._tmux_session) if need_focus else False
+        active_idx = next((idx for idx, _n, active in windows if active), None)
+
+        for idx, _name, _active in windows:
+            busy = _tmux_window_busy(self._tmux_session, idx)
+            prev = prev_states.get(idx, "idle")
+            if busy:
+                new = "running"
+            elif prev == "running":
+                # Finished: gold flag unless the user is watching right now.
+                new = "idle" if (focused and idx == active_idx) else "unseen"
+            elif prev == "unseen":
+                new = "idle" if (focused and idx == active_idx) else "unseen"
+            else:
+                new = "idle"
+            self._win_states[idx] = new
+        self._win_states = {i: s for i, s in self._win_states.items() if i in {w[0] for w in windows}}
 
         # Clear and rebuild — tmux is the source of truth.
         while self._sessions_layout.count():
@@ -510,31 +591,99 @@ class ProjectRow(QWidget):
             if w:
                 w.setParent(None)
                 w.deleteLater()
+        self._dot_widgets: dict[int, QLabel] = {}
 
-        for index, name in windows:
-            self._add_session_sub_row(index, name)
+        for idx, name, _active in windows:
+            self._add_session_sub_row(idx, name, self._win_states.get(idx, "idle"))
 
-    def _add_session_sub_row(self, window_index: int, title: str) -> None:
+        self._update_badges()
+        if any(s == "running" for s in self._win_states.values()):
+            if not self._pulse_timer.isActive():
+                self._pulse_timer.start()
+        else:
+            self._pulse_timer.stop()
+
+    def _dot_style(self, state: str) -> str:
+        c = colors()
+        if state == "running":
+            color = c["status_success"] if self._pulse_on else _shade(c["status_success"], 0.45)
+            return f"color: {color}; font-size: 13px;"
+        if state == "unseen":
+            return f"color: {c['status_warning']}; font-size: 13px;"
+        return f"color: {c['text_dim']}; font-size: 12px;"
+
+    def _on_pulse(self) -> None:
+        """Alternate running dots between bright/dim while agents work."""
+        self._pulse_on = not self._pulse_on
+        for idx, dot in self._dot_widgets.items():
+            if self._win_states.get(idx) == "running":
+                dot.setStyleSheet(self._dot_style("running"))
+
+    def _update_badges(self) -> None:
+        running = sum(1 for s in self._win_states.values() if s == "running")
+        unseen = sum(1 for s in self._win_states.values() if s == "unseen")
+        c = colors()
+        parts = []
+        if running:
+            parts.append(
+                f"<span style='color:{c['status_success']}'>●{running}</span>"
+            )
+        if unseen:
+            parts.append(
+                f"<span style='color:{c['status_warning']}'>⚑{unseen}</span>"
+            )
+        self.badge_label.setText("  ".join(parts))
+        tip = []
+        if running:
+            tip.append(f"{running} agent(s) running")
+        if unseen:
+            tip.append(f"{unseen} agent(s) finished — not yet viewed")
+        self.badge_label.setToolTip(" / ".join(tip))
+
+    def _add_session_sub_row(self, window_index: int, title: str, state: str) -> None:
+        c = colors()
         row = QWidget()
         layout = QHBoxLayout(row)
-        layout.setContentsMargins(0, 1, 0, 1)
-        layout.setSpacing(8)
+        layout.setContentsMargins(6, 1, 0, 1)
+        layout.setSpacing(6)
 
-        label = QLabel(f"  {title}")
-        label.setStyleSheet(f"color: {colors()['text']}; font-size: 12px;")
+        # State dot (pulses for running via the shared timer)
+        dot = QLabel({"running": "●", "unseen": "⚑", "idle": "○"}.get(state, "○"))
+        dot.setStyleSheet(self._dot_style(state))
+        dot.setToolTip(
+            {"running": "Agent is working", "unseen": "Agent finished — not yet viewed"}.get(state, "Idle")
+        )
+        layout.addWidget(dot)
+        self._dot_widgets[window_index] = dot
+
+        label = QLabel(title)
+        text_color = c["text"] if state != "idle" else c["text_dim"]
+        label.setStyleSheet(f"color: {text_color}; font-size: 12px;")
         label.setCursor(Qt.CursorShape.PointingHandCursor)
         label.setToolTip("Click to switch this terminal to this session")
+        layout.addWidget(label)
+        layout.addStretch()
+
         def _focus(idx: int) -> None:
+            self._win_states[idx] = "idle"  # clicking = seeing it
             if not _tmux_has_client(self._tmux_session):
                 _tmux_attach(self._tmux_session)
                 _raise_session_terminal(self._tmux_session, delay_ms=800)
             else:
                 _tmux_select_window(self._tmux_session, idx)
                 _raise_session_terminal(self._tmux_session)
+            self._reconcile_tmux()
         label.mousePressEvent = lambda e, idx=window_index: _focus(idx)
-        layout.addWidget(label)
 
-        layout.addStretch()
+        # Left accent bar colored by state distinguishes session rows from
+        # project headers; unseen additionally gets a soft background tint.
+        bar = {
+            "running": c["status_success"],
+            "unseen": c["status_warning"],
+            "idle": c["panel_border"],
+        }[state]
+        bg = f"background-color: {c['box_bg']};" if state == "unseen" else ""
+        row.setStyleSheet(f"border-left: 3px solid {bar}; {bg}")
 
         btn_close = make_button("x", role="negative", parent=row)
         btn_close.setFixedWidth(40)
