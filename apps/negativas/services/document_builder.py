@@ -3,7 +3,8 @@
 from typing import List
 
 from negativas.models import ItemSelecionado, Medicamento, NegativaData
-from negativas.utils import data_por_extenso
+from negativas.constants import BRASAO_HEIGHT
+from negativas.utils import data_por_extenso, svg_base64
 
 try:
     from negativas.ui_qt.theme import colors
@@ -21,7 +22,7 @@ class DocumentBuilder:
         self._medicamentos_cache: dict[str, Medicamento] = {}
         self._medicamentos_cache_key: tuple[str, ...] | None = None
 
-    def build_html(self, data: NegativaData) -> str:
+    def build_html(self, data: NegativaData, include_brasao: bool = True) -> str:
         """Gera HTML completo a partir dos dados do formulário."""
         div_texto = self._get_divisao_texto(data)
         data_hoje = data.data_hoje or data_por_extenso()
@@ -29,7 +30,7 @@ class DocumentBuilder:
         nome_dgmi = data.nome_dgmi if data.nome_dgmi else "____________________"
 
         parts = [
-            self._build_html_header(data.destinatario, div_texto),
+            self._build_html_header(data.destinatario, div_texto, include_brasao),
             self._build_itens_section(data.itens),
             "<br>",
             self._build_footer(
@@ -50,11 +51,17 @@ class DocumentBuilder:
         else:
             return "Divisão de Assistência Farmacêutica e Divisão de Gestão de Materiais e Insumos"
 
-    def _build_html_header(self, destinatario: str, div_texto: str) -> str:
+    def _build_html_header(self, destinatario: str, div_texto: str, include_brasao: bool = True) -> str:
         """Constrói o cabeçalho HTML."""
         c = colors()
         text_color = c.get("text", "#000000")
         border_color = c.get("panel_border", "#000000")
+
+        brasao_img = (
+            f'<img class="brasao" height="{BRASAO_HEIGHT}" src="data:image/svg+xml;base64,{svg_base64()}" alt="Brasão da Prefeitura">'
+            if include_brasao else ""
+        )
+        brasao_css = f'    .brasao {{ display: block; height: {BRASAO_HEIGHT}px; }}' if include_brasao else ""
 
         return f"""
 <!DOCTYPE html>
@@ -74,17 +81,21 @@ class DocumentBuilder:
     .assinatura {{ text-align: center; flex: 1; }}
     .assinatura strong {{ font-size: 11pt; color: {text_color}; }}
     .assinatura span {{ font-size: 10pt; font-weight: bold; color: {text_color}; }}
-    .header {{ text-align: center; margin-bottom: 10px; }}
-    .header-title {{ text-decoration: underline; font-size: 17px; margin: 0; color: {text_color}; }}
+    .header {{ display: flex; align-items: center; justify-content: center; gap: 50px; margin-bottom: 10px; }}
+    .header-title {{ text-align: center; text-decoration: underline; font-size: 17px; margin: 0; color: {text_color}; }}
     .divider {{ border-top: 1px solid {border_color}; margin: 20px 0; }}
+    {brasao_css}
     @media print {{ body {{ margin: 0; }} }}
   </style>
 </head>
 <body>
   <div class="header">
-    <h1 class="header-title" style="font-size: 17px;">MUNICÍPIO DA ESTÂNCIA BALNEÁRIA DE PRAIA GRANDE</h1>
-    <h2 style="font-size: 14px;">Estado de São Paulo</h2>
-    <h3 style="font-size: 14px;">SESAP - Secretaria de Saúde Pública</h3>
+    {brasao_img}
+    <div>
+      <h1 class="header-title" style="font-size: 17px;">MUNICÍPIO DA ESTÂNCIA BALNEÁRIA DE PRAIA GRANDE</h1>
+      <h2 style="font-size: 14px;">Estado de São Paulo</h2>
+      <h3 style="font-size: 14px;">SESAP - Secretaria de Saúde Pública</h3>
+    </div>
   </div>
   <div class="divider"></div>
 

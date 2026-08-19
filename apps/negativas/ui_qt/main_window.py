@@ -569,7 +569,7 @@ class MainWindow(QMainWindow):
             return
         self._last_preview_data = data
 
-        html = self.document_builder.build_html(data)
+        html = self.document_builder.build_html(data, include_brasao=False)
 
         scroll_area = self._scroll_area
         scroll_pos = scroll_area.verticalScrollBar().value() if scroll_area else 0

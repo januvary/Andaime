@@ -164,6 +164,23 @@ class _Tile(QWidget):
         self._badge.setMaximumWidth(128)
         self._update_badge()
 
+        # Placeholder de carregamento assíncrono da miniatura: aparece quando a
+        # tile nasce sem pixmap (sempre, via ``_make_tile``) e desaparece quando
+        # ``set_pixmap`` a entrega — animação leve sem dependências (QTimer).
+        self._loading_lbl = QLabel(self)
+        self._loading_lbl.setStyleSheet(
+            f"color: {colors()['text_dim']}; font-size: 16px; "
+            "background: transparent; border: none;"
+        )
+        self._loading_lbl.setVisible(self._pixmap is None)
+        layout.addWidget(self._loading_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self._ellipsis_phase = 0
+        self._loading_timer = QTimer(self)  # parented → pára ao destruir a tile
+        self._loading_timer.timeout.connect(self._animate_loading)
+        self._loading_timer.start(500)
+        self._animate_loading()
+
     def _update_thumb(self) -> None:
         if self._pixmap is not None and not self._pixmap.isNull():
             self._thumb.setPixmap(
@@ -179,6 +196,8 @@ class _Tile(QWidget):
         if pixmap.isNull():
             return
         self._pixmap = pixmap
+        self._loading_timer.stop()
+        self._loading_lbl.hide()
         self._update_thumb()
 
     def _rotate(self) -> None:
@@ -201,6 +220,21 @@ class _Tile(QWidget):
             self._badge.raise_()
         else:
             self._badge.hide()
+
+    def _animate_loading(self) -> None:
+        dots = "." * ((self._ellipsis_phase % 3) + 1)
+        self._loading_lbl.setText(dots)
+        self._ellipsis_phase += 1
+
+    def _loading_failed(self) -> None:
+        """Conteúdo indisponível (BLOB ausente/ilegível): pára o pulso e marca
+        a tile com um placeholder estático — nunca mais fica "carregando…"."""
+        self._loading_timer.stop()
+        self._loading_lbl.setText("×")
+        self._loading_lbl.setStyleSheet(
+            f"color: {colors()['status_error']}; font-size: 24px; "
+            "background: transparent; border: none;"
+        )
 
     def contextMenuEvent(self, event):
         current = self._item.tipo_documento
@@ -447,7 +481,12 @@ class _ThumbnailTask(QRunnable):
         self._signal = signal
 
     def run(self) -> None:
-        pixmap = _thumbnail(self._item, self._loader)
+        try:
+            pixmap = _thumbnail(self._item, self._loader)
+        except Exception:
+            # Conteúdo ilegível/ausente (ex.: PDF de arquivo deletado): emite
+            # pixmap nulo para a tile marcar "indisponível" em vez de travar.
+            pixmap = QPixmap()
         # Mesmo que a tile tenha sido removida, o sinal é ignorado pelo
         # destinatário (ver ``DocumentGrid._on_thumbnail_ready``).
         self._signal.ready.emit(self._item, pixmap)
@@ -906,9 +945,14 @@ class DocumentGrid(QWidget):
 
     def _on_thumbnail_ready(self, item: GridItem, pixmap: QPixmap) -> None:
         """Recebe a miniatura renderizada (thread principal) e a aplica."""
-        key = self._thumb_key(item)
         if pixmap.isNull():
+            # Conteúdo indisponível (BLOB ausente/ilegível): a tile nunca
+            # recebe pixmap — marca como falha em vez de pulsar "…" para sempre.
+            for tile in self._tiles:
+                if tile._item is item:
+                    tile._loading_failed()
             return
+        key = self._thumb_key(item)
         self._thumb_cache[key] = pixmap
         # Pinta nas tiles vivas que exibem este item (normalmente uma só).
         for tile in self._tiles:

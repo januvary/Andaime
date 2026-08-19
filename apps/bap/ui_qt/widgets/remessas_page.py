@@ -60,8 +60,9 @@ from andaime.qt.table import (
     TableViewModel,
     configure_table_view,
 )
-from andaime.qt.widgets import SearchableComboBox, static_search_fn
-from andaime.dates import parse_date
+from andaime.qt.widgets import SearchableComboBox, static_search_fn, DateLineEdit
+from andaime.dates import parse_date, format_date
+from andaime.qt.dialogs import KEEP_OPEN, prompt_dialog
 
 # Abas: Renovação / Solicitação (campo ``solicitacao`` do processo).
 _TAB_KEYS = ["primeira", "renovacao"]
@@ -243,6 +244,7 @@ class RemessasPage(QWidget):
         self.remessa_label = RemessaLabel(self)
         self.remessa_label.remessa_changed.connect(self.remessa_changed.emit)
         self.remessa_label.remessa_changed.connect(self._on_remessa_changed)
+        self.remessa_label.status_message.connect(self.set_status)
 
         from andaime.qt.theme import make_button
 
@@ -691,6 +693,7 @@ class RemessasPage(QWidget):
             processo.status,
             lambda key, obs: self._change_status(processo_id, key, obs),
             on_observation=lambda obs: self._add_observation(processo_id, obs),
+            initial_obs=processo.last_obs or "",
         )
 
     def _gerar_pdf(self, processo_id: int) -> None:
@@ -726,6 +729,10 @@ class RemessasPage(QWidget):
         list_widget.setProperty("class", "remessa-tree")
         list_widget.itemDoubleClicked.connect(
             lambda item: self._edit_log_obs(item, processo_id, dlg)
+        )
+        list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        list_widget.customContextMenuRequested.connect(
+            lambda pos: self._show_log_menu(list_widget, pos, processo_id, dlg)
         )
         self._populate_status_log(list_widget, processo_id)
 
@@ -787,6 +794,57 @@ class RemessasPage(QWidget):
                 dlg.findChild(QListWidget), processo_id
             )
             self.refresh()
+
+    def _show_log_menu(
+        self, list_widget: QListWidget, pos, processo_id: int, dlg: QDialog
+    ) -> None:
+        item = list_widget.itemAt(pos)
+        if item is None or item.data(Qt.ItemDataRole.UserRole) is None:
+            return
+        menu = styled_menu(list_widget)
+        date_action = menu.addAction("Editar data")
+        chosen = menu.exec(list_widget.viewport().mapToGlobal(pos))
+        if chosen == date_action:
+            self._edit_log_date(item, processo_id, dlg)
+
+    def _edit_log_date(
+        self, item: QListWidgetItem, processo_id: int, dlg: QDialog
+    ) -> None:
+        log_id = item.data(Qt.ItemDataRole.UserRole)
+        if log_id is None or self._db is None:
+            return
+        logs = self._db.get_status_logs(processo_id)
+        current = next(
+            (lg["created_at"] or "" for lg in logs if lg["id"] == log_id), ""
+        )
+
+        date_input = DateLineEdit()
+        date_input.setPlaceholderText("DD/MM/AAAA")
+        dt = parse_date(current[:10]) if current else None
+        date_input.setText(format_date(dt) if dt else "")
+        date_input.selectAll()
+
+        def on_confirm(edit: DateLineEdit):
+            parsed = parse_date(edit.text())
+            if not parsed:
+                return KEEP_OPEN
+            iso = parsed.isoformat()
+            if iso == current[:10]:
+                return  # sem mudança — fecha sem feedback
+            if self._db is not None:
+                self._db.update_status_log_date(log_id, iso)
+                self._populate_status_log(
+                    dlg.findChild(QListWidget), processo_id
+                )
+                self.refresh()
+
+        prompt_dialog(
+            dlg,
+            "Data do registro",
+            widget=date_input,
+            confirm_label="Salvar",
+            on_confirm=on_confirm,
+        )
 
     def _change_status(
         self, processo_id: int, key: str, observacoes: str = ""

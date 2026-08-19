@@ -43,6 +43,8 @@ class StatusLabel(QWidget):
         # Observação digitada no diálogo antes do processo existir (primeiro
         # Save). Fica pendente até o Save persistir; limpa ao trocar de processo.
         self.pending_obs = ""
+        # Observação atual do processo: pré-preenche o diálogo e dirty-check.
+        self._current_obs = ""
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -88,6 +90,7 @@ class StatusLabel(QWidget):
     def set_status(self, key: str, emit: bool = True) -> None:
         self._status_key = key
         self.pending_obs = ""  # descarta nota pendente de edição não salva
+        self._current_obs = ""
         self.refresh()
         if emit:
             self.status_changed.emit(key, "")
@@ -114,6 +117,7 @@ class StatusLabel(QWidget):
             self._status_key,
             self._apply_status,
             on_observation=self._apply_observation,
+            initial_obs=self._current_obs or self.pending_obs,
         )
 
 
@@ -123,6 +127,7 @@ def show_status_dialog(
     on_select,
     on_observation=None,
     preselect: str | None = None,
+    initial_obs: str = "",
 ) -> None:
     """Diálogo de status: escolha uma transição, adicione uma observação e
     salve. Selecionar um status apenas o destaca; o diálogo só fecha ao
@@ -132,6 +137,10 @@ def show_status_dialog(
     transição.  ``on_observation`` (opcional) é chamado como
     ``on_observation(text)`` quando o usuário salva apenas uma observação
     sem selecionar nova transição.
+
+    ``initial_obs`` (opcional) pré-preenche o campo de observações; se
+    não for alterado e nenhuma transição for selecionada, nenhum callback
+    é chamado.
     """
     dlg, layout = scaffold_dialog(parent, "Status", spacing=12, min_width=300)
 
@@ -182,6 +191,7 @@ def show_status_dialog(
     obs.setAcceptRichText(False)
     obs.setPlaceholderText("Observações...")
     obs.setFixedHeight(56)
+    obs.setPlainText(initial_obs)
     layout.addWidget(obs)
 
     btn_row, [cancel, salvar] = make_dialog_button_row([
@@ -202,6 +212,9 @@ def show_status_dialog(
     def _on_selection_changed() -> None:
         items = tree.selectedItems()
         selected["key"] = items[0].data(0, Qt.ItemDataRole.UserRole) if items else None
+        # Nota é específica da transição: limpa ao selecionar.
+        if selected["key"] is not None:
+            obs.clear()
         _update_salvar()
 
     tree.itemSelectionChanged.connect(_on_selection_changed)
@@ -213,7 +226,7 @@ def show_status_dialog(
         if key is None and not text:
             return
         if key is None:
-            if on_observation:
+            if on_observation and text != (initial_obs or "").strip():
                 on_observation(text)
             dlg.accept()
             return

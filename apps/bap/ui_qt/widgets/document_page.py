@@ -57,6 +57,7 @@ class DocumentPage(QWidget):
 
         self.remessa_label = RemessaLabel(self)
         self.remessa_label.remessa_changed.connect(self.remessa_changed.emit)
+        self.remessa_label.status_message.connect(self.set_status)
 
         self.status_selector = StatusLabel(self)
         self.status_selector.status_changed.connect(self.status_changed.emit)

@@ -3,37 +3,43 @@
 Um rótulo clicável na barra inferior esquerda mostra a data da remessa
 ativa; ao clicar, abre um diálogo listando as remessas existentes
 (selecionar uma a torna ativa). Ao contrário do RAC:
-- não há botões de ação no rodapé do diálogo;
 - não há cálculo de data de retorno;
-- "malotes" chamam-se "remessas" aqui;
-- novas remessas não são criadas manualmente.
+- "malotes" chamam-se "remessas" aqui.
+
+O diálogo possui barra inferior com "Nova Remessa" (criação manual) e
+"Fechar". O sinal ``remessa_changed`` é emitido uma única vez, ao fechar
+o diálogo, e apenas quando a remessa ativa realmente mudou.
 """
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Optional
 
 from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtWidgets import (
-    QDialog,
     QLabel,
     QTreeWidget,
     QTreeWidgetItem,
-    QVBoxLayout,
     QWidget,
     QHBoxLayout,
     QSizePolicy,
 )
 from datetime import date, datetime
-from andaime.qt.widgets import DateLineEdit
-from andaime.qt.theme import make_button
-from andaime.dates import parse_date, format_date
 import operator
+from andaime.qt.widgets import DateLineEdit
+from andaime.dates import parse_date, format_date
+from andaime.qt import styled_menu
+from andaime.qt.dialogs import (
+    KEEP_OPEN,
+    confirm_dialog,
+    make_dialog_toolbar,
+    prompt_dialog,
+    scaffold_dialog,
+)
 
 from bap.database.ss54_database import SS54Database
 from bap.models import Lote
 from bap.utils.date_utils import format_date_display
-from andaime.qt import styled_menu
 
 
 class RemessaLabel(QWidget):
@@ -44,6 +50,7 @@ class RemessaLabel(QWidget):
     """
 
     remessa_changed = Signal(object)  # Lote | None
+    status_message = Signal(str, object)  # (texto, cor|None) — feedback do diálogo
 
     def __init__(self, parent=None, db: SS54Database | None = None):
         super().__init__(parent)
@@ -104,26 +111,41 @@ class RemessaLabel(QWidget):
         else:
             self._date.setText("Nenhuma remessa ativa")
 
+    def emit_status(self, text: str, color: str | None = None) -> None:
+        """Feedback do diálogo via linha de status (conectada pelas páginas)."""
+        self.status_message.emit(text, color)
+
     def mousePressEvent(self, event) -> None:
-        show_remessa_dialog(self.window(), self._db, self._active, self.set_active)
+        show_remessa_dialog(self)
 
 
-def show_remessa_dialog(
-    parent,
-    db: SS54Database | None,
-    active: Optional[Lote],
-    on_select: Callable[[Optional[Lote]], None],
-) -> None:
+def _lote_key(lote: Optional[Lote]):
+    return (lote.id, lote.date) if lote is not None else None
+
+
+def _activate_if_changed(label: "RemessaLabel", lote: Lote) -> bool:
+    """Aplica ``lote`` como ativo silenciosamente, apenas se mudou de fato.
+
+    O ``remessa_changed`` do rótulo só é emitido ao fechar o diálogo, pelo
+    próprio ``show_remessa_dialog``, e somente quando a chave diferir da
+    inicial — evita refreshes redundantes na MainWindow (padrão RAC).
+    """
+    current = label.active()
+    if current is not None and current.id == lote.id and current.date == lote.date:
+        return False
+    label.set_active(lote, emit=False)
+    return True
+
+
+def show_remessa_dialog(label: "RemessaLabel") -> None:
+    db = label._db
     if db is None:
         return
 
-    dlg = QDialog(parent)
-    dlg.setWindowTitle("Remessas")
-    dlg.setMinimumWidth(170)
-    dlg.setMinimumHeight(320)
+    parent = label.window()
 
-    layout = QVBoxLayout(dlg)
-    layout.setSpacing(12)
+    dlg, layout = scaffold_dialog(parent, "Remessas", spacing=12, min_width=170)
+    dlg.setMinimumHeight(320)
 
     tree = QTreeWidget()
     tree.setHeaderHidden(True)
@@ -134,16 +156,16 @@ def show_remessa_dialog(
     tree.setColumnCount(1)
     tree.setProperty("class", "remessa-tree")
 
-    active_id = active.id if active else None
-    _populate_remessa_tree(tree, db, active_id)
-
     def _repopulate() -> None:
-        _populate_remessa_tree(tree, db, active_id)
+        active = label.active()
+        _populate_remessa_tree(tree, db, active.id if active else None)
+
+    _repopulate()
 
     def _on_item(item: QTreeWidgetItem, _column: int) -> None:
-        data = item.data(0, Qt.ItemDataRole.UserRole)
-        if data is not None:
-            on_select(data)
+        lote = item.data(0, Qt.ItemDataRole.UserRole)
+        if lote is not None:
+            _activate_if_changed(label, lote)
             dlg.accept()
         else:
             item.setExpanded(not item.isExpanded())
@@ -152,11 +174,22 @@ def show_remessa_dialog(
     tree.itemActivated.connect(_on_item)
     tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     tree.customContextMenuRequested.connect(
-        lambda pos: _show_tree_menu(tree, pos, db, active, _repopulate, on_select)
+        lambda pos: _show_tree_menu(label, tree, pos, _repopulate)
     )
     layout.addWidget(tree)
 
+    btn_row, [nova_btn, fechar_btn] = make_dialog_toolbar(
+        left=[("Nova Remessa", "flat")],
+        right=[("Fechar", "flat")],
+    )
+    nova_btn.clicked.connect(lambda: (_show_new_remessa_dialog(label), _repopulate()))
+    fechar_btn.clicked.connect(dlg.reject)
+    layout.addLayout(btn_row)
+
+    initial = _lote_key(label.active())
     dlg.exec()
+    if _lote_key(label.active()) != initial:
+        label.remessa_changed.emit(label.active())
 
 
 def _populate_remessa_tree(
@@ -230,7 +263,9 @@ def _populate_remessa_tree(
             month_items[key].addChild(child)
 
 
-def _show_tree_menu(tree, pos, db, active, on_done, on_select) -> None:
+def _show_tree_menu(
+    label: "RemessaLabel", tree: QTreeWidget, pos, on_done
+) -> None:
     item = tree.itemAt(pos)
     if not item:
         return
@@ -238,50 +273,131 @@ def _show_tree_menu(tree, pos, db, active, on_done, on_select) -> None:
     if not lote:
         return
 
+    db = label._db
     menu = styled_menu(tree)
     edit_action = menu.addAction("Editar")
+    delete_action = None
+    counts = {lo.id: c for lo, c in db.get_lotes_with_counts()}
+    if counts.get(lote.id, 0) <= 0:
+        delete_action = menu.addAction("Excluir")
+
     action = menu.exec(tree.viewport().mapToGlobal(pos))
     if action == edit_action:
-        _show_edit_date_dialog(tree.window(), db, lote, active, on_done, on_select)
+        _show_edit_date_dialog(label, lote, on_done)
+    elif action == delete_action and delete_action is not None:
+        _confirm_delete_remessa(label, lote, on_done)
 
 
-def _show_edit_date_dialog(parent, db, lote, active, on_done, on_select) -> None:
-    dlg = QDialog(parent)
-    dlg.setWindowTitle("Data de envio")
-    dlg.setMinimumWidth(300)
+def _confirm_delete_remessa(
+    label: "RemessaLabel", lote: Lote, on_done
+) -> None:
+    db = label._db
+    if not confirm_dialog(
+        label.window(),
+        "Excluir Remessa",
+        f'Excluir a remessa "{format_date_display(lote.date)}"?',
+        confirm_label="Excluir",
+        danger=True,
+    ):
+        return
 
-    layout = QVBoxLayout(dlg)
-    layout.setSpacing(12)
+    if not db.delete_lote(lote.id):
+        label.emit_status("Não foi possível excluir a remessa.", "status_error")
+        return
+
+    # Se a remessa excluída era a ativa, reatribui para a mais recente restante.
+    active = label.active()
+    if active is not None and active.id == lote.id:
+        remaining = db.get_all_lotes()
+        label.set_active(remaining[0] if remaining else None, emit=False)
+    label.refresh()
+    on_done()
+    label.emit_status("Remessa excluída.", "status_success")
+
+
+def _show_new_remessa_dialog(label: "RemessaLabel") -> None:
+    from bap.utils.remessa_service import next_remessa_date
+
+    db = label._db
+    parent = label.window()
+
+    date_input = DateLineEdit()
+    date_input.setPlaceholderText("DD/MM/AAAA")
+    existing = db.get_lotes_with_counts()
+    dates = {lo.date for lo, _ in existing}
+    if existing:
+        last = parse_date(existing[0][0].date)
+        suggested = next_remessa_date(last) if last else date.today()
+    else:
+        suggested = date.today()
+    date_input.setText(suggested.strftime("%d/%m/%Y"))
+    date_input.selectAll()
+
+    def on_confirm(edit: DateLineEdit):
+        parsed = parse_date(edit.text())
+        if not parsed:
+            label.emit_status("Data inválida.", "status_error")
+            return KEEP_OPEN
+        iso = parsed.isoformat()
+        if iso in dates:
+            label.emit_status("Já existe uma remessa nesta data.", "status_error")
+            return KEEP_OPEN
+        lote = db.create_lote(iso)
+        if lote.id is None:
+            label.emit_status("Não foi possível criar a remessa.", "status_error")
+            return KEEP_OPEN
+        db.move_incompletos_to_lote(lote.id)
+        label.set_active(lote, emit=False)
+        label.refresh()
+        label.emit_status(f"Remessa criada: {format_date_display(iso)}.", "status_success")
+
+    prompt_dialog(
+        parent,
+        "Nova Remessa",
+        widget=date_input,
+        confirm_label="Criar",
+        on_confirm=on_confirm,
+    )
+
+
+def _show_edit_date_dialog(label: "RemessaLabel", lote: Lote, on_done) -> None:
+    db = label._db
+    parent = label.window()
 
     date_input = DateLineEdit()
     date_input.setPlaceholderText("DD/MM/AAAA")
     dt = parse_date(lote.date)
     date_input.setText(format_date(dt) if dt else "")
     date_input.selectAll()
-    layout.addWidget(date_input)
 
-    btn_row = QHBoxLayout()
-    cancel = make_button("Cancelar", "flat-fill")
-    cancel.clicked.connect(dlg.reject)
-    save = make_button("Salvar", "flat-fill")
-    btn_row.addStretch()
-    btn_row.addWidget(cancel)
-    btn_row.addWidget(save)
-    layout.addLayout(btn_row)
+    dates = {lo.date for lo, _ in db.get_lotes_with_counts() if lo.id != lote.id}
 
-    def do_save() -> None:
-        parsed = parse_date(date_input.text())
+    def on_confirm(edit: DateLineEdit):
+        parsed = parse_date(edit.text())
         if not parsed:
-            return
+            label.emit_status("Data inválida.", "status_error")
+            return KEEP_OPEN
         iso = parsed.isoformat()
+        if iso == lote.date:
+            return  # sem mudança — fecha sem feedback
+        if iso in dates:
+            label.emit_status("Já existe uma remessa nesta data.", "status_error")
+            return KEEP_OPEN
         db.update_lote_date(lote.id, iso)
+        lote.date = iso
+        active = label.active()
+        if active is not None and active.id == lote.id:
+            fresh = db.get_lote_by_id(lote.id)
+            if fresh is not None:
+                label.set_active(fresh, emit=False)
+        label.refresh()
         on_done()
-        fresh = db.get_lote_by_id(lote.id)
-        if on_select is not None and active is not None and fresh is not None:
-            if active.id == fresh.id:
-                on_select(fresh)
-        dlg.accept()
+        label.emit_status("Remessa atualizada.", "status_success")
 
-    save.clicked.connect(do_save)
-    date_input.returnPressed.connect(do_save)
-    dlg.exec()
+    prompt_dialog(
+        parent,
+        "Data de envio",
+        widget=date_input,
+        confirm_label="Salvar",
+        on_confirm=on_confirm,
+    )

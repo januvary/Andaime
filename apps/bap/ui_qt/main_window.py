@@ -70,6 +70,12 @@ class MainWindow(QMainWindow):
 
         root.addWidget(self._stack, stretch=1)
 
+        # Injeta o db nos rótulos de remessa já na construção: o
+        # ``init_backend`` roda assíncrono, e antes dele o clique acertaria
+        # um ``RemessaLabel`` sem db, cujo diálogo retorna em silêncio.
+        self._doc_page.set_remessa_db(self.db)
+        self._remessa_page.set_remessa_db(self.db)
+
         self._connect_pages()
         self._setup_shortcuts()
         self.installEventFilter(self)
@@ -275,7 +281,24 @@ class MainWindow(QMainWindow):
             active = self._resolve_active_lote()
             return pacientes, active
 
-        self._db_runner.run(_load, on_done=self._on_backend_loaded)
+        self._db_runner.run(
+            _load,
+            on_done=self._on_backend_loaded,
+            on_error=self._on_backend_load_error,
+        )
+
+    def _on_backend_load_error(self, e: BaseException) -> None:
+        """Backend falhou ao carregar: mostra o erro em vez de deixar a UI
+        órfã em silêncio (rótulo "Nenhuma remessa ativa", clique sem ação)."""
+        from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+
+        ErrorHandler.log(
+            f"Falha ao inicializar o backend: {e}",
+            level=ErrorLevel.ERROR,
+            context=ErrorContext.DATABASE,
+        )
+        self.set_status(f"Erro ao carregar dados: {e}", "status_error")
+        self._warn(f"Falha ao carregar os dados do aplicativo:\n\n{e}")
 
     def _on_backend_loaded(self, result) -> None:
         pacientes, active = result
@@ -417,6 +440,7 @@ class MainWindow(QMainWindow):
             # status padrão quando o seletor ainda está num valor padrão.
             if self._status_selector.status() in (NULL_STATUS, Status.EM_ANALISE):
                 self._status_selector.set_status(default_status, emit=False)
+            self._status_selector._current_obs = ""
             self._grid_showing_process = False
             self.set_status("Nenhum processo para este contexto.")
             return
@@ -456,6 +480,7 @@ class MainWindow(QMainWindow):
         )
         self._header.set_descricao(processo.descricao or "")
         self._status_selector.set_status(processo.status, emit=False)
+        self._status_selector._current_obs = processo.last_obs or ""
         self._grid_showing_process = True
         self.set_status(
             f"Processo {processo.protocolo} carregado. - {arquivos}"
@@ -465,8 +490,9 @@ class MainWindow(QMainWindow):
         processo = self._current_processo()
         if processo is None:
             # Processo ainda não existe: adia a observação para o Save.
-            if observacoes:
-                self._status_selector.pending_obs = observacoes
+            # Sempre atualiza (limpa se vazia): mudar status invalida a
+            # observação pendente da transição anterior.
+            self._status_selector.pending_obs = observacoes
             return
         if processo.status != key:
             self.db.update_processo_status(

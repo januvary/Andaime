@@ -408,6 +408,23 @@ class SS54Database(BaseDatabase):
     def update_lote_date(self, lote_id: int, date: str) -> bool:
         return self._update_row("lotes", lote_id, date=date)
 
+    @db_op("write")
+    def delete_lote(self, lote_id: int) -> bool:
+        """Remove uma remessa, apenas se não houver processos associados.
+
+        Guarda interna (defensiva) além da checagem da UI: lotes com
+        processos não são apagados.
+        """
+        row = self._fetch_one(
+            "SELECT COUNT(*) AS c FROM processos WHERE lote_id = ?", (lote_id,)
+        )
+        if row and row["c"]:
+            return False
+        deleted = self._delete_row("lotes", lote_id)
+        if deleted:
+            self._request_vacuum()
+        return deleted
+
     # ========== PROCESSO ==========
 
     @db_op("write")
@@ -586,6 +603,36 @@ class SS54Database(BaseDatabase):
     @db_op("write")
     def update_status_log(self, log_id: int, observacoes: str) -> bool:
         return self._update_row("status_logs", log_id, observacoes=observacoes)
+
+    @db_op("write")
+    def update_status_log_date(self, log_id: int, date_str: str) -> bool:
+        """Atualiza a data de um status_log, preservando o horário do registro.
+
+        Se a transição é ENVIADO, sincroniza ``processos.sent_at``; se é
+        AUTORIZADO/NEGADO, sincroniza ``processos.result_at`` — para que o
+        histórico e os marcos do processo concordem com a nova data.
+        """
+        rows = self._fetch_all(
+            "SELECT processo_id, new_status, created_at "
+            "FROM status_logs WHERE id = ?",
+            (log_id,),
+        )
+        if not rows:
+            return False
+        row = rows[0]
+        existing = row["created_at"] or ""
+        new_created = date_str
+        if "T" in existing:
+            new_created = f"{date_str}T{existing.split('T', 1)[1]}"
+        if not self._update_row("status_logs", log_id, created_at=new_created):
+            return False
+
+        st = row["new_status"] or ""
+        if st == Status.ENVIADO:
+            self._update_row("processos", row["processo_id"], sent_at=new_created)
+        elif st in (Status.AUTORIZADO, Status.NEGADO):
+            self._update_row("processos", row["processo_id"], result_at=new_created)
+        return True
 
     @db_op("write")
     def add_status_observation(self, processo_id: int, observacoes: str) -> bool:
