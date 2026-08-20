@@ -49,3 +49,14 @@ def get_config_path() -> Path:
         return root_config
 
     return data_config
+
+
+def find_parent_dir(start_path: Path, target_name: str, max_depth: int = 3) -> Path | None:
+    """Search upward from start_path for target_name directory."""
+    current = Path(start_path)
+    for _ in range(max_depth):
+        candidate = current / target_name
+        if candidate.is_dir():
+            return current
+        current = current.parent
+    return None
