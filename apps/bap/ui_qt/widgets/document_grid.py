@@ -169,7 +169,7 @@ class _Tile(QWidget):
         # ``set_pixmap`` a entrega — animação leve sem dependências (QTimer).
         self._loading_lbl = QLabel(self)
         self._loading_lbl.setStyleSheet(
-            f"color: {colors()['text_dim']}; font-size: 16px; "
+            f"color: {colors()['text_dim']}; font-size: 24px; "
             "background: transparent; border: none;"
         )
         self._loading_lbl.setVisible(self._pixmap is None)

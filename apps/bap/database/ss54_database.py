@@ -305,7 +305,7 @@ class SS54Database(BaseDatabase):
     def find_paciente_by_name(self, nome: str) -> Optional[Paciente]:
         row = self._fetch_one(
             "SELECT * FROM pacientes WHERE nome = ? LIMIT 1",
-            (to_upper_normalized(nome),),
+            (to_upper_normalized(nome.strip()),),
         )
         return Paciente.from_row(row) if row else None
 
@@ -337,6 +337,37 @@ class SS54Database(BaseDatabase):
         if not updates:
             return False
         return self._update_row("pacientes", paciente_id, **updates)
+
+    @db_op("write")
+    def merge_pacientes(self, from_id: int, to_id: int) -> bool:
+        """Merges two patient records by moving all data from from_id to to_id.
+
+        Moves processos and DRS messages to the target and keeps the source
+        phone when the target has none (avoids silent data loss).
+        """
+        if from_id == to_id:
+            return False
+        from_pac = self.get_paciente_by_id(from_id)
+        to_pac = self.get_paciente_by_id(to_id)
+        if from_pac is None or to_pac is None:
+            return False
+        carry_telefone = bool(from_pac.telefone and not to_pac.telefone)
+        with self.transaction():
+            self._execute_write(
+                "UPDATE processos SET paciente_id = ? WHERE paciente_id = ?",
+                (to_id, from_id)
+            )
+            self._execute_write(
+                "UPDATE drs_messages SET paciente_id = ? WHERE paciente_id = ?",
+                (to_id, from_id)
+            )
+            if carry_telefone:
+                self._execute_write(
+                    "UPDATE pacientes SET telefone = ? WHERE id = ?",
+                    (from_pac.telefone, to_id)
+                )
+            self._execute_write("DELETE FROM pacientes WHERE id = ?", (from_id,))
+        return True
 
     # ========== LOTE ==========
 

@@ -99,8 +99,11 @@ def main() -> None:
     # MANDADOS JUDICIAIS/05 - INSULINA.
     from emissor.utils.insulina_folder_migration import migrate_insulina_folders
 
-    _migration_root = andaime_instance.root
-    migrate_insulina_folders(_migration_root)
+    _migration_root = andaime_instance.config.save_location
+    try:
+        migrate_insulina_folders(_migration_root)
+    except Exception:
+        pass
 
     app = QApplication(sys.argv)
 

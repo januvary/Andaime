@@ -4,18 +4,12 @@ import hashlib
 from pathlib import Path
 from typing import Iterable
 
-from andaime.paths import get_root_directory
+from andaime.paths import find_parent_dir, get_root_directory
 from andaime.dates import parse_date
 
 
 def _find_ss54_dir() -> Path | None:
-    current = Path.cwd()
-    for _ in range(3):
-        candidate = current / "SS 54"
-        if candidate.is_dir():
-            return candidate
-        current = current.parent
-    return None
+    return find_parent_dir(Path.cwd(), "SS 54")
 
 
 def resolve_arquivos_root(config: Path | dict | None = None) -> Path:
@@ -47,11 +41,7 @@ def _tipo_folder(solicitacao: str) -> str:
 
 
 def remessa_folder_relpath(lote_date: str, solicitacao: str) -> str:
-    """Caminho relativo (estilo POSIX) da pasta da remessa: ``REMESSAS/YYYY/MM-DD/TIPO``.
-
-    Usado tanto no disco quanto como espelho de pastas no Google Drive, para
-    manter a mesma estrutura nos dois lugares.
-    """
+    """Caminho relativo da pasta da remessa: ``REMESSAS/YYYY/MM-DD/TIPO``."""
     d = parse_date(lote_date)
     if d is None:
         year, mmdd = "0000", "00-00"
@@ -69,11 +59,7 @@ def processo_dir_path(
     tipo: str,
     ciclo: int = 1,
 ) -> Path:
-    """Caminho da pasta do processo (puro — não cria nada em disco).
-
-    Chamadores que vão escrever devem garantir a existência da pasta
-    (``path.mkdir(parents=True, exist_ok=True)``) no momento da escrita.
-    """
+    """Caminho da pasta do processo (não cria em disco)."""
     d = parse_date(lote_date)
     if d is None:
         year, mmdd = "0000", "00-00"
@@ -86,12 +72,7 @@ def processo_dir_path(
 
 
 def merge_conteudos_to_pdf(conteudos: "Iterable[bytes]", output_path: str) -> str:
-    """Une PDFs (bytes) em um único PDF salvo em ``output_path``.
-
-    Aceita qualquer iterável de bytes — incluindo um gerador que resolve os
-    BLOBs sob demanda — de modo que os conteúdos não precisam estar todos na
-    memória ao mesmo tempo.
-    """
+    """Une PDFs (bytes) em um único PDF salvo em ``output_path``."""
     from andaime.pdf import merge_pdfs
 
     merge_pdfs(conteudos, output_path)
@@ -99,15 +80,7 @@ def merge_conteudos_to_pdf(conteudos: "Iterable[bytes]", output_path: str) -> st
 
 
 def compute_processo_sig(arqs: list) -> str:
-    """Assinatura estável do conjunto de arquivos de um processo (só metadados).
-
-    Deriva de ``(id, ordem, content_sha256)`` de cada arquivo — **sem ler nenhum
-    BLOB** — de modo que a decisão de regenerar o PDF combinado é O(1) em disco.
-    A assinatura muda se um arquivo é adicionado/removido, reordenado ou tem
-    seu conteúdo alterado (o ``content_sha256`` é regravado a cada escrita, na
-    mesma transação do BLOB). ``tipo_documento`` fica de fora: é classificação,
-    não conteúdo da página — mudá-lo não deve forçar regenerar o PDF.
-    """
+    """Assinatura estável do conjunto de arquivos (só metadados, sem ler BLOBs)."""
     h = hashlib.sha256()
     for a in sorted(arqs, key=lambda x: (x.ordem, x.id)):
         h.update(f"{a.id}|{a.ordem}|{a.content_sha256}".encode())

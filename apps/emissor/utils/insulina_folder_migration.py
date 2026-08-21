@@ -23,6 +23,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+from andaime.paths import find_parent_dir
 
 from emissor.utils.paths import (
     INSULINA_PARENT_FOLDER,
@@ -44,7 +45,7 @@ def _log(level: ErrorLevel, msg: str) -> None:
 
 
 def _drop_empty_duplicate(parent: Path, original_name: str) -> None:
-    """Remove duplicata sem sufixo se estiver vazia; avisa se não estiver."""
+    """Remove duplicata vazia ou avisa se não vazia."""
     duplicate = parent / original_name
     if not (duplicate.exists() and duplicate.is_dir()):
         return
@@ -65,7 +66,7 @@ def _move_to_insulina(
     insulina_dir: Path,
     original_name: str,
 ) -> None:
-    """Move/renomeia ``src`` para ``<insulina_dir>/<nome> - INSULINA``."""
+    """Move src para insulina_dir com sufixo - INSULINA."""
     dest = insulina_dir / f"{original_name}{INSULINA_SUFFIX}"
 
     _drop_empty_duplicate(parent, original_name)
@@ -86,9 +87,12 @@ def migrate_insulina_folders(save_root: Path | None) -> None:
     if save_root is None:
         return
 
-    parent = Path(save_root) / RECIBOS_PARENT_FOLDER
-    if not parent.is_dir():
+    migration_root = find_parent_dir(save_root, RECIBOS_PARENT_FOLDER)
+    if migration_root is None:
+        _log(ErrorLevel.INFO, f"MANDADOS JUDICIAIS não encontrado a partir de {save_root}")
         return
+
+    parent = migration_root / RECIBOS_PARENT_FOLDER
 
     insulina_dir = parent / INSULINA_PARENT_FOLDER
 

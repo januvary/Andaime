@@ -15,7 +15,7 @@ from datetime import date
 
 from bap.utils.date_utils import format_date_display
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QVBoxLayout,
     QWidget,
+    QMessageBox,
 )
 
 from bap.ui_qt.styles import colors, get_theme
@@ -43,7 +44,7 @@ from bap.constants import (
 )
 from bap.utils.remessa_email import ensure_processo_pdf
 from bap.utils.arquivo_storage import resolve_arquivos_root
-from bap.utils.text_utils import format_phone
+from bap.utils.text_utils import format_phone, _digits
 from bap.ui_qt.widgets.dialogs import (
     open_input_dialog,
     scaffold_dialog,
@@ -469,10 +470,16 @@ class RemessasPage(QWidget):
         resultados = self._db.search_processos(
             query=query, active_lote_id=active_id, limit=20
         )
-        return {
-            str(p.id): f"{format_date_display(p.lote_date or '')} - {p.paciente_nome or ''}"
-            for p in resultados
-        }
+        is_phone_search = bool(_digits(query))
+        formatted: dict[str, str] = {}
+        for p in resultados:
+            date_str = format_date_display(p.lote_date or "")
+            nome = p.paciente_nome or ""
+            label = f"{date_str} - {nome}" if date_str else nome
+            if is_phone_search and (p.paciente_telefone):
+                label = f"{label} - ({format_phone(p.paciente_telefone)})"
+            formatted[str(p.id)] = label
+        return formatted
 
     def _on_search_select(self, data) -> None:
         if not data or self._db is None:
@@ -505,6 +512,10 @@ class RemessasPage(QWidget):
             self._pending_highlight = (processo.solicitacao, processo_id)
         else:
             self._highlight_processo(processo.solicitacao, processo_id)
+
+        # set_text é adiado para after do event loop: o QCompleter reescreve
+        # o texto do QLineEdit com o label completo depois do _on_activated.
+        QTimer.singleShot(0, lambda: self._search.set_text(processo.paciente_nome or ""))
 
     def _highlight_processo(self, tab_key: str, processo_id: int) -> None:
         table = self._tables.get(tab_key)
@@ -622,10 +633,17 @@ class RemessasPage(QWidget):
                 lambda _c=False, pid=processo_id, k=key: self._change_tipo(pid, k)
             )
 
-        nome_action = edit_menu.addAction("Nome do paciente")
+        paciente_menu = edit_menu.addMenu("Paciente")
+        nome_action = paciente_menu.addAction("Nome")
         nome_action.triggered.connect(
             lambda _c=False, pid=processo_id: self._edit_field(
-                pid, "paciente_nome", "Nome do paciente"
+                pid, "paciente_nome", "Nome"
+            )
+        )
+        telefone_action = paciente_menu.addAction("Telefone")
+        telefone_action.triggered.connect(
+            lambda _c=False, pid=processo_id: self._edit_field(
+                pid, "paciente_telefone", "Telefone"
             )
         )
 
@@ -678,9 +696,26 @@ class RemessasPage(QWidget):
             confirm_label="Salvar",
             multiline=(field == "observacoes"),
         )
-        if text is not None:
+        if text is None:
+            return
+        if field == "paciente_telefone":
+            self._db.update_paciente(processo.paciente_id, telefone=text)
+        elif field == "paciente_nome":
+            existing = self._db.find_paciente_by_name(text)
+            if existing and existing.id != processo.paciente_id:
+                reply = QMessageBox.question(
+                    self, "Fundir pacientes",
+                    f"Já existe um paciente chamado '{text}'. Fundir?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+                self._db.merge_pacientes(processo.paciente_id, existing.id)
+            else:
+                self._db.update_paciente(processo.paciente_id, nome=text)
+        else:
             self._db.update_processo(processo_id, **{field: text})
-            self.refresh()
+        self.refresh()
 
     def _edit_status(self, processo_id: int) -> None:
         if self._db is None:

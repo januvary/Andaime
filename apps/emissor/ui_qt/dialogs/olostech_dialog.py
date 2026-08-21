@@ -74,17 +74,12 @@ class RegistrationWorker(QThread):
                 self.finished_with_result.emit(False, "Falha no login")
                 return
             disp = Dispensing(auth, log_callback=_log_cb)
-            success = disp.dispense_retirada(
+            success, message = disp.dispense_retirada(
                 patient_sus=self.patient_sus,
                 professional_code=self.professional_code,
                 items=self.items,
             )
-            if success:
-                self.finished_with_result.emit(True, "Registrado com sucesso")
-            else:
-                self.finished_with_result.emit(
-                    False, "Falha na dispensacao — ver detalhes no emissor.log"
-                )
+            self.finished_with_result.emit(success, message)
         except Exception as e:
             self.finished_with_result.emit(False, f"Erro: {e}")
 

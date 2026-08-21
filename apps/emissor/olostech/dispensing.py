@@ -36,6 +36,7 @@ class Dispensing:
         self._item_chaves = []
         self._patient_sus = None
         self._action_type = None
+        self._last_error = ""
 
     def _log(self, msg, level="INFO"):
         if self._log_cb:
@@ -118,10 +119,11 @@ class Dispensing:
 
         if result.get("concluido") == "True":
             self._log(f"  Stock adjusted: +{shortfall}")
-            return True
+            return True, ""
         else:
+            msg = result.get("mensagem", "Erro ao ajustar estoque")
             self._log(f"  Stock adjustment failed: {result}", "ERROR")
-            return False
+            return False, msg
 
     def open_attendance(self, patient_sus):
         """Create/open attendance and set up session state for dispensing."""
@@ -357,7 +359,7 @@ class Dispensing:
         alerta_qtde = mat.get("alertaqtdeentrega", "0")
         medicamento_recnum = mat.get("medicamentorecnum", "")
         self._log(f"  Found: {mat.get('materialdesc', '?')} "
-            f"(recnum={material_recnum}, saldo={saldo})")
+            f"(recnum={material_recnum}, saldo={saldo}, controlalote={controla_lote!r})")
 
         is_medication = bool(medicamento_recnum)
 
@@ -402,7 +404,8 @@ class Dispensing:
         loterecnum = ""
         lote_desc = ""
         lote_validade = ""
-        if controla_lote == "1":
+        is_lot_controlled = controla_lote not in ("", "0")
+        if is_lot_controlled:
             resp_lots = self.auth.session.post(
                 f"{self.base}/saudeweb/amfb/fb/dispensacao.ajax.asp",
                 data={"funcao": "obterLotesMedicamento",
@@ -413,6 +416,13 @@ class Dispensing:
             lot_match = re.search(r"<loterecnum><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
             lote_desc_match = re.search(r"<lote><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
             validade_match = re.search(r"<data_validade><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
+            lot_count = len(re.findall(
+                r"<loterecnum><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text
+            ))
+            self._log(
+                f"  Lots: {lot_count} encontrado(s), capturado: "
+                f"{lot_match.group(1) if lot_match else '-'}"
+            )
             if lot_match:
                 loterecnum = lot_match.group(1)
                 lote_desc = lote_desc_match.group(1) if lote_desc_match else ""
@@ -430,9 +440,11 @@ class Dispensing:
         current_saldo = int(saldo) if str(saldo).isdigit() else 0
         if current_saldo < quantity:
             self._log(f"  Insufficient stock (have {current_saldo}, need {quantity})")
-            if not self.add_stock(material_recnum, quantity, current_saldo,
-                                  loterecnum, lote_desc, lote_validade):
-                self._log("  Cannot proceed without stock", "ERROR")
+            success, error_msg = self.add_stock(material_recnum, quantity, current_saldo,
+                                              loterecnum, lote_desc, lote_validade)
+            if not success:
+                self._log(f"  Cannot proceed without stock: {error_msg}", "ERROR")
+                self._last_error = f"Erro de estoque: {error_msg}"
                 return False
             saldo = str(quantity)
 
@@ -875,20 +887,25 @@ class Dispensing:
             3. Group items by action_type
             4. For each group: open_dispensacao_direta → add each item
             5. Conclude attendance (once)
+
+        Returns:
+            ``(success: bool, message: str)`` — message surfaces in the UI on failure.
         """
         if not items:
             self._log("No items to dispense", "ERROR")
-            return False
+            return False, "Nenhum item para dispensar"
 
         # Step 1: Open attendance
         if not self.open_attendance(patient_sus):
-            return False
+            return False, "Falha ao abrir atendimento"
 
         # Step 2: Look up professional
         if not self.lookup_professional(professional_code):
             self._log("Trying fallback professional code '12345'", "WARN")
             if not self.lookup_professional("12345"):
-                return False
+                return False, self._rollback_after_failure(
+                    [], "Profissional não encontrado"
+                )
 
         # Step 3: Filter out zero-quantity items, group by action_type
         valid_items = [it for it in items if it.get("quantity", 0) > 0]
@@ -897,7 +914,9 @@ class Dispensing:
             self._log(f"Skipping {skipped_zero} item(s) with quantity 0")
         if not valid_items:
             self._log("No items with quantity > 0", "ERROR")
-            return False
+            return False, self._rollback_after_failure(
+                [], "Nenhum item com quantidade maior que zero"
+            )
 
         groups = {}
         for item in valid_items:
@@ -912,32 +931,39 @@ class Dispensing:
         succeeded = []
         failed = []
 
-        # Step 4: Process each group
-        for action_type, group_items in groups.items():
-            notif = group_items[0].get("notificacao_nr", "")
+        # Step 4: Process each group. Any exception (e.g. network failure)
+        # rolls the attendance back before the message reaches the UI.
+        try:
+            for action_type, group_items in groups.items():
+                notif = group_items[0].get("notificacao_nr", "")
 
-            self._log(f"\n--- Group: action_type={action_type} ({len(group_items)} item(s)) ---")
+                self._log(f"\n--- Group: action_type={action_type} ({len(group_items)} item(s)) ---")
 
-            if not self.open_dispensacao_direta(patient_sus, action_type, notif):
-                self._log(f"Failed to open dispensacao for action {action_type}", "ERROR")
+                if not self.open_dispensacao_direta(patient_sus, action_type, notif):
+                    self._log(f"Failed to open dispensacao for action {action_type}", "ERROR")
+                    for item in group_items:
+                        failed.append(item["material_desc"])
+                    continue
+
                 for item in group_items:
-                    failed.append(item["material_desc"])
-                continue
-
-            for item in group_items:
-                if not self.add_item(
-                    patient_sus,
-                    item["material_code"],
-                    item["material_desc"],
-                    item["quantity"],
-                    action_type,
-                    item.get("dias", 0),
-                ):
-                    self._log(f"  FAILED: {item['material_desc']}", "ERROR")
-                    failed.append(item["material_desc"])
-                else:
-                    self._log(f"  OK: {item['material_desc']} x{item['quantity']}")
-                    succeeded.append(item["material_desc"])
+                    if not self.add_item(
+                        patient_sus,
+                        item["material_code"],
+                        item["material_desc"],
+                        item["quantity"],
+                        action_type,
+                        item.get("dias", 0),
+                    ):
+                        self._log(f"  FAILED: {item['material_desc']}", "ERROR")
+                        failed.append(item["material_desc"])
+                    else:
+                        self._log(f"  OK: {item['material_desc']} x{item['quantity']}")
+                        succeeded.append(item["material_desc"])
+        except Exception as e:  # noqa: BLE001
+            self._log(f"  Unexpected error during dispensation: {e}", "ERROR")
+            return False, self._rollback_after_failure(
+                succeeded, f"Erro durante a dispensação: {e}"
+            )
 
         # Report results
         self._log(f"\n=== Results: {len(succeeded)} succeeded, {len(failed)} failed ===")
@@ -947,11 +973,34 @@ class Dispensing:
         # If any item failed, don't conclude - roll back so no
         # orphaned-open attendance (or partial dispensation) is left behind.
         if failed:
-            self._log("One or more items failed - rolling back attendance", "ERROR")
-            if succeeded or self._item_chaves:
-                self.rollback_dispensation()
-            else:
-                self.cancel_attendance()
-            return False
+            return False, self._rollback_after_failure(
+                succeeded,
+                self._last_error or "Falha na dispensação — ver detalhes no emissor.log",
+            )
 
-        return self.conclude()
+        # Step 5: Conclude. Exceptions here only surface the message without
+        # auto-rollback: the items may already be delivered and cancelling
+        # them would destroy records the user could still finish manually.
+        try:
+            if not self.conclude():
+                return False, "Falha ao concluir a dispensação"
+        except Exception as e:  # noqa: BLE001
+            self._log(f"  Unexpected error while concluding: {e}", "ERROR")
+            return False, f"Erro ao concluir a dispensação: {e}"
+
+        return True, "Registrado com sucesso"
+
+    def _rollback_after_failure(self, succeeded: list, message: str) -> str:
+        """Roll back the open attendance/dispensation after a failure.
+
+        Appends a note to ``message`` if the cleanup itself fails to complete.
+        """
+        self._log("Rolling back after failure", "ERROR")
+        if succeeded or self._item_chaves or self.dispensacao_id:
+            ok = self.rollback_dispensation()
+        else:
+            ok = self.cancel_attendance()
+        if not ok:
+            self._log("  Rollback failed", "ERROR")
+            return f"{message} (falha no rollback)"
+        return message
