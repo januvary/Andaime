@@ -26,6 +26,29 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# File types that trigger an auto-restart when they change.
+WATCHED_EXTENSIONS = (".py", ".qml", ".qss", ".json", ".toml", ".ui")
+
+# Directories that never contain source (runtime data, DBs, logs, caches).
+# Changes to them (e.g. saving a process) must not restart the app.
+SKIP_DIRS = {
+    ".git",
+    "__pycache__",
+    "venv",
+    "dist",
+    ".egg-info",
+    "node_modules",
+    "_update_staging",
+    "data",       # DBs, config.json, logs, tokens
+    "REMESSAS",   # saved-process PDFs/folders
+    "backups",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".coverage",
+    ".codebase-memory",
+}
+
 from PySide6.QtCore import (
     QFileSystemWatcher,
     QProcess,
@@ -394,6 +417,7 @@ class ProjectRow(QWidget):
         self.process: QProcess | None = None
         self.console: ConsoleDialog | None = None
         self._watched_files: list[str] = []
+        self._dir_snapshots: dict[str, dict[str, tuple[int, int]]] = {}
         self._restart_timer = QTimer(self)
         self._restart_timer.setSingleShot(True)
         self._restart_timer.setInterval(500)
@@ -921,9 +945,9 @@ class ProjectRow(QWidget):
         files = []
         for root, dirs, fnames in os.walk(self.path):
             # Skip common non-project dirs
-            dirs[:] = [d for d in dirs if d not in {".git", "__pycache__", "venv", "dist", ".egg-info", "node_modules", "_update_staging"}]
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
             for f in fnames:
-                if f.endswith((".py", ".qml", ".qss", ".json", ".toml", ".ui")):
+                if f.endswith(WATCHED_EXTENSIONS):
                     files.append(str(Path(root) / f))
 
         # Watch individual files only (not directories) so that unrelated
@@ -932,38 +956,68 @@ class ProjectRow(QWidget):
         if len(files) > 200:
             directories = []
             for root, dirs, _ in os.walk(self.path):
-                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__", "venv", "dist", ".egg-info", "node_modules", "_update_staging"}]
+                dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
                 directories.append(root)
             self.watcher.addPaths(directories)
             self._watched_files = directories
+            # Snapshot all watched-type files under each directory so that a
+            # change to a non-source file in the same dir (DB, log) can be
+            # told apart from an actual edit (see _dir_snapshot_changed).
+            self._dir_snapshots = {
+                d: self._scan_watched_files(d) for d in directories
+            }
         else:
             self.watcher.addPaths(files)
             self._watched_files = files
+            self._dir_snapshots = {}
 
     def _unwatch_project(self) -> None:
         if self._watched_files:
             self.watcher.removePaths(self._watched_files)
             self._watched_files = []
+            self._dir_snapshots = {}
 
     def _on_file_changed(self, path: str) -> None:
         self._restart_timer.start()
 
     def _on_dir_changed(self, path: str) -> None:
         # When watching directories (too many individual files), only trigger
-        # if a relevant file type was actually changed.
-        if not self._has_recent_relevant_change(path):
+        # if a watched file type actually changed in this directory.
+        if not self._dir_snapshot_changed(path):
             return
         self._restart_timer.start()
 
-    def _has_recent_relevant_change(self, dir_path: str) -> bool:
-        """Check if *dir_path* contains any watched file types."""
+    def _dir_snapshot_changed(self, dir_path: str) -> bool:
+        """Return True only when a watched-type file in *dir_path* changed.
+
+        QFileSystemWatcher only reports the directory in dir-watch mode, so
+        runtime writes (DBs, logs, PDFs) that share a directory with source
+        files otherwise masquerade as edits.
+        """
+        fresh = self._scan_watched_files(dir_path)
+        prev = self._dir_snapshots.get(dir_path)
+        # Unknown dir (created during the run): treat the presence of watched
+        # files as a change.
+        changed = fresh != prev if prev is not None else bool(fresh)
+        self._dir_snapshots[dir_path] = fresh
+        return changed
+
+    @staticmethod
+    def _scan_watched_files(dir_path: str) -> dict[str, tuple[int, int]]:
+        """Snapshot ``{name: (mtime_ns, size)}`` of watched-type files."""
+        snapshot: dict[str, tuple[int, int]] = {}
         try:
             for entry in os.scandir(dir_path):
-                if entry.is_file() and entry.name.endswith((".py", ".qml", ".qss", ".json", ".toml", ".ui")):
-                    return True
+                if not entry.is_file() or not entry.name.endswith(WATCHED_EXTENSIONS):
+                    continue
+                try:
+                    st = entry.stat()
+                    snapshot[entry.name] = (st.st_mtime_ns, st.st_size)
+                except OSError:
+                    pass
         except OSError:
             pass
-        return False
+        return snapshot
 
     def _on_restart_triggered(self) -> None:
         if self.process is not None and self.process.state() == QProcess.ProcessState.Running:
