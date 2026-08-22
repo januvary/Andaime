@@ -54,6 +54,7 @@ from andaime.qt.dialogs import (  # noqa: F401
     prompt_dialog,
     scaffold_dialog,
 )
+from andaime.qt.dashboard import DashboardService, DashboardWindow, open_dashboard
 
 __all__ = [
     "DARK",
@@ -97,4 +98,7 @@ __all__ = [
     "open_input_dialog",
     "prompt_dialog",
     "scaffold_dialog",
+    "DashboardService",
+    "DashboardWindow",
+    "open_dashboard",
 ]

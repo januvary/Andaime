@@ -1214,19 +1214,26 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 
     log_message("Launching: %s cwd=%s", cmdLine, workDir);
 
-    /* Capture stdout/stderr to a log file so python.exe crashes are visible. */
+    /* Capture stdout/stderr to a log file so python.exe crashes are visible.
+     * NOTE: the handles MUST be created inheritable (bInheritHandle=TRUE).
+     * With NULL security attributes they are not, and despite
+     * bInheritHandles=TRUE in CreateProcess the child receives invalid
+     * std handles — CPython then sets sys.stdout/sys.stderr to None and
+     * app.log stays forever empty (no logs, no crash tracebacks). */
+    SECURITY_ATTRIBUTES secAttrs = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+
     char appLogPath[MAX_PATH * 2];
     snprintf(appLogPath, sizeof(appLogPath), "%s\\app.log", localRoot);
     HANDLE hAppLog = CreateFileA(appLogPath,
                                  GENERIC_WRITE,
                                  FILE_SHARE_READ,
-                                 NULL,
+                                 &secAttrs,
                                  CREATE_ALWAYS,
                                  FILE_ATTRIBUTE_NORMAL,
                                  NULL);
 
     HANDLE hStdIn = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ,
-                                NULL, OPEN_EXISTING, 0, NULL);
+                                &secAttrs, OPEN_EXISTING, 0, NULL);
 
     STARTUPINFOA si;
     ZeroMemory(&si, sizeof(si));

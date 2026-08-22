@@ -274,6 +274,7 @@ class QtConfigDialog(QDialog):
         location_label: str = "Local de salvamento:",
         center_label: str | None = None,
         center_callback: Callable | None = None,
+        center_buttons: list[tuple[str, Callable]] | None = None,
         middle: QWidget | None = None,
         on_reset: Callable | None = None,
         title: str = "Configurações",
@@ -288,10 +289,16 @@ class QtConfigDialog(QDialog):
         self._location_edit = QLineEdit(initial_location)
         self._location_edit.setMinimumWidth(280)
 
+        # Merge legacy single-button into center_buttons list
+        if center_buttons is None:
+            self._center_buttons: list[tuple[str, Callable]] = []
+        else:
+            self._center_buttons = list(center_buttons)
+        if center_label is not None and center_callback is not None:
+            self._center_buttons.append((center_label, center_callback))
+
         self._build_ui(
             location_label=location_label,
-            center_label=center_label,
-            center_callback=center_callback,
             middle=middle,
             reset_location=reset_location,
         )
@@ -302,8 +309,6 @@ class QtConfigDialog(QDialog):
         self,
         *,
         location_label: str,
-        center_label: str | None,
-        center_callback: Callable | None,
         middle: QWidget | None,
         reset_location: str,
     ) -> None:
@@ -347,11 +352,13 @@ class QtConfigDialog(QDialog):
 
         btn_row.addStretch(1)
 
-        if center_label is not None:
-            center_btn = make_button(center_label, "flat", self)
-            if center_callback is not None:
-                center_btn.clicked.connect(center_callback)
-            btn_row.addWidget(center_btn)
+        for label, callback in self._center_buttons:
+            btn = make_button(label, "flat", self)
+            if callback is not None:
+                btn.clicked.connect(callback)
+            btn_row.addWidget(btn)
+
+        if self._center_buttons:
             btn_row.addStretch(1)
 
         save_btn = make_button("Salvar", "primary", self)
