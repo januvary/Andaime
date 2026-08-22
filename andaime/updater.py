@@ -221,18 +221,126 @@ def _sha256_file(path: Path) -> str:
 # ============================================================================
 
 
+_WIN_RESERVED_NAMES = {
+    "con", "prn", "aux", "nul",
+    *(f"com{i}" for i in range(1, 10)),
+    *(f"lpt{i}" for i in range(1, 10)),
+}
+
+
+def _is_reserved_win_name(name: str) -> bool:
+    """True for DOS device names (nul, con, aux, com1, …, incl. nul.txt)."""
+    stem = name.lower().split(".", 1)[0]
+    return stem in _WIN_RESERVED_NAMES
+
+
+def _delete_file_force(path: Path) -> None:
+    """Delete a file, handling Windows reserved device names.
+
+    ``nul``/``con``/… cannot be removed through the normal Win32 namespace —
+    deletion requires an extended-path prefix (``\\\\?\\`` or ``\\\\.\\``).
+    Note: ``os.path.abspath`` is NOT usable here — ``GetFullPathName``
+    resolves a trailing reserved name to the device itself (``.\\\\nul``).
+    Resolve the parent instead and rejoin the name.
+    """
+    if os.name == "nt" and _is_reserved_win_name(path.name):
+        parent = path.parent if path.is_absolute() else Path(
+            os.path.abspath(path.parent)
+        )
+        full = str(parent / path.name)
+        last_err: OSError | None = None
+
+        # Strategy 1: direct removal via extended-path prefix.
+        try:
+            os.remove(f"\\\\?\\{full}")
+            return
+        except OSError as e:  # pragma: no cover - Windows/wine specific
+            last_err = e
+
+        # Strategy 2: rename to a non-reserved name via \\\\?\\, then
+        # remove normally. Some environments (wine) refuse direct removal
+        # but allow the rename.
+        tmp_name = f"__del_{path.name}"
+        tmp_full = str(parent / tmp_name)
+        try:
+            os.rename(f"\\\\?\\{full}", f"\\\\?\\{tmp_full}")
+            os.remove(tmp_full)
+            return
+        except OSError as e:  # pragma: no cover
+            last_err = e
+
+        # Strategy 3: raw Win32.
+        try:
+            import ctypes
+
+            if ctypes.windll.kernel32.DeleteFileW(f"\\\\?\\{full}"):
+                return
+        except OSError as e:  # pragma: no cover
+            last_err = e
+        if last_err:
+            raise last_err
+    else:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _rmtree_force(path: Path) -> None:
+    """rmtree that survives trees containing reserved-name files.
+
+    Uses ``os.rmdir`` success as the authoritative "empty" signal —
+    ``os.path.lexists`` reports nonsense for reserved names, and deleting
+    them can be flaky, so we retry a few passes before giving up.
+    """
+    if path.is_dir() and not path.is_symlink():
+        for _attempt in range(3):
+            for entry in path.iterdir():
+                with contextlib.suppress(OSError):
+                    _rmtree_force(entry)
+            try:
+                os.rmdir(path)
+                return
+            except OSError:
+                continue
+        raise OSError(f"could not remove {path}: {list(path.iterdir())}")
+    else:
+        # Not a directory. Entries discovered via iterdir() are
+        # authoritative — exists() lies for reserved device names — so
+        # attempt the deletion unconditionally.
+        _delete_file_force(path)
+
+
+def _free_rollback_name(current: Path) -> Path:
+    """Return a rollback path for *current* that is not already occupied.
+
+    Prefers the classic ``<name>.old``; if a previous failed update left an
+    undeletable ``.old`` behind, falls back to ``.old.2``, ``.old.3``, …
+    """
+    base = current.with_name(current.name + ".old")
+    if not base.exists() and not base.is_symlink():
+        return base
+    with contextlib.suppress(Exception):
+        _rmtree_force(base)
+    if not base.exists() and not base.is_symlink():
+        return base
+    n = 2
+    while True:
+        candidate = current.with_name(f"{current.name}.old.{n}")
+        if not candidate.exists() and not candidate.is_symlink():
+            return candidate
+        n += 1
+
+
 def _swap_directory(current: Path, new: Path) -> list[tuple[Path, Path]]:
     """Atomically swap *new* into *current*'s location.
 
-    Renames ``current`` → ``current.old`` (for rollback), then moves
-    *new* → *current*.  Returns ``[(old_path, final_path)]`` pairs.
+    Renames ``current`` → a free rollback name, then moves *new* →
+    *current*.  Returns ``[(old_path, final_path)]`` pairs.
     """
     swaps: list[tuple[Path, Path]] = []
     if current.exists() or current.is_symlink():
-        old = current.with_name(current.name + ".old")
-        with contextlib.suppress(Exception):
-            if old.exists():
-                shutil.rmtree(old)
+        old = _free_rollback_name(current)
         os.rename(current, old)
         swaps.append((old, current))
     current.parent.mkdir(parents=True, exist_ok=True)
@@ -245,13 +353,13 @@ def _rollback(swaps: list[tuple[Path, Path]]) -> None:
     for old, current in reversed(swaps):
         with contextlib.suppress(Exception):
             if current.exists():
-                shutil.rmtree(current)
+                _rmtree_force(current)
             if old.exists():
                 os.rename(old, current)
 
 
 def _cleanup_old_dirs(root: Path) -> None:
-    """Remove ``*.old`` directories left by a previous successful update."""
+    """Remove ``*.old`` (and ``.old.N``) directories from previous updates."""
     search_dirs = [
         root / "apps",
         root / "python" / "Lib" / "site-packages",
@@ -260,17 +368,19 @@ def _cleanup_old_dirs(root: Path) -> None:
     for d in search_dirs:
         if d.is_dir():
             for item in d.iterdir():
-                if item.name.endswith(".old"):
+                if ".old" in item.name:
                     with contextlib.suppress(Exception):
-                        shutil.rmtree(item)
+                        _rmtree_force(item)
     # Also clean .old files (legacy frozen artifacts) and any top-level
     # .old directories (e.g. python.old left by a payload swap).
-    for stale in root.glob("*.old"):
-        with contextlib.suppress(Exception):
-            if stale.is_dir():
-                shutil.rmtree(stale)
-            else:
-                stale.unlink()
+    with contextlib.suppress(Exception):
+        for stale in root.iterdir():
+            if ".old" in stale.name:
+                with contextlib.suppress(Exception):
+                    if stale.is_dir():
+                        _rmtree_force(stale)
+                    else:
+                        _delete_file_force(stale)
 
 
 # ============================================================================
