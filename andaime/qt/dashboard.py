@@ -45,6 +45,17 @@ from andaime.qt.theme import get_palette, make_button
 from andaime.qt.table import table_batch_populate
 
 
+def _format_blob_size(length: int | None) -> str:
+    """Format a BLOB byte length into a human-readable size string."""
+    if length is None or length == 0:
+        return "[empty]"
+    if length < 1024:
+        return f"{length} B"
+    if length < 1024 * 1024:
+        return f"{length / 1024:.0f} KB"
+    return f"{length / (1024 * 1024):.1f} MB"
+
+
 # ======================================================================
 # Service
 # ======================================================================
@@ -180,13 +191,16 @@ class DashboardService:
             column_names = [col[1] for col in columns_info]
             blob_columns = {col[1] for col in columns_info if col[2].upper() == "BLOB"}
 
-            # Skip BLOB columns to avoid loading large binary data into memory
-            select_cols = [c for c in column_names if c not in blob_columns]
-            if not select_cols:
-                select_cols = column_names  # fallback: all BLOBs, still show PKs
+            # BLOB columns → LENGTH() (size in bytes, never loads the data)
+            select_parts = []
+            for c in column_names:
+                if c in blob_columns:
+                    select_parts.append(f"LENGTH({c}) AS {c}")
+                else:
+                    select_parts.append(c)
 
             cursor = conn.cursor()
-            cols_sql = ", ".join(select_cols)
+            cols_sql = ", ".join(select_parts)
             if filter_text:
                 where = " OR ".join(
                     f"CAST({col} AS TEXT) LIKE ?" for col in column_names
@@ -601,14 +615,9 @@ class DashboardWindow(QMainWindow):
             return
 
         blob_columns = schema["blob_columns"]
-        # Exclude BLOB columns from display (rows don't contain them)
-        self._column_names = [
-            c for c in schema["column_names"] if c not in blob_columns
-        ]
-        self._pk_columns = [
-            c for c in schema["pk_columns"] if c not in blob_columns
-        ]
-        non_editable = set(self._service.get_non_editable_columns(table_name))
+        self._column_names = schema["column_names"]
+        self._pk_columns = schema["pk_columns"]
+        non_editable = set(self._service.get_non_editable_columns(table_name)) | set(self._pk_columns)
 
         with table_batch_populate(self._table):
             self._table.clear()
@@ -630,16 +639,20 @@ class DashboardWindow(QMainWindow):
                     if col_name in self._pk_columns:
                         pk_vals[col_name] = raw
 
-                    display = "-" if raw is None else str(raw)
-                    if raw is not None and col_name not in non_editable:
-                        if self._mask_fn is not None:
+                    if col_name in blob_columns:
+                        display = _format_blob_size(raw)
+                    elif raw is None:
+                        display = "-"
+                    else:
+                        display = str(raw)
+                        if col_name not in non_editable and self._mask_fn is not None:
                             masked = self._mask_fn(col_name, str(raw))
                             if masked:
                                 display = masked
 
                     item = QTableWidgetItem(display)
                     item.setData(Qt.ItemDataRole.UserRole, row_key)
-                    if col_name in non_editable:
+                    if col_name in non_editable or col_name in blob_columns:
                         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                         item.setForeground(QColor(self._palette["text_dim"]))
                     self._table.setItem(row_idx, col_idx, item)

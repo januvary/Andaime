@@ -170,6 +170,10 @@ mkdir_recursive(const char *path)
 
 /* --- Progress dialog --- */
 #define IDD_PROGRESS 100
+
+/* app.log: single append-only session log; truncated once if it grows
+ * past this (crash-loop protection). */
+#define APPLOG_MAX_BYTES (1024 * 1024)
 #define IDC_PROGRESS 101
 
 static INT_PTR CALLBACK progress_dlgproc(HWND, UINT, WPARAM, LPARAM);
@@ -1219,7 +1223,11 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
      * With NULL security attributes they are not, and despite
      * bInheritHandles=TRUE in CreateProcess the child receives invalid
      * std handles — CPython then sets sys.stdout/sys.stderr to None and
-     * app.log stays forever empty (no logs, no crash tracebacks). */
+     * app.log stays forever empty (no logs, no crash tracebacks).
+     *
+     * Append (OPEN_ALWAYS + seek to end) so previous sessions' crash
+     * tracebacks survive; truncate once if the file has grown past
+     * APPLOG_MAX_BYTES (crash-loop protection). */
     SECURITY_ATTRIBUTES secAttrs = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
 
     char appLogPath[MAX_PATH * 2];
@@ -1228,9 +1236,27 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
                                  GENERIC_WRITE,
                                  FILE_SHARE_READ,
                                  &secAttrs,
-                                 CREATE_ALWAYS,
+                                 OPEN_ALWAYS,
                                  FILE_ATTRIBUTE_NORMAL,
                                  NULL);
+    if (hAppLog != INVALID_HANDLE_VALUE) {
+        LARGE_INTEGER size;
+        if (GetFileSizeEx(hAppLog, &size) &&
+            size.QuadPart > APPLOG_MAX_BYTES) {
+            /* Too big (crash loop?) — start fresh. */
+            CloseHandle(hAppLog);
+            hAppLog = CreateFileA(appLogPath,
+                                  GENERIC_WRITE,
+                                  FILE_SHARE_READ,
+                                  &secAttrs,
+                                  CREATE_ALWAYS,
+                                  FILE_ATTRIBUTE_NORMAL,
+                                  NULL);
+        } else {
+            LARGE_INTEGER zero = { 0 };
+            SetFilePointerEx(hAppLog, zero, NULL, FILE_END);
+        }
+    }
 
     HANDLE hStdIn = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ,
                                 &secAttrs, OPEN_EXISTING, 0, NULL);
