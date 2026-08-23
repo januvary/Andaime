@@ -168,13 +168,84 @@ mkdir_recursive(const char *path)
     return 0;
 }
 
+/* Recursively delete a directory tree (like `rd /s /q`), natively.
+ *
+ * We must NOT shell out to cmd.exe for this: cmd is a console app, so a
+ * GUI launcher spawning it flashes a terminal window, and when the exe
+ * runs from a network share cmd.exe also prints the "UNC paths are not
+ * supported" warning (it cannot inherit a UNC current directory).
+ *
+ * Failures are logged to launcher.log (not silently ignored) but do not
+ * abort the sweep — remaining entries are still attempted. */
+static void
+delete_tree_log(const char *path, int depth, int *failures)
+{
+    if (!path || !*path) return;
+
+    char pattern[MAX_PATH * 2];
+    snprintf(pattern, sizeof(pattern), "%s\\*", path);
+
+    WIN32_FIND_DATAA fd;
+    HANDLE hFind = FindFirstFileA(pattern, &fd);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        /* Not a directory (or missing) — try a plain file delete. */
+        if (!SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL))
+            log_message("delete_tree: attrs failed (%lu): %s",
+                        GetLastError(), path);
+        if (!DeleteFileA(path)) {
+            (*failures)++;
+            log_message("delete_tree: DeleteFileA failed (%lu): %s",
+                        GetLastError(), path);
+        }
+        return;
+    }
+
+    do {
+        if (!strcmp(fd.cFileName, ".") || !strcmp(fd.cFileName, ".."))
+            continue;
+
+        char child[MAX_PATH * 2];
+        snprintf(child, sizeof(child), "%s\\%s", path, fd.cFileName);
+
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            delete_tree_log(child, depth + 1, failures);
+        } else {
+            if (!SetFileAttributesA(child, FILE_ATTRIBUTE_NORMAL))
+                log_message("delete_tree: attrs failed (%lu): %s",
+                            GetLastError(), child);
+            if (!DeleteFileA(child)) {
+                (*failures)++;
+                log_message("delete_tree: DeleteFileA failed (%lu): %s",
+                            GetLastError(), child);
+            }
+        }
+    } while (FindNextFileA(hFind, &fd));
+
+    FindClose(hFind);
+    if (!RemoveDirectoryA(path)) {
+        (*failures)++;
+        log_message("delete_tree: RemoveDirectoryA failed (%lu): %s "
+                    "(%d failures beneath)",
+                    GetLastError(), path, *failures);
+    }
+}
+
+static void
+delete_tree(const char *path)
+{
+    int failures = 0;
+    delete_tree_log(path, 0, &failures);
+    if (failures > 0)
+        log_message("delete_tree: %d failure(s) under %s", failures, path);
+}
+
 /* --- Progress dialog --- */
 #define IDD_PROGRESS 100
+#define IDC_PROGRESS 101
 
 /* app.log: single append-only session log; truncated once if it grows
  * past this (crash-loop protection). */
 #define APPLOG_MAX_BYTES (1024 * 1024)
-#define IDC_PROGRESS 101
 
 static INT_PTR CALLBACK progress_dlgproc(HWND, UINT, WPARAM, LPARAM);
 
@@ -837,9 +908,7 @@ launcher_update_check(const char *localRoot, const char *appName,
     if (!needPayload && !needAppUpdate) {
         free(json);
         log_message("Update check: up to date");
-        char cmd[MAX_PATH * 4];
-        snprintf(cmd, sizeof(cmd), "cmd.exe /c rd /s /q \"%s\" 2>nul", tempDir);
-        system(cmd);
+        delete_tree(tempDir);
         return;
     }
 
@@ -865,10 +934,7 @@ launcher_update_check(const char *localRoot, const char *appName,
     snprintf(stagingPath, sizeof(stagingPath),
              "%s\\_update_staging", localRoot);
 
-    char delCmd[MAX_PATH * 4];
-    snprintf(delCmd, sizeof(delCmd),
-             "cmd.exe /c rd /s /q \"%s\" 2>nul", stagingPath);
-    system(delCmd);
+    delete_tree(stagingPath);
     mkdir_recursive(stagingPath);
 
     HWND hdlg = show_progress(displayName);
@@ -911,10 +977,7 @@ launcher_update_check(const char *localRoot, const char *appName,
     write_file(tagFilePath, tag);
 
     /* Clean up temp. */
-    char cleanupCmd[MAX_PATH * 4];
-    snprintf(cleanupCmd, sizeof(cleanupCmd),
-             "cmd.exe /c rd /s /q \"%s\" 2>nul", tempDir);
-    system(cleanupCmd);
+    delete_tree(tempDir);
 
     ReleaseMutex(hUpdateMutex);
     CloseHandle(hUpdateMutex);
@@ -1021,10 +1084,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
         /* Partial install detected — wipe before re-downloading. */
         log_message("Incomplete install detected (python=%d version=%d), wiping",
                     pythonExists, versionExists);
-        char wipeCmd[MAX_PATH * 4];
-        snprintf(wipeCmd, sizeof(wipeCmd),
-                 "cmd.exe /c rd /s /q \"%s\" 2>nul", localRoot);
-        system(wipeCmd);
+        delete_tree(localRoot);
     }
 
     /* --- Install / update --- */
@@ -1177,10 +1237,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
         if (hdlg) DestroyWindow(hdlg);
 
         /* Clean up temp directory. */
-        char cleanupCmd[MAX_PATH * 4];
-        snprintf(cleanupCmd, sizeof(cleanupCmd),
-                 "cmd.exe /c rd /s /q \"%s\" 2>nul", tempDir);
-        system(cleanupCmd);
+        delete_tree(tempDir);
 
         /* Verify python.exe appeared. */
         attr = GetFileAttributesA(localPython);
@@ -1225,16 +1282,18 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
      * std handles — CPython then sets sys.stdout/sys.stderr to None and
      * app.log stays forever empty (no logs, no crash tracebacks).
      *
-     * Append (OPEN_ALWAYS + seek to end) so previous sessions' crash
-     * tracebacks survive; truncate once if the file has grown past
-     * APPLOG_MAX_BYTES (crash-loop protection). */
+     * Append so previous sessions' crash tracebacks survive; truncate
+     * once if the file has grown past APPLOG_MAX_BYTES (crash-loop
+     * protection). Opened with FILE_APPEND_DATA + full sharing so
+     * multiple apps can hold the log concurrently — every write goes to
+     * EOF, so sessions interleave at line granularity (fine for a log). */
     SECURITY_ATTRIBUTES secAttrs = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
 
     char appLogPath[MAX_PATH * 2];
     snprintf(appLogPath, sizeof(appLogPath), "%s\\app.log", localRoot);
     HANDLE hAppLog = CreateFileA(appLogPath,
-                                 GENERIC_WRITE,
-                                 FILE_SHARE_READ,
+                                 FILE_APPEND_DATA,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                                  &secAttrs,
                                  OPEN_ALWAYS,
                                  FILE_ATTRIBUTE_NORMAL,
@@ -1246,15 +1305,12 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             /* Too big (crash loop?) — start fresh. */
             CloseHandle(hAppLog);
             hAppLog = CreateFileA(appLogPath,
-                                  GENERIC_WRITE,
-                                  FILE_SHARE_READ,
+                                  FILE_APPEND_DATA,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE,
                                   &secAttrs,
                                   CREATE_ALWAYS,
                                   FILE_ATTRIBUTE_NORMAL,
                                   NULL);
-        } else {
-            LARGE_INTEGER zero = { 0 };
-            SetFilePointerEx(hAppLog, zero, NULL, FILE_END);
         }
     }
 
@@ -1306,10 +1362,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
             if (MessageBoxA(NULL, msg, displayName,
                             MB_ICONQUESTION | MB_YESNO) == IDYES) {
                 log_message("User chose to reinstall after crash");
-                char wipeCmd[MAX_PATH * 4];
-                snprintf(wipeCmd, sizeof(wipeCmd),
-                         "cmd.exe /c rd /s /q \"%s\" 2>nul", localRoot);
-                system(wipeCmd);
+                delete_tree(localRoot);
 
                 /* Re-launch self (triggers fresh download). */
                 STARTUPINFOA rsi;
