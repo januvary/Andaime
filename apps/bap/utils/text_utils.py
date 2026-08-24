@@ -1,10 +1,10 @@
+import unicodedata
+
 from andaime.text import to_upper_normalized
 
 
 def fold_diacritics(s: str) -> str:
     """Remove acentos/diacríticos: NFKD + strip combining marks."""
-    import unicodedata
-
     s = unicodedata.normalize("NFKD", s)
     return "".join(c for c in s if not unicodedata.combining(c))
 

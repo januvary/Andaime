@@ -27,6 +27,7 @@ from bap.constants import (
 )
 from bap.utils.date_utils import format_date_display
 from bap.utils.arquivo_storage import resolve_arquivos_root
+from andaime.pdf import merge_pdfs, page_count
 
 
 class MainWindow(QMainWindow):
@@ -203,6 +204,7 @@ class MainWindow(QMainWindow):
             self,
             current,
             self._export_planilha,
+            dashboard_callback=self._launch_dashboard,
         )
         if dialog.exec() and dialog.result_data is not None:
             self.config.set("arquivos_root", dialog.result_data["arquivos_root"])
@@ -243,6 +245,24 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "BAP", f"Falha ao exportar planilha:\n{e}")
 
         self._run_async(_work, on_done=_done, on_error=_error)
+
+    def _launch_dashboard(self) -> None:
+        """Abre o Dashboard interno como janela filha."""
+        from pathlib import Path
+
+        from andaime.paths import get_root_directory
+        from andaime.qt.dashboard import DashboardService, open_dashboard
+
+        existing = getattr(self, "_dashboard_window", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        data_dir = get_root_directory() / "data"
+        service = DashboardService.from_directory(data_dir)
+        dark_mode = self.config.get("theme", "dark") == "dark"
+        self._dashboard_window = open_dashboard(self, service, dark_mode)
 
     def _on_theme_toggled(self, dark_mode: bool):
         theme = "dark" if dark_mode else "light"
@@ -447,9 +467,7 @@ class MainWindow(QMainWindow):
 
         items = []
         if processo.is_archived:
-            from bap.utils.arquivo_storage import resolve_arquivos_root
             from bap.utils.remessa_email import processo_pdf_path
-            from andaime.pdf import page_count
 
             root = resolve_arquivos_root(self.config.get_all())
             pdf_path = processo_pdf_path(root, processo)
@@ -638,7 +656,6 @@ class MainWindow(QMainWindow):
 
         import hashlib
 
-        from andaime.pdf import merge_pdfs
         from bap.utils.remessa_email import processo_pdf_path
 
         arqs = self.db.get_arquivos_by_processo(processo_id)

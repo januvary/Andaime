@@ -20,6 +20,7 @@ from andaime.qt import build_checkable_menu
 from bap.constants import DOC_TYPE_LABELS
 from bap.models import GridItem
 from bap.ui_qt.styles import colors
+from andaime.pdf import render_page
 
 
 @contextmanager
@@ -47,8 +48,6 @@ def _resolve_item_page(
     if not raw:
         yield None, None
         return
-
-    from andaime.pdf import render_page
 
     try:
         yield render_page(raw, page_no, scale), None

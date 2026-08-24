@@ -99,7 +99,7 @@ def main() -> None:
     # MANDADOS JUDICIAIS/05 - INSULINA.
     from emissor.utils.insulina_folder_migration import migrate_insulina_folders
 
-    _migration_root = andaime_instance.config.save_location
+    _migration_root = andaime_instance.config.get_all().save_location
     try:
         migrate_insulina_folders(_migration_root)
     except Exception:

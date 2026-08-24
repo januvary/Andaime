@@ -4,28 +4,16 @@
 
 from dataclasses import dataclass
 from typing import Dict, List, Any
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
+
+from andaime.pdf import PDFConfig as BasePDFConfig, CM
 from reportlab.lib import colors
 
 from emissor.utils.date_utils import get_receitas_aviso
 
 
 @dataclass
-class PDFConfig:
-    """Constantes centralizadas de layout, cores e fontes do PDF."""
-
-    # ========================================================================
-    # LAYOUT DA PÁGINA
-    # ========================================================================
-
-    pagesize = A4
-    margin: float = 0.7 * cm
-
-    # Dimensões calculadas (preenchidas em __post_init__)
-    width: float = 0
-    height: float = 0
-    total_width: float = 0  # width - 2*margin
+class PDFConfig(BasePDFConfig):
+    """Constantes centralizadas de layout, cores e fontes do PDF Emissor."""
 
     # ========================================================================
     # LARGURAS DE COLUNAS (proporções do total_width)
@@ -66,43 +54,16 @@ class PDFConfig:
     COLOR_HEADER_BG = colors.HexColor("#e8e8e8")
 
     # ========================================================================
-    # TAMANHOS DE FONTE
+    # TAMANHOS DE FONTE (extras)
     # ========================================================================
 
-    FONT_SIZE_SMALL: int = 9
-    FONT_SIZE_NORMAL: int = 11
-    FONT_SIZE_MEDIUM: int = 12
-    FONT_SIZE_LARGE: int = 13
     FONT_SIZE_EXTRA_LARGE: int = 13
 
     # ========================================================================
-    # ESPAÇAMENTO (PADDING)
+    # ESPAÇAMENTO (extras)
     # ========================================================================
 
-    PADDING_SMALL: int = 2
-    PADDING_MEDIUM: int = 3
-    PADDING_LARGE: int = 4
-    PADDING_XLARGE: int = 6
-    PADDING_XXLARGE: int = 10
     PADDING_LOGO: int = 26  # LEFTPADDING específico para logo
-
-    # ========================================================================
-    # CONFIGURAÇÕES DE SVG
-    # ========================================================================
-
-    LOGO_TARGET_SIZE: float = 1.8 * cm
-    LOGO_OFFSET_Y: float = -0.0 * cm
-
-    # ========================================================================
-    # OUTROS
-    # ========================================================================
-
-    SPACER_SMALL: int = 6
-
-    def __post_init__(self) -> None:
-        """Calcula dimensões derivadas após inicialização."""
-        self.width, self.height = self.pagesize
-        self.total_width = self.width - 2 * self.margin
 
 
 @dataclass

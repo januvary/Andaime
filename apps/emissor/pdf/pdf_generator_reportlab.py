@@ -8,11 +8,10 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from io import BytesIO
 import sys
 
-from svglib.svglib import svg2rlg
-
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+from andaime.pdf import load_svg_drawing
 from emissor.pdf.pdf_config import PDFConfig, PDFDataContext
-from emissor.pdf.pdf_styles import PDFStyleManager, _DrawingFlowable
+from emissor.pdf.pdf_styles import PDFStyleManager
 from emissor.utils.date_utils import DateCalculator
 from emissor.utils.net_io import atomic_write_path
 
@@ -136,7 +135,7 @@ class HeaderTableBuilder(TableBuilderBase):
 
         return table
 
-    def _get_logo_drawing(self) -> _DrawingFlowable | None:
+    def _get_logo_drawing(self):
         """Carrega o logo SVG e converte para ReportLab Drawing."""
         try:
             # Determinar caminho do SVG
@@ -148,48 +147,26 @@ class HeaderTableBuilder(TableBuilderBase):
             else:
                 svg_path = Path(__file__).parent / "brasao_prefeitura.svg"
 
-            if not svg_path.exists():
+            result = load_svg_drawing(
+                svg_path,
+                self.config.LOGO_TARGET_SIZE,
+                offset_y=self.config.LOGO_OFFSET_Y,
+            )
+
+            if result is None:
                 ErrorHandler.log(
-                    f"Logo SVG não encontrado: {svg_path}",
+                    f"Logo SVG não encontrado ou inválido: {svg_path}",
                     level=ErrorLevel.WARNING,
                     context=ErrorContext.PDF_GENERATION,
                 )
-                return None
-
-            # Converter SVG para ReportLab Drawing
-            drawing = svg2rlg(str(svg_path))
-
-            # Verificar se conversão foi bem-sucedida
-            if drawing is None:
+            else:
                 ErrorHandler.log(
-                    f"Falha ao converter SVG para Drawing: {svg_path}",
-                    level=ErrorLevel.ERROR,
+                    f"Logo SVG carregado: {svg_path}",
+                    level=ErrorLevel.INFO,
                     context=ErrorContext.PDF_GENERATION,
                 )
-                return None
 
-            original_width = drawing.width
-            original_height = drawing.height
-
-            # Calcular fator de escala
-            scale_factor = (
-                self.config.LOGO_TARGET_SIZE / original_width
-                if original_width > 0
-                else 0.033
-            )
-            drawing.scale(scale_factor, scale_factor)
-            drawing.width = original_width * scale_factor
-            drawing.height = original_height * scale_factor
-            drawing.hAlign = "LEFT"
-            drawing.vAlign = "BOTTOM"
-
-            ErrorHandler.log(
-                f"Logo SVG carregado: {svg_path} (escala: {scale_factor:.3f})",
-                level=ErrorLevel.INFO,
-                context=ErrorContext.PDF_GENERATION,
-            )
-
-            return _DrawingFlowable(drawing, offset_y=self.config.LOGO_OFFSET_Y)
+            return result
 
         except Exception as e:
             ErrorHandler.log(

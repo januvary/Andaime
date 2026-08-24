@@ -1,5 +1,4 @@
 from emissor.services.agenda_service import AgendaService
-from emissor.services.dashboard_service import DashboardService
 from emissor.services.exceptions import (
     DuplicatePatientError,
     EmissorError,
@@ -13,7 +12,6 @@ from emissor.services.scanner_service import ScannerError, ScannerService
 
 __all__ = [
     "AgendaService",
-    "DashboardService",
     "DuplicatePatientError",
     "EmissorError",
     "PDFGenerationError",

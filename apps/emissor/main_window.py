@@ -852,14 +852,26 @@ class QtApp(QMainWindow):
 
     def launch_dashboard(self) -> None:
         """Abre o Dashboard interno como janela filha."""
-        from emissor.ui_qt.dashboard_window import open_dashboard
+        from pathlib import Path
+
+        from andaime.paths import get_root_directory
+        from andaime.qt.dashboard import DashboardService, open_dashboard
+        from emissor.utils.masks import apply_mask_for_field
 
         existing = getattr(self, "_dashboard_window", None)
         if existing is not None and existing.isVisible():
             existing.raise_()
             existing.activateWindow()
             return
-        self._dashboard_window = open_dashboard(self, self.config_manager)
+
+        data_dir = get_root_directory() / "data"
+        service = DashboardService.from_directory(data_dir)
+        self._dashboard_window = open_dashboard(
+            self,
+            service,
+            self._current_dark_mode,
+            mask_fn=apply_mask_for_field,
+        )
 
     def restart_app(self) -> None:
         """Reinicia a aplicação."""

@@ -52,9 +52,6 @@ from rac.gui.styles import get_theme
 from andaime.qt import styled_menu
 
 
-from rac import __version__
-
-
 class _ClickableLabel(QLabel):
     """QLabel that emits ``clicked`` on left-click."""
 
@@ -142,10 +139,17 @@ class StartPage(BasePage):
         self._rac_label.setStyleSheet("border: none; background: transparent;")
         layout.addWidget(self._rac_label)
 
-        # Version label
-        self._version_label = QLabel(f"v{__version__}")
+        # RAC build hash from the VERSION manifest (hidden in dev).
+        rac_hash = ""
+        with suppress(ImportError):
+            from andaime.updater import get_local_hash
+
+            rac_hash = (get_local_hash("rac") or "")[:8]
+
+        self._version_label = QLabel(f"rac {rac_hash}")
         self._version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._version_label.setStyleSheet("border: none; background: transparent; font-size: 7pt;")
+        self._version_label.setVisible(bool(rac_hash))
         layout.addWidget(self._version_label)
         
         # Subtitles

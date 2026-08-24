@@ -6,6 +6,7 @@ from typing import Iterable
 
 from andaime.paths import find_parent_dir, get_root_directory
 from andaime.dates import parse_date
+from andaime.pdf import merge_pdfs
 
 
 def _find_ss54_dir() -> Path | None:
@@ -73,8 +74,6 @@ def processo_dir_path(
 
 def merge_conteudos_to_pdf(conteudos: "Iterable[bytes]", output_path: str) -> str:
     """Une PDFs (bytes) em um único PDF salvo em ``output_path``."""
-    from andaime.pdf import merge_pdfs
-
     merge_pdfs(conteudos, output_path)
     return output_path
 

@@ -7,6 +7,7 @@ from typing import Any, Callable, ClassVar
 from typing_extensions import Self
 
 from bap.constants import Status
+from andaime.pdf import extract_page, image_to_pdf, open_pdf
 
 
 def _identity(value: Any) -> Any:
@@ -92,8 +93,6 @@ class Arquivo(RowModel):
 
 def image_to_pdf_bytes(source: str | bytes) -> bytes:
     """Converte uma imagem (caminho ou bytes) em um PDF de página única."""
-    from andaime.pdf import image_to_pdf
-
     return image_to_pdf(source)
 
 
@@ -130,8 +129,6 @@ class GridItem:
 
     def open_document(self, loader: Callable[[GridItem], bytes | None] | None = None):
         """Abre o conteúdo como ``pypdf.PdfReader``."""
-        from andaime.pdf import open_pdf
-
         raw = self.raw_bytes(loader)
         return open_pdf(raw) if raw else None
 
@@ -139,8 +136,6 @@ class GridItem:
         self, loader: Callable[[GridItem], bytes | None] | None = None
     ) -> bytes | None:
         """Extrai a página do item como PDF de página única (bytes)."""
-        from andaime.pdf import extract_page
-
         if self.data is not None and self.path is None:
             return bytes(self.data)
 

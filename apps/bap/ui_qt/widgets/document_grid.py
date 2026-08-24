@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import io
+import zipfile
 from typing import Callable
 from pathlib import Path
 from contextlib import contextmanager
@@ -38,7 +39,8 @@ from PySide6.QtWidgets import (
 
 from bap.ui_qt.styles import colors, get_theme
 from bap.constants import DOC_TYPE_LABELS, DOC_TYPE_ORDER
-from bap.models import GridItem
+from bap.models import GridItem, image_to_pdf_bytes
+from andaime.pdf import page_count, split_pages
 from bap.ui_qt.widgets.viewer_popup import (
     ViewerPopup,
     _resolve_item_page,
@@ -419,8 +421,6 @@ def _iter_zip_files(path: str):
     (``__MACOSX/``, ``.DS_Store``, dotfiles). As entradas saem ordenadas por
     nome para dar uma ordem de páginas determinística.
     """
-    import zipfile
-
     with zipfile.ZipFile(path) as zf:
         for info in sorted(zf.infolist(), key=lambda i: i.filename):
             name = info.filename
@@ -443,9 +443,6 @@ def _archive_to_items(path: str) -> list[GridItem]:
     original da entrada é preservado em ``arquivo_original``. Entradas que não
     podem ser decodificadas são silenciosamente ignoradas.
     """
-    from bap.models import image_to_pdf_bytes
-    from andaime.pdf import split_pages
-
     items: list[GridItem] = []
     for name, raw in _iter_zip_files(path):
         ext = Path(name).suffix.lower()
@@ -761,8 +758,6 @@ class DocumentGrid(QWidget):
         QTimer.singleShot(0, lambda: self._build_paths(paths))
 
     def _build_paths(self, paths: list[str]) -> None:
-        from andaime.pdf import page_count
-
         new_items: list[GridItem] = []
         for path in paths:
             suffix = Path(path).suffix.lower()
@@ -834,7 +829,6 @@ class DocumentGrid(QWidget):
                     png_bytes = f.read()
             finally:
                 os.unlink(tmp_path)
-            from bap.models import image_to_pdf_bytes
             pdf_bytes = image_to_pdf_bytes(png_bytes)
             item = GridItem(data=pdf_bytes, page=0, arquivo_original="clipboard.png")
             self._add_new_items([item])

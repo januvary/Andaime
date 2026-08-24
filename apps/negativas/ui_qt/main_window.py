@@ -1,7 +1,6 @@
 """UI do Sistema de Negativas - PySide6 com preview dinâmico."""
 
 import sys
-import tempfile
 import webbrowser
 import copy
 from pathlib import Path
@@ -31,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from andaime.qt.widgets import SearchableComboBox
+from andaime.qt.status_line import StatusLine
 from andaime.qt.table import (
     ColumnSpec,
     TableViewModel,
@@ -73,7 +73,6 @@ class MainWindow(QMainWindow):
         self.selected_medicamento = None
         self._last_preview_data: NegativaData | None = None
         self._scroll_area: QScrollArea | None = None
-        self._last_temp_path: str | None = None
         self._styled_widgets: list = []  # Track widgets that need theme updates
 
         self._debounce_timer = QTimer(self)
@@ -180,6 +179,8 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self._create_divisoes())
         left_layout.addWidget(self._create_search_and_items())
         left_layout.addWidget(self._create_botoes())
+        self._status_line = StatusLine()
+        left_layout.addWidget(self._status_line)
         left_layout.addStretch()
 
         # ── Coluna direita ──
@@ -340,7 +341,7 @@ class MainWindow(QMainWindow):
         layout.addStretch()
 
         self.limpar_btn = make_button("Limpar Tudo", role="flat")
-        self.imprimir_btn = make_button("Imprimir / Salvar PDF", role="primary")
+        self.imprimir_btn = make_button("Salvar PDF", role="primary")
         self.copiar_btn = make_button("Copiar Texto", role="flat")
 
         layout.addWidget(self.imprimir_btn)
@@ -605,43 +606,48 @@ class MainWindow(QMainWindow):
         self.check_dgmi.setChecked(False)
         self._atualizar_tabela()
         self._atualizar_preview_imediato()
+        self._status_line.set_status("")
 
     def _imprimir_documento(self):
         if not self.itens_selecionados:
-            QMessageBox.warning(self, "Aviso", "Adicione pelo menos um item.")
+            self._status_line.set_status("Adicione pelo menos um item.", "status_warning")
             return
 
         if not self.check_daf.isChecked() and not self.check_dgmi.isChecked():
-            QMessageBox.warning(self, "Aviso", "Selecione pelo menos uma divisão.")
+            self._status_line.set_status("Selecione pelo menos uma divisão.", "status_warning")
             return
 
         if self.check_daf.isChecked() and not self.nome_daf_input.text().strip():
-            QMessageBox.warning(self, "Aviso", "Informe o nome do responsável da DAF.")
+            self._status_line.set_status("Informe o nome do responsável da DAF.", "status_warning")
             return
 
         if self.check_dgmi.isChecked() and not self.nome_dgmi_input.text().strip():
-            QMessageBox.warning(self, "Aviso", "Informe o nome do responsável da DGMI.")
+            self._status_line.set_status("Informe o nome do responsável da DGMI.", "status_warning")
             return
 
-        html_content = self.document_builder.build_html(self._coletar_dados())
+        from negativas.pdf.negativa_pdf import NegativaPDF
 
-        if self._last_temp_path and Path(self._last_temp_path).exists():
-            Path(self._last_temp_path).unlink(missing_ok=True)
+        data = self._coletar_dados()
+        filename = f"Negativa_{data.destinatario.replace(' ', '_')}_{data.data_hoje.replace(' de ', '_').replace(' ', '')}.pdf"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", suffix=".html", delete=False
-        ) as f:
-            f.write(html_content)
-            self._last_temp_path = f.name
+        from andaime.paths import get_root_directory
+        save_dir = get_root_directory() / "PARA ASSINAR"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        path = str(save_dir / filename)
 
-        webbrowser.open(f"file://{self._last_temp_path}")
+        self._status_line.set_status("Gerando PDF...", "status_warning")
+        pdf_gen = NegativaPDF(self.document_builder.db)
+        try:
+            pdf_gen.generate(data, output_path=path)
+            self._status_line.set_status(f"PDF salvo — {path}", "status_success", path=path)
+            webbrowser.open(f"file://{path}")
+        except Exception as e:
+            self._status_line.set_status(f"Erro ao gerar PDF: {e}", "status_error")
 
     def _copiar_texto(self):
         clipboard = QApplication.clipboard()
         clipboard.setText(self.resultado_text.toPlainText())
-        QMessageBox.information(
-            self, "Sucesso", "Texto copiado para a área de transferência!"
-        )
+        self._status_line.set_status("Texto copiado para a área de transferência!", "status_success")
 
     def _on_theme_toggled(self, dark_mode: bool):
         """Handle theme toggle from the header button."""
@@ -785,6 +791,4 @@ class MainWindow(QMainWindow):
         self._save_nomes_config()
         self.itens_selecionados.clear()
         self._debounce_timer.stop()
-        if self._last_temp_path and Path(self._last_temp_path).exists():
-            Path(self._last_temp_path).unlink(missing_ok=True)
         event.accept()
