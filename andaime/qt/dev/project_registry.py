@@ -8,6 +8,7 @@ Each project records its path plus detected capabilities. Detection is run at
 add-time and re-run on refresh:
   - ``git``        -> has a ``.git`` (Commit button, diff-stat, source view)
   - ``launchable`` -> has a ``main.py`` (Launch button)
+  - ``node_dev``   -> has a ``package.json`` with a ``dev`` script (Launch button)
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ _SKIP_DIRS = {
 class Capabilities:
     git: bool = False
     launchable: bool = False
+    node_dev: bool = False
 
     @property
     def label(self) -> str:
@@ -41,6 +43,8 @@ class Capabilities:
             tags.append("git")
         if self.launchable:
             tags.append("launch")
+        if self.node_dev:
+            tags.append("npm")
         return ", ".join(tags) if tags else "static"
 
 
@@ -72,9 +76,19 @@ class Project:
 
 def detect_capabilities(path: Path) -> Capabilities:
     """Detect what functions *path* supports."""
+    node_dev = False
+    pkg_json = path / "package.json"
+    if pkg_json.is_file():
+        try:
+            import json as _json
+            data = _json.loads(pkg_json.read_text(encoding="utf-8"))
+            node_dev = isinstance(data.get("scripts", {}).get("dev"), str)
+        except (OSError, ValueError, AttributeError):
+            pass
     return Capabilities(
         git=(path / ".git").exists(),
         launchable=(path / "main.py").is_file(),
+        node_dev=node_dev,
     )
 
 
@@ -123,6 +137,7 @@ def load_registry() -> list[Project]:
                     capabilities=Capabilities(
                         git=caps.get("git", False),
                         launchable=caps.get("launchable", False),
+                        node_dev=caps.get("node_dev", False),
                     ),
                     sessions=sessions,
                 )
@@ -141,6 +156,7 @@ def save_registry(projects: list[Project]) -> None:
             "capabilities": {
                 "git": p.capabilities.git,
                 "launchable": p.capabilities.launchable,
+                "node_dev": p.capabilities.node_dev,
             },
             "sessions": [
                 {

@@ -14,7 +14,9 @@ Usage::
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -385,6 +387,7 @@ class ConsoleDialog(QDialog):
         layout.addWidget(btn_close)
 
     def append(self, text: str) -> None:
+        text = re.sub(r"\x1b\[[0-9;]*m", "", text)
         self.text_edit.moveCursor(self.text_edit.textCursor().MoveOperation.End)
         self.text_edit.insertPlainText(text)
         self.text_edit.moveCursor(self.text_edit.textCursor().MoveOperation.End)
@@ -415,6 +418,8 @@ class ProjectRow(QWidget):
         self.andaime_root = andaime_root
 
         self.process: QProcess | None = None
+        self._subprocess: subprocess.Popen | None = None
+        self._use_subprocess = False
         self.console: ConsoleDialog | None = None
         self._watched_files: list[str] = []
         self._dir_snapshots: dict[str, dict[str, tuple[int, int]]] = {}
@@ -422,6 +427,8 @@ class ProjectRow(QWidget):
         self._restart_timer.setSingleShot(True)
         self._restart_timer.setInterval(500)
         self._restart_timer.timeout.connect(self._on_restart_triggered)
+
+        self._subprocess_timer: QTimer | None = None
 
         self.watcher = QFileSystemWatcher(self)
         self.watcher.fileChanged.connect(self._on_file_changed)
@@ -495,7 +502,7 @@ class ProjectRow(QWidget):
 
         header.addStretch()
 
-        if self.project.capabilities.launchable:
+        if self.project.capabilities.launchable or self.project.capabilities.node_dev:
             self.btn_toggle = make_button("Launch", parent=self)
             self.btn_toggle.setFixedWidth(90)
             self.btn_toggle.clicked.connect(self.toggle)
@@ -846,12 +853,26 @@ class ProjectRow(QWidget):
     # ---- process management ----
 
     def toggle(self) -> None:
-        if self.process is not None and self.process.state() != QProcess.ProcessState.NotRunning:
+        if self._is_running():
             self.stop()
         else:
             self.start()
 
+    def _is_running(self) -> bool:
+        if self._use_subprocess and self._subprocess is not None:
+            return self._subprocess.poll() is None
+        if not self._use_subprocess and self.process is not None:
+            return self.process.state() != QProcess.ProcessState.NotRunning
+        return False
+
     def start(self) -> None:
+        if self.project.capabilities.node_dev and not self.project.capabilities.launchable:
+            self._start_npm()
+        else:
+            self._start_python()
+
+    def _start_python(self) -> None:
+        self._use_subprocess = False
         if self.process is not None:
             self.process.kill()
             self.process.waitForFinished(1000)
@@ -879,12 +900,95 @@ class ProjectRow(QWidget):
         self._update_status(True)
         self._watch_project()
 
+    def _start_npm(self) -> None:
+        self._stop_subprocess()
+        self._use_subprocess = True
+
+        import os as _os
+        env = _os.environ.copy()
+        env["ELECTRON_DISABLE_GPU"] = "1"
+
+        cmd = f"cd {shlex.quote(str(self.path))} && npm run dev"
+        self._subprocess = subprocess.Popen(
+            ["sh", "-c", cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd=str(self.path),
+            env=env,
+            start_new_session=True,
+            bufsize=1,
+        )
+
+        self._subprocess_timer = QTimer(self)
+        self._subprocess_timer.setInterval(200)
+        self._subprocess_timer.timeout.connect(self._poll_subprocess)
+        self._subprocess_timer.start()
+
+        self._update_status(True)
+        self._watch_project()
+
+    def _poll_subprocess(self) -> None:
+        if self._subprocess is None or self._subprocess.stdout is None:
+            return
+        import select
+        while True:
+            ready, _, _ = select.select([self._subprocess.stdout], [], [], 0)
+            if not ready:
+                break
+            line = self._subprocess.stdout.readline()
+            if not line:
+                break
+            self._append_to_console(line.decode("utf-8", errors="replace"))
+
+        if self._subprocess.poll() is not None:
+            if self._subprocess_timer is not None:
+                self._subprocess_timer.stop()
+            rc = self._subprocess.returncode
+            self._append_to_console(f"\n[launcher] {self.name} exited with code {rc}\n")
+            self._subprocess = None
+            self._update_status(False)
+            self._unwatch_project()
+
     def stop(self) -> None:
+        if self._use_subprocess:
+            self._stop_subprocess()
+        else:
+            self._stop_python()
+        self._update_status(False)
+        self._unwatch_project()
+
+    def _stop_python(self) -> None:
         if self.process is not None:
             self.process.kill()
             self.process.waitForFinished(2000)
-        self._update_status(False)
-        self._unwatch_project()
+
+    def _stop_subprocess(self) -> None:
+        if self._subprocess is None or self._subprocess.poll() is not None:
+            self._subprocess = None
+            return
+        import os as _os
+        import signal
+        pid = self._subprocess.pid
+        try:
+            pgid = _os.getpgid(pid)
+            _os.killpg(pgid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            self._subprocess.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            try:
+                pgid = _os.getpgid(pid)
+                _os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+            try:
+                self._subprocess.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+        if self._subprocess_timer is not None:
+            self._subprocess_timer.stop()
+        self._subprocess = None
 
     # ---- UI updates ----
 
@@ -1020,7 +1124,7 @@ class ProjectRow(QWidget):
         return snapshot
 
     def _on_restart_triggered(self) -> None:
-        if self.process is not None and self.process.state() == QProcess.ProcessState.Running:
+        if self._is_running():
             self._append_to_console(f"\n[launcher] File change detected — restarting {self.name}\n\n")
             self.stop()
             QTimer.singleShot(300, self.start)
