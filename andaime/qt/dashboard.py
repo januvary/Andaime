@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QFormLayout,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -48,7 +49,7 @@ from andaime.qt.table import table_batch_populate
 def _format_blob_size(length: int | None) -> str:
     """Format a BLOB byte length into a human-readable size string."""
     if length is None or length == 0:
-        return "[empty]"
+        return "[vazio]"
     if length < 1024:
         return f"{length} B"
     if length < 1024 * 1024:
@@ -118,7 +119,7 @@ class DashboardService:
     def _get_connection(self, db_name: str) -> sqlite3.Connection:
         db_path = self._db_paths.get(db_name)
         if not db_path:
-            raise ValueError(f"Database not found: {db_name}")
+            raise ValueError(f"Banco de dados não encontrado: {db_name}")
         conn = sqlite3.connect(str(db_path), timeout=30)
         conn.execute("PRAGMA busy_timeout=30000")
         return conn
@@ -294,12 +295,79 @@ class DashboardService:
     ) -> str:
         msg = str(error)
         if "UNIQUE constraint failed" in msg:
-            return f"Value '{value}' already exists in '{table}'"
+            return f"Valor '{value}' já existe em '{table}'"
         if "NOT NULL constraint failed" in msg:
-            return f"Column '{column}' cannot be empty"
+            return f"Coluna '{column}' não pode ser vazia"
         if "FOREIGN KEY constraint failed" in msg:
-            return f"Invalid reference: '{value}'"
-        return f"Database error: {msg}"
+            return f"Referência inválida: '{value}'"
+        return f"Erro de banco de dados: {msg}"
+
+    # ---------- export ----------
+
+    def export_to_excel(
+        self,
+        db_name: str,
+        table_name: str,
+        save_path: str,
+    ) -> str:
+        """Export the table to an Excel (.xlsx) file.
+
+        Returns the full path of the saved file.
+        """
+        self._validate_table(db_name, table_name)
+
+        try:
+            import openpyxl
+        except ImportError:
+            raise RuntimeError("openpyxl não está instalado") from None
+
+        conn = self._get_connection(db_name)
+        try:
+            cursor = conn.cursor()
+
+            # Get column names
+            columns_info = self._get_table_info(db_name, table_name)
+            column_names = [col[1] for col in columns_info]
+            blob_columns = {col[1] for col in columns_info if col[2].upper() == "BLOB"}
+
+            # Build SELECT with LENGTH() for blobs
+            select_parts = []
+            for c in column_names:
+                if c in blob_columns:
+                    select_parts.append(f"LENGTH({c}) AS {c}")
+                else:
+                    select_parts.append(c)
+
+            cursor.execute(f"SELECT {', '.join(select_parts)} FROM {table_name}")
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = table_name
+
+        # Header row
+        for col_idx, col_name in enumerate(column_names, 1):
+            cell = ws.cell(row=1, column=col_idx, value=col_name)
+            cell.font = openpyxl.styles.Font(bold=True)
+
+        # Data rows
+        for row_idx, row in enumerate(rows, 2):
+            for col_idx, value in enumerate(row, 1):
+                ws.cell(row=row_idx, column=col_idx, value=value)
+
+        # Auto-size columns
+        for col_idx, col_name in enumerate(column_names, 1):
+            max_length = len(col_name)
+            for row in ws.iter_rows(min_row=2, min_col=col_idx, max_col=col_idx):
+                for cell in row:
+                    if cell.value is not None:
+                        max_length = max(max_length, len(str(cell.value)))
+            ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = min(max_length + 2, 50)
+
+        wb.save(save_path)
+        return save_path
 
 
 # ======================================================================
@@ -318,7 +386,7 @@ class _AddRecordDialog(QDialog):
         palette: dict[str, str],
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Add to {table_name}")
+        self.setWindowTitle(f"Adicionar a {table_name}")
         self.setMinimumWidth(420)
         self._inputs: dict[str, QLineEdit] = {}
 
@@ -338,10 +406,10 @@ class _AddRecordDialog(QDialog):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        cancel_btn = make_button("Cancel", "flat-fill", self)
+        cancel_btn = make_button("Cancelar", "flat-fill", self)
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
-        ok_btn = make_button("Add", "primary", self)
+        ok_btn = make_button("Adicionar", "primary", self)
         ok_btn.clicked.connect(self.accept)
         ok_btn.setDefault(True)
         btn_row.addWidget(ok_btn)
@@ -371,7 +439,7 @@ class DashboardWindow(QMainWindow):
         super().__init__(parent)
         self._service = service
         self._mask_fn = mask_fn
-        self.setWindowTitle("Dashboard")
+        self.setWindowTitle("Painel")
         self.setMinimumSize(1000, 700)
         self.setWindowFlag(Qt.WindowType.Window, True)
 
@@ -416,7 +484,7 @@ class DashboardWindow(QMainWindow):
         layout.setContentsMargins(8, 12, 8, 12)
         layout.setSpacing(8)
 
-        db_label = QLabel("Database")
+        db_label = QLabel("Banco de Dados")
         db_label.setProperty("class", "panel-title")
         layout.addWidget(db_label)
 
@@ -425,7 +493,7 @@ class DashboardWindow(QMainWindow):
         self._db_buttons_container.setSpacing(4)
         layout.addLayout(self._db_buttons_container)
 
-        tables_label = QLabel("Tables")
+        tables_label = QLabel("Tabelas")
         tables_label.setProperty("class", "panel-title")
         layout.addWidget(tables_label)
 
@@ -453,26 +521,31 @@ class DashboardWindow(QMainWindow):
         search_row = QHBoxLayout()
         search_row.setSpacing(8)
 
-        search_row.addWidget(QLabel("Search:"))
+        search_row.addWidget(QLabel("Pesquisa:"))
 
         self._search_entry = QLineEdit()
-        self._search_entry.setPlaceholderText("Type to filter...")
+        self._search_entry.setPlaceholderText("Digite para filtrar...")
         self._search_entry.textChanged.connect(self._on_search)
         search_row.addWidget(self._search_entry, stretch=1)
 
-        self._add_button = make_button("Add", "flat-fill", main)
+        self._add_button = make_button("Adicionar", "flat-fill", main)
         self._add_button.setEnabled(False)
         self._add_button.clicked.connect(self._add_record)
         search_row.addWidget(self._add_button)
 
-        self._delete_button = make_button("Delete", "flat-fill", main)
+        self._delete_button = make_button("Excluir", "flat-fill", main)
         self._delete_button.setEnabled(False)
         self._delete_button.clicked.connect(self._delete_record)
         search_row.addWidget(self._delete_button)
 
-        self._save_button = make_button("Save (0)", "primary", main)
+        self._save_button = make_button("Salvar (0)", "primary", main)
         self._save_button.clicked.connect(self._save_changes)
         search_row.addWidget(self._save_button)
+
+        self._export_button = make_button("Exportar", "flat-fill", main)
+        self._export_button.setEnabled(False)
+        self._export_button.clicked.connect(self._export_table)
+        search_row.addWidget(self._export_button)
 
         layout.addLayout(search_row)
 
@@ -523,13 +596,13 @@ class DashboardWindow(QMainWindow):
 
     def _switch_database(self, db_name: str) -> None:
         if db_name not in self._db_paths:
-            QMessageBox.critical(self, "Error", f"Database '{db_name}' not available.")
+            QMessageBox.critical(self, "Erro", f"Banco de dados '{db_name}' não disponível.")
             return
         if self._unsaved_changes:
             reply = QMessageBox.question(
                 self,
-                "Unsaved changes",
-                "There are unsaved changes. Switch anyway?",
+                "Alterações não salvas",
+                "Há alterações não salvas. Alternar mesmo assim?",
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
@@ -544,6 +617,7 @@ class DashboardWindow(QMainWindow):
         self._table.setColumnCount(0)
         self._add_button.setEnabled(False)
         self._delete_button.setEnabled(False)
+        self._export_button.setEnabled(False)
         self._populate_table_list()
 
     def _rebuild_table_buttons(self) -> None:
@@ -567,7 +641,7 @@ class DashboardWindow(QMainWindow):
             return
 
         for table_name, count in self._service.get_tables(self._current_db):
-            btn = make_button(f"{table_name}\n({count} rows)", "flat-fill")
+            btn = make_button(f"{table_name}\n({count} linhas)", "flat-fill")
             btn.setMinimumHeight(44)
             btn.clicked.connect(
                 lambda checked=False, t=table_name: self._select_table(t)
@@ -583,8 +657,8 @@ class DashboardWindow(QMainWindow):
         if self._unsaved_changes:
             reply = QMessageBox.question(
                 self,
-                "Unsaved changes",
-                "There are unsaved changes. Switch anyway?",
+                "Alterações não salvas",
+                "Há alterações não salvas. Alternar mesmo assim?",
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
@@ -594,6 +668,7 @@ class DashboardWindow(QMainWindow):
         self._search_entry.clear()
         self._add_button.setEnabled(True)
         self._delete_button.setEnabled(True)
+        self._export_button.setEnabled(True)
         self._unsaved_changes.clear()
         self._update_save_button()
         self._populate_table(table_name)
@@ -608,7 +683,7 @@ class DashboardWindow(QMainWindow):
                 self._current_db, table_name, filter_text
             )
         except (ValueError, sqlite3.Error) as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, "Erro", str(e))
             self._table.clear()
             self._table.setRowCount(0)
             self._table.setColumnCount(0)
@@ -726,7 +801,7 @@ class DashboardWindow(QMainWindow):
 
     def _update_save_button(self) -> None:
         total = sum(len(c) for c in self._unsaved_changes.values())
-        self._save_button.setText(f"Save ({total})")
+        self._save_button.setText(f"Salvar ({total})")
 
     def _save_changes(self) -> None:
         if not self._unsaved_changes or not self._current_table:
@@ -771,7 +846,7 @@ class DashboardWindow(QMainWindow):
                     msg = self._service.parse_integrity_error(
                         e, self._current_table, col_name, str(new_value)
                     )
-                    QMessageBox.critical(self, "Save error", msg)
+                    QMessageBox.critical(self, "Erro ao salvar", msg)
                     del self._unsaved_changes[row_key][col_name]
                     if not self._unsaved_changes[row_key]:
                         del self._unsaved_changes[row_key]
@@ -779,8 +854,36 @@ class DashboardWindow(QMainWindow):
         self._update_save_button()
         if saved > 0:
             QMessageBox.information(
-                self, "Saved", f"{saved} change(s) saved."
+                self, "Salvo", f"{saved} alteração(ões) salva(s)."
             )
+
+    # ------------------------------------------------------------- export
+
+    def _export_table(self) -> None:
+        if not self._current_table:
+            return
+
+        from datetime import datetime
+
+        default_name = f"{self._current_table}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar para Excel",
+            str(Path.home() / "Downloads" / default_name),
+            "Planilha Excel (*.xlsx)",
+        )
+        if not save_path:
+            return
+
+        try:
+            self._service.export_to_excel(
+                self._current_db, self._current_table, save_path
+            )
+            QMessageBox.information(
+                self, "Exportado", f"Planilha salva em:\n{save_path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Erro ao exportar", str(e))
 
     # -------------------------------------------------------------- CRUD
 
@@ -802,8 +905,8 @@ class DashboardWindow(QMainWindow):
         if not editable:
             QMessageBox.warning(
                 self,
-                "No editable columns",
-                f"Table '{self._current_table}' has no editable columns.",
+                "Sem colunas editáveis",
+                f"Tabela '{self._current_table}' não possui colunas editáveis.",
             )
             return
 
@@ -817,12 +920,12 @@ class DashboardWindow(QMainWindow):
             self._service.insert_record(self._current_db, self._current_table, values)
             self._populate_table(self._current_table)
             self._populate_table_list()
-            QMessageBox.information(self, "Added", "Record added successfully.")
+            QMessageBox.information(self, "Adicionado", "Registro adicionado com sucesso.")
         except sqlite3.IntegrityError as e:
             msg = self._service.parse_integrity_error(e, self._current_table, "", "")
-            QMessageBox.critical(self, "Add error", msg)
+            QMessageBox.critical(self, "Erro ao adicionar", msg)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Unexpected error: {e}")
+            QMessageBox.critical(self, "Erro", f"Erro inesperado: {e}")
 
     def _delete_record(self) -> None:
         if not self._current_table:
@@ -831,7 +934,7 @@ class DashboardWindow(QMainWindow):
         selected = self._table.selectedItems()
         if not selected:
             QMessageBox.warning(
-                self, "No selection", "Select a record to delete."
+                self, "Nenhuma seleção", "Selecione um registro para excluir."
             )
             return
 
@@ -849,8 +952,8 @@ class DashboardWindow(QMainWindow):
 
         reply = QMessageBox.question(
             self,
-            "Confirm deletion",
-            f"Delete record:\n{self._current_table}[{pk_str}]?",
+            "Confirmar exclusão",
+            f"Excluir registro:\n{self._current_table}[{pk_str}]?",
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -863,12 +966,12 @@ class DashboardWindow(QMainWindow):
             self._update_save_button()
             self._populate_table(self._current_table)
             self._populate_table_list()
-            QMessageBox.information(self, "Deleted", "Record deleted successfully.")
+            QMessageBox.information(self, "Excluído", "Registro excluído com sucesso.")
         except sqlite3.IntegrityError as e:
             msg = self._service.parse_integrity_error(e, self._current_table, "", "")
-            QMessageBox.critical(self, "Delete error", msg)
+            QMessageBox.critical(self, "Erro ao excluir", msg)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Unexpected error: {e}")
+            QMessageBox.critical(self, "Erro", f"Erro inesperado: {e}")
 
 
 # ======================================================================
