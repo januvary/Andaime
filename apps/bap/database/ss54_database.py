@@ -666,6 +666,10 @@ class SS54Database(BaseDatabase):
         return True
 
     @db_op("write")
+    def delete_status_log(self, log_id: int) -> bool:
+        return self._execute_write("DELETE FROM status_logs WHERE id = ?", (log_id,))
+
+    @db_op("write")
     def add_status_observation(self, processo_id: int, observacoes: str) -> bool:
         current = self.get_processo_by_id(processo_id)
         if not current:

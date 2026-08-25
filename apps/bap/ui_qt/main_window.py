@@ -248,7 +248,6 @@ class MainWindow(QMainWindow):
 
     def _launch_dashboard(self) -> None:
         """Abre o Dashboard interno como janela filha."""
-        from pathlib import Path
 
         from andaime.paths import get_root_directory
         from andaime.qt.dashboard import DashboardService, open_dashboard
@@ -465,6 +464,10 @@ class MainWindow(QMainWindow):
             self.set_status("Nenhum processo para este contexto.")
             return
 
+        self._header.set_descricao(processo.descricao or "")
+        self._status_selector.set_status(processo.status, emit=False)
+        self._status_selector._current_obs = processo.last_obs or ""
+
         items = []
         if processo.is_archived:
             from bap.utils.remessa_email import processo_pdf_path
@@ -496,9 +499,6 @@ class MainWindow(QMainWindow):
             items,
             status_label=f"Carregando processo {processo.protocolo} - {arquivos}…",
         )
-        self._header.set_descricao(processo.descricao or "")
-        self._status_selector.set_status(processo.status, emit=False)
-        self._status_selector._current_obs = processo.last_obs or ""
         self._grid_showing_process = True
         self.set_status(
             f"Processo {processo.protocolo} carregado. - {arquivos}"
@@ -641,12 +641,16 @@ class MainWindow(QMainWindow):
         else:
             self._salvar_work_active(processo_id, items)
 
+        fresh_processo = self.db.get_processo_by_id(processo_id)
         return {
             "processo_id": processo_id,
             "saved": len(items),
             "is_update": is_update,
             "paciente_info": paciente_info,
             "items": items,
+            "protocolo": fresh_processo.protocolo if fresh_processo is not None else "",
+            "pacientes": self.db.get_all_pacientes(),
+            "descricoes": self.db.get_distinct_descricoes(),
         }
 
     def _salvar_work_archived(
@@ -769,18 +773,14 @@ class MainWindow(QMainWindow):
             live.__dict__.update(saved.__dict__)
 
         self._grid_showing_process = True
-        # Mantém a lista de pacientes/descrições do cabeçalho em dia (um
-        # paciente novo/atualizado precisa aparecer na busca).
-        self._header.set_patients(self.db.get_all_pacientes())
-        self._header.set_descricoes(self.db.get_distinct_descricoes())
+        self._header.set_patients(res["pacientes"])
+        self._header.set_descricoes(res["descricoes"])
 
-        fresh = self.db.get_processo_by_id(res["processo_id"])
-        protocolo = fresh.protocolo if fresh is not None else ""
         # O save alterou o banco (status, descrição, paciente, arquivos ou um
         # processo novo): atualiza a tabela de remessas para refletir o estado.
         self._remessa_page.refresh()
         self.set_status(
-            f"Processo {protocolo} "
+            f"Processo {res['protocolo']} "
             f"{'atualizado' if res['is_update'] else 'salvo'}{res['paciente_info']} — "
             f"{res['saved']} {'arquivo' if res['saved'] == 1 else 'arquivos'}",
             "status_success",
@@ -793,70 +793,69 @@ class MainWindow(QMainWindow):
             self._stack.setCurrentWidget(self._doc_page)
 
     def open_processo(self, processo_id: int) -> None:
-        processo = self.db.get_processo_by_id(processo_id)
-        if processo is None:
-            return
+        def _work():
+            processo = self.db.get_processo_by_id(processo_id)
+            if processo is None:
+                return None
 
-        # Processos "incompleto" ou "em_analise" avançam para a remessa mais
-        # recente ao serem carregados na página de documentos — exceto processos
-        # arquivados, que permanecem no lote histórico.
-        if not processo.is_archived and processo.status in (Status.INCOMPLETO, Status.EM_ANALISE):
-            latest = self._resolve_active_lote()
-            if latest is not None and latest.id != processo.lote_id:
-                reassigned = self.db.reassign_processo_lote(
-                    processo.id, latest.id
-                )
-                if reassigned is not None:
-                    processo = reassigned
+            # Move incompletos/em_analise para a remessa mais recente.
+            if not processo.is_archived and processo.status in (
+                Status.INCOMPLETO, Status.EM_ANALISE
+            ):
+                lotes = self.db.get_all_lotes()
+                latest = lotes[0] if lotes else None
+                if latest is not None and latest.id != processo.lote_id:
+                    reassigned = self.db.reassign_processo_lote(
+                        processo.id, latest.id
+                    )
+                    if reassigned is not None:
+                        processo = reassigned
 
-        lote = self.db.get_lote_by_id(processo.lote_id)
-
-        # Carrega o contexto de forma atômica: os setters abaixo emitem sinais
-        # (paciente/ciclo) que dispariam syncs parciais; suprimimos até o fim.
-        self._loading = True
-        try:
-            if lote is not None:
-                self._sync_pages_remessa(lote, emit=False)
-                self._on_remessa_changed(lote)
-
+            lote = self.db.get_lote_by_id(processo.lote_id)
             paciente = (
                 self.db.get_paciente_by_id(processo.paciente_id)
-                if processo.paciente_id
-                else None
+                if processo.paciente_id else None
             )
-            if paciente is not None:
-                self._header.set_paciente_by_id(paciente)
-                self._selected_patient_id = paciente.id
-            self._header.set_tipo(processo.tipo)
-            self._header.set_solicitacao(processo.solicitacao)
-
-            if paciente is not None and lote is not None:
-                contextos = self.db.get_processos_by_context(
+            contextos = (
+                self.db.get_processos_by_context(
                     paciente.id, lote.id, processo.tipo, processo.solicitacao
                 )
-                idx = next(
-                    (i for i, p in enumerate(contextos) if p.id == processo.id), 0
-                )
+                if paciente is not None and lote is not None else []
+            )
+            idx = next(
+                (i for i, p in enumerate(contextos) if p.id == processo.id), 0
+            )
+            return processo, lote, paciente, idx
+
+        def _done(result):
+            if result is None:
+                return
+            processo, lote, paciente, idx = result
+
+            # Suprime syncs parciais disparados pelos setters de cabeçalho.
+            self._loading = True
+            try:
+                if lote is not None:
+                    self._sync_pages_remessa(lote, emit=False)
+                    self._on_remessa_changed(lote)
+
+                if paciente is not None:
+                    self._header.set_paciente_by_id(paciente)
+                    self._selected_patient_id = paciente.id
+                self._header.set_tipo(processo.tipo)
+                self._header.set_solicitacao(processo.solicitacao)
                 self._header.set_ciclo(idx + 1)
-            else:
-                self._header.set_ciclo(1)
+                self._header.set_descricao(processo.descricao)
+            finally:
+                self._loading = False
 
-            self._header.set_descricao(processo.descricao)
-        finally:
-            self._loading = False
+            self._grid.clear()
+            self.navigate_to("document")
+            QApplication.processEvents()  # repaint grade vazia antes do sync
+            self._sync_grid(processo)
 
-        # Limpa a grade e navega ANTES de montar a nova: a página de documentos
-        # aparece vazia imediatamente (sem mostrar as tiles do processo
-        # anterior) e a construção incremental das novas tiles (uma a uma, com
-        # a UI livre entre passos) é vista pelo usuário em vez de travar a
-        # página de remessas até terminar.
-        self._grid.clear()
-        self.navigate_to("document")
-        # Força o repaint da grade vazia antes de começar a montagem síncrona
-        # das novas tiles; sem isso o Qt só repinta ao final e a grade antiga
-        # "pisca" até a nova ficar pronta.
-        QApplication.processEvents()
-        self._sync_grid(processo)
+        self.set_status("Carregando processo…", "status_warning")
+        self._run_async(_work, on_done=_done)
 
     def shutdown_backend(self):
         active = self._remessa_label.active()

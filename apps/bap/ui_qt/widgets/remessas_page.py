@@ -737,20 +737,28 @@ class RemessasPage(QWidget):
         processo = self._db.get_processo_by_id(processo_id)
         if processo is None:
             return
-        pdf_path, has_docs = ensure_processo_pdf(
-            self._db, resolve_arquivos_root(self._config.get_all()), processo
-        )
-        if not has_docs or pdf_path is None:
-            self.set_status("Processo sem documentos para gerar PDF.")
-            return
-        from andaime.qt import relative_path
+        root = resolve_arquivos_root(self._config.get_all())
 
-        if self._config is None:
-            return
-        status_path = relative_path(resolve_arquivos_root(self._config.get_all()), pdf_path)
-        self.set_status(
-            f"PDF gerado: {status_path}", "status_success", path=pdf_path
-        )
+        def _work():
+            return ensure_processo_pdf(self._db, root, processo)
+
+        def _on_done(result):
+            pdf_path, has_docs = result
+            if not has_docs or pdf_path is None:
+                self.set_status("Processo sem documentos para gerar PDF.")
+                return
+            from andaime.qt import relative_path
+
+            status_path = relative_path(root, pdf_path)
+            self.set_status(
+                f"PDF gerado: {status_path}", "status_success", path=pdf_path
+            )
+
+        if self._runner is not None:
+            self.set_status("Gerando PDF…", "status_warning")
+            self._runner.run(_work, on_done=_on_done)
+        else:
+            _on_done(_work())
 
     def _show_status_log(self, processo_id: int) -> None:
         if self._db is None:
@@ -838,9 +846,12 @@ class RemessasPage(QWidget):
             return
         menu = styled_menu(list_widget)
         date_action = menu.addAction("Editar data")
+        delete_action = menu.addAction("Excluir registro")
         chosen = menu.exec(list_widget.viewport().mapToGlobal(pos))
         if chosen == date_action:
             self._edit_log_date(item, processo_id, dlg)
+        elif chosen == delete_action:
+            self._delete_log(item, processo_id, dlg)
 
     def _edit_log_date(
         self, item: QListWidgetItem, processo_id: int, dlg: QDialog
@@ -880,6 +891,30 @@ class RemessasPage(QWidget):
             confirm_label="Salvar",
             on_confirm=on_confirm,
         )
+
+    def _delete_log(
+        self, item: QListWidgetItem, processo_id: int, dlg: QDialog
+    ) -> None:
+        log_id = item.data(Qt.ItemDataRole.UserRole)
+        if log_id is None or self._db is None:
+            return
+        logs = self._db.get_status_logs(processo_id)
+        log = next((lg for lg in logs if lg["id"] == log_id), None)
+        if log is None:
+            return
+        old = STATUS_LABELS.get(log["old_status"], log["old_status"] or "—")
+        new = STATUS_LABELS.get(log["new_status"], log["new_status"] or "—")
+        if not confirm_dialog(
+            dlg,
+            "Excluir registro de status",
+            f"Excluir o registro {old} → {new}?",
+            confirm_label="Excluir",
+            danger=True,
+        ):
+            return
+        self._db.delete_status_log(log_id)
+        self._populate_status_log(dlg.findChild(QListWidget), processo_id)
+        self.refresh()
 
     def _change_status(
         self, processo_id: int, key: str, observacoes: str = ""

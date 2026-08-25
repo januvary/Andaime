@@ -67,6 +67,12 @@ class MainWindow(QMainWindow):
         self.config = app_instance.config
         self.document_builder = DocumentBuilder(self.db)
 
+        from andaime.db_worker import DatabaseWorker
+        from andaime.qt.db_runner import DbAsyncRunner
+
+        self._db_worker = DatabaseWorker(self.db)
+        self._db_runner = DbAsyncRunner(self._db_worker)
+
         self.itens_selecionados: List[ItemSelecionado] = []
         self._item_names: set[str] = set()
         self.next_item_id = 0
@@ -628,7 +634,9 @@ class MainWindow(QMainWindow):
         from negativas.pdf.negativa_pdf import NegativaPDF
 
         data = self._coletar_dados()
-        filename = f"Negativa_{data.destinatario.replace(' ', '_')}_{data.data_hoje.replace(' de ', '_').replace(' ', '')}.pdf"
+        safe_dest = data.destinatario.replace(" ", "_")
+        safe_date = data.data_hoje.replace("/", "-")
+        filename = f"Negativa_{safe_dest}_{safe_date}.pdf"
 
         from andaime.paths import get_root_directory
         save_dir = get_root_directory() / "PARA ASSINAR"
@@ -636,13 +644,20 @@ class MainWindow(QMainWindow):
         path = str(save_dir / filename)
 
         self._status_line.set_status("Gerando PDF...", "status_warning")
-        pdf_gen = NegativaPDF(self.document_builder.db)
-        try:
+
+        def _work():
+            pdf_gen = NegativaPDF(self.db)
             pdf_gen.generate(data, output_path=path)
-            self._status_line.set_status(f"PDF salvo — {path}", "status_success", path=path)
-            webbrowser.open(f"file://{path}")
-        except Exception as e:
-            self._status_line.set_status(f"Erro ao gerar PDF: {e}", "status_error")
+            return path
+
+        self._db_runner.run(
+            _work,
+            on_done=lambda p: (
+                self._status_line.set_status(f"PDF salvo — {p}", "status_success", path=p),
+                webbrowser.open(f"file://{p}"),
+            ),
+            on_error=lambda e: self._status_line.set_status(f"Erro ao gerar PDF: {e}", "status_error"),
+        )
 
     def _copiar_texto(self):
         clipboard = QApplication.clipboard()
@@ -791,4 +806,10 @@ class MainWindow(QMainWindow):
         self._save_nomes_config()
         self.itens_selecionados.clear()
         self._debounce_timer.stop()
+        worker = getattr(self, "_db_worker", None)
+        if worker is not None:
+            try:
+                worker.shutdown(wait=True)
+            except Exception:
+                pass
         event.accept()
