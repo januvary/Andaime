@@ -57,7 +57,7 @@ VERSION_FILE = "VERSION"
 UPDATE_TAG = ".update_tag"
 POST_UPDATE_ENV = "ANDAIME_POST_UPDATE"
 SUCCESS_FILE = "success"
-ROLLOUT_TIMEOUT = 30  # seconds to wait for launch signature
+ROLLOUT_TIMEOUT = 120  # seconds to wait for launch signature
 
 ANDAIME_REPO = "januvary/andaime"
 
@@ -349,13 +349,30 @@ def _swap_directory(current: Path, new: Path) -> list[tuple[Path, Path]]:
 
 
 def _rollback(swaps: list[tuple[Path, Path]]) -> None:
-    """Revert all directory swaps in reverse order."""
+    """Revert all directory swaps in reverse order.
+
+    Best-effort: individual step failures are logged (ERROR) but do not
+    abort the remaining swaps.
+    """
     for old, current in reversed(swaps):
-        with contextlib.suppress(Exception):
+        try:
             if current.exists():
                 _rmtree_force(current)
+        except Exception as e:  # noqa: BLE001
+            ErrorHandler.log(
+                f"Rollback: falha ao remover '{current}': {e}",
+                level=ErrorLevel.ERROR,
+                context="Updater",
+            )
+        try:
             if old.exists():
                 os.rename(old, current)
+        except Exception as e:  # noqa: BLE001
+            ErrorHandler.log(
+                f"Rollback: falha ao restaurar '{old}' -> '{current}': {e}",
+                level=ErrorLevel.ERROR,
+                context="Updater",
+            )
 
 
 def _cleanup_old_dirs(root: Path) -> None:
@@ -626,6 +643,34 @@ def _apply_pending_update_locked() -> bool:
         return False
 
 
+def _terminate_process_tree(proc: subprocess.Popen) -> None:
+    """Kill ``proc`` and wait for it to fully exit.
+
+    Best-effort: ``kill()`` + bounded ``wait()``; on Windows a still-alive
+    process gets ``taskkill /F /T`` as fallback before another bounded wait.
+    """
+    with contextlib.suppress(Exception):
+        proc.kill()
+    try:
+        proc.wait(timeout=5)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:  # noqa: BLE001
+        return
+
+    if os.name == "nt" and proc.pid:
+        with contextlib.suppress(Exception):
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+                timeout=15,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+    with contextlib.suppress(Exception):
+        proc.wait(timeout=10)
+
+
 def _get_python_exe() -> Path:
     """Return the Python executable for (re)launching."""
     root = get_install_root()
@@ -693,9 +738,12 @@ def _launch_with_monitoring(
 
         time.sleep(0.5)
     else:
-        # Timeout
+        # Timeout. The process may still be running — it MUST be dead
+        # before rollback touches its directory, or locked files survive
+        # the rmtree and leave a gutted install behind.
         rc = -1
         stderr = b"timeout"
+        _terminate_process_tree(proc)
 
     # --- Failure path ---
     stderr_text = ""
