@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from typing import Callable
-from pathlib import Path
-from contextlib import contextmanager
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -13,45 +9,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QVBoxLayout,
+    QApplication,
 )
 
 from andaime.qt import build_checkable_menu
-from bap.constants import DOC_TYPE_LABELS
+from bap.constants import DOC_TYPE_LABELS, doc_type_label
 from bap.models import GridItem
 from bap.ui_qt.styles import colors
-from andaime.pdf import render_page
-
-
-@contextmanager
-def _resolve_item_page(
-    item: GridItem,
-    loader: "Callable[[GridItem], bytes | None] | None" = None,
-    scale: float = 2.0,
-):
-    """Resolve um item em ``(qimage, image_path)`` para renderização.
-
-    Para PDFs, renderiza a página via ``andaime.pdf``. Para imagens em disco,
-    devolve o caminho para carga direta via ``QImage(path)``.
-    """
-    page_no = item.page or 0
-
-    if (
-        item.data is None
-        and item.path is not None
-        and Path(item.path).suffix.lower() != ".pdf"
-    ):
-        yield None, item.path
-        return
-
-    raw = item.raw_bytes(loader)
-    if not raw:
-        yield None, None
-        return
-
-    try:
-        yield render_page(raw, page_no, scale), None
-    except Exception:
-        yield None, None
+from bap.ui_qt.icons import make_icon_button, resolve_item_image
 
 
 class _PanLabel(QLabel):
@@ -189,6 +154,15 @@ class ViewerPopup(QDialog):
         bar.addWidget(fit_btn)
         bar.addStretch(1)
 
+        for name, tip, handler in (
+            ("copy-icon", "Copiar imagem", self._copy_current),
+            ("rotate-icon", "Girar 90°", self._rotate_current),
+            ("X-icon", "Remover", self._remove_current),
+        ):
+            bar.addWidget(make_icon_button(name, tip, handler))
+
+        bar.addStretch(1)
+
         close_btn = QPushButton("Fechar")
         close_btn.setFixedHeight(30)
         close_btn.clicked.connect(self.reject)
@@ -219,15 +193,6 @@ class ViewerPopup(QDialog):
         else:
             super().wheelEvent(event)
 
-    def _image_for(self, item: GridItem) -> QImage | None:
-        with _resolve_item_page(item, self._loader) as (qimage, image_path):
-            if qimage is not None:
-                return qimage
-            if image_path is not None:
-                img = QImage(image_path)
-                return None if img.isNull() else img
-            return None
-
     def _render_index(self, index: int):
         if not self._items:
             self._page_label.setText("0 / 0")
@@ -237,7 +202,7 @@ class ViewerPopup(QDialog):
         self._index = max(0, min(index, len(self._items) - 1))
         item = self._items[self._index]
 
-        self._img = self._image_for(item)
+        self._img = resolve_item_image(item, self._loader)
         self._apply_pixmap()
 
         total = len(self._items)
@@ -292,7 +257,7 @@ class ViewerPopup(QDialog):
             self._type_label.setText("")
             return
         doc_type = self._items[self._index].tipo_documento
-        label = DOC_TYPE_LABELS.get(doc_type, "Sem classificação")
+        label = doc_type_label(doc_type)
         self._type_label.setText(f"Tipo: {label}")
 
     def resizeEvent(self, event):
@@ -304,3 +269,26 @@ class ViewerPopup(QDialog):
 
     def _next(self):
         self._render_index(self._index + 1)
+
+    def _copy_current(self):
+        if self._img is not None and not self._img.isNull():
+            QApplication.clipboard().setImage(self._img)
+
+    def _rotate_current(self):
+        if self._grid is None or not self._items:
+            return
+        item = self._items[self._index]
+        if self._grid.rotate_item(item):
+            self._render_index(self._index)
+
+    def _remove_current(self):
+        if self._grid is None or not self._items:
+            return
+        item = self._items[self._index]
+        self._items.pop(self._index)
+        if self._grid.items() and item in self._grid.items():
+            self._grid._remove_item(item)
+        if not self._items:
+            self.reject()
+        else:
+            self._render_index(min(self._index, len(self._items) - 1))

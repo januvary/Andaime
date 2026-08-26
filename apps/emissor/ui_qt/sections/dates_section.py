@@ -56,6 +56,7 @@ class DatesSection(QtSection):
         self.setProperty("class", "")
 
         self._hoje_edit: QDateEdit | None = None
+        self._retirada_segment_index: int = 0  # day → month → year cycle
         self._retirada_registered_label: QLabel | None = None
         self._proxima_label: QLabel | None = None
         self._proxima_countdown: QLabel | None = None
@@ -159,6 +160,29 @@ class DatesSection(QtSection):
         """Data da retirada mudou → checa retirada existente e pede recálculo."""
         self.check_existing_retirada()
         self.state.request_date_recalculation()
+
+    def focus_retirada(self) -> None:
+        """Foca o campo de data da retirada (atalho Ctrl+T).
+
+        Na primeira pressão foca o campo. Em pressões repetidas (enquanto
+        o campo mantém o foco) avança entre os segmentos DD → MM → AA.
+        """
+        if self._hoje_edit is None:
+            return
+
+        edit = self._hoje_edit
+        if not edit.hasFocus():
+            edit.setFocus()
+            self._retirada_segment_index = 0
+        else:
+            self._retirada_segment_index = (self._retirada_segment_index + 1) % 3
+
+        sections = [
+            QDateEdit.Section.DaySection,
+            QDateEdit.Section.MonthSection,
+            QDateEdit.Section.YearSection,
+        ]
+        edit.setCurrentSection(sections[self._retirada_segment_index])
 
     def update_today_date(self) -> None:
         """Define a data da retirada para hoje (sem disparar recálculo)."""

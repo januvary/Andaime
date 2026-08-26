@@ -277,6 +277,7 @@ class QtApp(QMainWindow):
         )
         self.shortcuts.bind("Ctrl+D", self.handle_scan, self.actions_section._scan_btn)
         self.shortcuts.bind("Ctrl+R", self.search_section.focus_search)
+        self.shortcuts.bind("Ctrl+T", self.dates_section.focus_retirada)
 
     # ========== Tema ==========
 

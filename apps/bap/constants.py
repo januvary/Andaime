@@ -140,6 +140,12 @@ DOC_TYPE_ORDER = {
     "outro": 7,
 }
 
+
+def doc_type_label(doc_type: str | None) -> str:
+    """Devolve o rótulo legível de um tipo de documento, ou 'Sem classificação'."""
+    return DOC_TYPE_LABELS.get(doc_type, "Sem classificação")
+
+
 RENOVACAO_DOC_EXCLUSIONS = {"documento_pessoal"}
 
 # Colunas da tabela de processos da página de Remessas.

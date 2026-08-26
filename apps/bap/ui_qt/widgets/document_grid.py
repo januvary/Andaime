@@ -20,8 +20,6 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QPixmap,
-    QImage,
-    QIcon,
     QDrag,
 )
 from PySide6.QtWidgets import (
@@ -37,25 +35,13 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 
-from bap.ui_qt.styles import colors, get_theme
-from bap.constants import DOC_TYPE_LABELS, DOC_TYPE_ORDER
+from bap.ui_qt.styles import colors
+from bap.constants import DOC_TYPE_LABELS, DOC_TYPE_ORDER, doc_type_label
 from bap.models import GridItem, image_to_pdf_bytes
+from bap.ui_qt.icons import make_icon_button, resolve_item_image
 from andaime.pdf import page_count, split_pages
-from bap.ui_qt.widgets.viewer_popup import (
-    ViewerPopup,
-    _resolve_item_page,
-)
+from bap.ui_qt.widgets.viewer_popup import ViewerPopup
 from andaime.qt import build_checkable_menu
-
-_ICON_DIR = Path(__file__).resolve().parent.parent / "img"
-
-
-def _icon_path(base: str) -> str:
-    suffix = "-white" if get_theme() == "dark" else ""
-    png_path = _ICON_DIR / f"{base}{suffix}.png"
-    if png_path.exists():
-        return str(png_path)
-    return str(_ICON_DIR / f"{base}{suffix}.svg")
 
 
 class _Tile(QWidget):
@@ -105,43 +91,13 @@ class _Tile(QWidget):
             self._grid.request_thumbnail(self._item, self)
         layout.addWidget(thumb, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        copy_btn = QPushButton(self)
-        open_btn = QPushButton(self)
-        rotate_btn = QPushButton(self)
-        remove_btn = QPushButton(self)
-        copy_btn.setIcon(QIcon(_icon_path("copy-icon")))
-        open_btn.setIcon(QIcon(_icon_path("preview-icon")))
-        rotate_btn.setIcon(QIcon(_icon_path("rotate-icon")))
-        remove_btn.setIcon(QIcon(_icon_path("X-icon")))
+        copy_btn = make_icon_button("copy-icon", "Copiar imagem", self._copy, self)
+        open_btn = make_icon_button("preview-icon", "Abrir pré-visualização", lambda _checked=False: self._on_open(self._item), self)
+        rotate_btn = make_icon_button("rotate-icon", "Girar 90°", self._rotate, self)
+        remove_btn = make_icon_button("X-icon", "Remover", lambda _checked=False: self._on_remove(self._item), self)
 
-        # Botões de ícone da tile: transparentes, com borda e padding zero
-        # (para caber o glifo 16x16 em 26x22). Reaproveita as cores do tema.
-        btn_style = (
-            "QPushButton {"
-            " background: transparent;"
-            f" border: 1px solid {colors()['panel_border']};"
-            " border-radius: 4px; padding: 0px;"
-            f" color: {colors()['text']}; }}"
-            " QPushButton:hover {"
-            f" background: {colors()['bg_hover']};"
-            f" border: 1px solid {colors()['text_dim']}; }}"
-        )
         for btn in (copy_btn, open_btn, rotate_btn, remove_btn):
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setFixedSize(26, 22)
-            btn.setIconSize(QSize(16, 16))
-            btn.setStyleSheet(btn_style)
             btn.hide()
-
-        copy_btn.setToolTip("Copiar imagem")
-        open_btn.setToolTip("Abrir pré-visualização")
-        rotate_btn.setToolTip("Girar 90°")
-        remove_btn.setToolTip("Remover")
-
-        copy_btn.clicked.connect(self._copy)
-        open_btn.clicked.connect(lambda _checked=False: self._on_open(self._item))
-        rotate_btn.clicked.connect(self._rotate)
-        remove_btn.clicked.connect(lambda _checked=False: self._on_remove(self._item))
 
         rotate_btn.move(6, 112)
         copy_btn.move(40, 112)
@@ -210,7 +166,7 @@ class _Tile(QWidget):
     def _update_badge(self):
         doc_type = self._item.tipo_documento
         if doc_type and doc_type != "outro":
-            label = DOC_TYPE_LABELS.get(doc_type, doc_type)
+            label = doc_type_label(doc_type)
             metrics = self._badge.fontMetrics()
             elided = metrics.elidedText(
                 label, Qt.TextElideMode.ElideRight, 116
@@ -405,13 +361,8 @@ def _source_pdf(item: GridItem, loader: "Callable[[GridItem], bytes | None] | No
 def _thumbnail(
     item: GridItem, loader: "Callable[[GridItem], bytes | None] | None" = None
 ) -> QPixmap:
-    with _resolve_item_page(item, loader, scale=0.5) as (qimage, image_path):
-        if qimage is not None:
-            return QPixmap.fromImage(qimage)
-        if image_path is not None:
-            img = QImage(image_path)
-            return QPixmap() if img.isNull() else QPixmap.fromImage(img)
-        return QPixmap()
+    img = resolve_item_image(item, loader, scale=0.5)
+    return QPixmap.fromImage(img) if img is not None else QPixmap()
 
 
 def _iter_zip_files(path: str):
