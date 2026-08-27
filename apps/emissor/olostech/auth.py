@@ -20,6 +20,7 @@ import platform
 import re
 import socket
 import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime
@@ -136,13 +137,30 @@ def get_physical_mac_addresses(log_callback: Any | None = None) -> list[str]:
     return macs
 
 
+def java_style_os_name() -> str:
+    """Retorna o os.name como o Java reporta.
+
+    O Java (JDK 8u321+/11.0.13+/17+) reporta "Windows 11" em builds
+    >= 22000, enquanto platform.release() do Python sempre retorna "10".
+    O hash registrado pelo launcher Java usa o nome do Java — precisamos
+    reproduzi-lo exatamente.
+    """
+    if platform.system() != "Windows":
+        return f"{platform.system()} {platform.release()}"
+    try:
+        build = sys.getwindowsversion().build
+    except Exception:
+        build = 0
+    return "Windows 11" if build >= 22000 else "Windows 10"
+
+
 def generate_mac_hash(mac_hex: str) -> str:
     """Gera SHA-1 exatamente como a aplicação Java faz.
 
     Formato: SHA-1( mac_hex|os.name|os.arch|processor_count )
     Codificação ISO-8859-1.
     """
-    os_name = f"{platform.system()} {platform.release()}"
+    os_name = java_style_os_name()
     os_arch = platform.machine().lower()
     cpu_count = os.cpu_count()
 
@@ -163,7 +181,7 @@ def build_machine_auth_params(log_callback: Any | None = None) -> tuple[str, str
 
     hashes = [generate_mac_hash(mac) for mac in macs]
 
-    os_info = f"{platform.system()} {platform.release()}|{platform.machine()}".lower()
+    os_info = f"{java_style_os_name()}|{platform.machine()}".lower()
     dados_parts = [f"{mac}|{os_info}" for mac in macs]
 
     return ",".join(hashes), ",".join(dados_parts)

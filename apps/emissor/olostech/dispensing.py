@@ -45,15 +45,19 @@ class Dispensing:
             print(f"[{level}] {msg}")
 
     def add_stock(self, material_recnum, quantity_needed, current_saldo=0,
-                  loterecnum="", lote_desc="", lote_validade=""):
+                  loterecnum="", lote_desc="", lote_validade="",
+                  material_lot_controlled=False):
         """Add stock via acerto (acrescimo) to cover a dispensation.
 
         Adds exactly: quantity_needed - current_saldo.
-        For lot-controlled materials, pass loterecnum/lote_desc/lote_validade.
+        For lot-controlled materials, pass loterecnum/lote_desc/lote_validade;
+        when omitted, a single dispensable lot is auto-fetched from Olostech.
+        Returns (True, ""), (False, msg) on failure, or (None, msg) when the
+        item should be skipped (no accessible lots at all).
         """
         shortfall = quantity_needed - current_saldo
         if shortfall <= 0:
-            return True
+            return True, ""
 
         today = datetime.now().strftime("%d/%m/%Y")
         self._log(f"  Adding stock: +{shortfall} (need {quantity_needed}, have {current_saldo})")
@@ -78,13 +82,80 @@ class Dispensing:
             timeout=60,
         )
 
-        # Step 4: Get material info for acerto
-        self.auth.session.post(
+        # Step 4: Get material info for acerto (tells us if lot-controlled)
+        resp_mat = self.auth.session.post(
             f"{self.base}/saudeweb/AMFB/MOV/acerto.ajax.asp",
             data={"funcao": "ObterMaterialAcrescimo",
                   "dados": f"{self.estoque}|#{material_recnum}"},
             timeout=60,
         )
+        mat_info = {}
+        for m in re.finditer(r"<(\w+)><!\[CDATA\[([^\]]*)\]\]></\1>", resp_mat.text):
+            mat_info[m.group(1)] = m.group(2)
+        controlalote = mat_info.get("controlalote", "")
+        # Fall back to the dispensação-side flag when the acerto lookup
+        # returns nothing useful (e.g. materials from another almoxarifado).
+        lot_controlled = controlalote == "1" if controlalote else bool(material_lot_controlled)
+        self._log(
+            f"  Material {material_recnum}: controlalote={controlalote or '?'} "
+            f"(lot_controlled={lot_controlled})"
+        )
+
+        # Step 4b: lot-controlled material without a lot → fetch lots via the
+        # acerto flow's own endpoint (ObterLoteMaterial). Lots that exist for
+        # acerto may still be undispensable (near/expired validity): the
+        # dispensação lot endpoint filters them out, so stock added to them
+        # can never be dispensed ("Não existem registro de Saldo de Lote").
+        # Cross-check both lists and only auto-select dispensable lots.
+        if not loterecnum and lot_controlled:
+            self._log(f"  No lot provided, fetching lots for material {material_recnum}")
+            resp_lots = self.auth.session.post(
+                f"{self.base}/saudeweb/AMFB/MOV/acerto.ajax.asp",
+                data={"funcao": "ObterLoteMaterial",
+                      "dados": f"{self.estoque}|#{material_recnum}|#true|#false"},
+                timeout=60,
+            )
+            lot_matches = re.findall(r"<recnum><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
+            lote_descs = re.findall(r"<lote><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
+            validades = re.findall(r"<data_validade><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
+
+            if not lot_matches:
+                msg = f"Material {material_recnum} possui controle de lote, mas nenhum lote cadastrado no Olostech."
+                self._log(f"  {msg} Item pulado.", "WARN")
+                return None, msg
+
+            resp_disp = self.auth.session.post(
+                f"{self.base}/saudeweb/amfb/fb/dispensacao.ajax.asp",
+                data={"funcao": "obterLotesMedicamento", "dados": f"{material_recnum}#"},
+                timeout=60,
+            )
+            dispensable = set(re.findall(r"<loterecnum><!\[CDATA\[([^\]]*)\]\]>", resp_disp.text))
+            self._log(f"  Lots: {len(lot_matches)} no acerto, {len(dispensable)} dispensável(is)")
+
+            candidates = [l for l in lot_matches if l in dispensable]
+            if len(candidates) == 1:
+                idx = lot_matches.index(candidates[0])
+                loterecnum = candidates[0]
+                lote_desc = lote_descs[idx] if idx < len(lote_descs) else ""
+                lote_validade = validades[idx] if idx < len(validades) else ""
+                self._log(f"  Auto-selected lot: {loterecnum} ({lote_desc}, validade: {lote_validade})")
+            elif len(candidates) > 1:
+                lot_list = ", ".join([
+                    lote_descs[lot_matches.index(l)] if lot_matches.index(l) < len(lote_descs) else l
+                    for l in candidates
+                ])
+                msg = f"Material possui multiplos lotes dispensáveis: {lot_list}. Selecione um lote no Olostech antes de continuar."
+                self._log(f"  {msg}", "ERROR")
+                return False, msg
+            else:
+                lot_list = ", ".join([
+                    f"{lote_descs[i] if i < len(lote_descs) else lot_matches[i]} (val. {validades[i] if i < len(validades) else '?'})"
+                    for i in range(len(lot_matches))
+                ])
+                msg = (f"Nenhum lote acessível para o material {material_recnum} "
+                       f"(lotes existentes: {lot_list} — vencidos ou próximos do vencimento).")
+                self._log(f"  {msg} Item pulado.", "WARN")
+                return None, msg
 
         # Step 5: GravarAcertoEstoque - add the stock
         # Field order from JS: true, motivo, date, estoque, material,
@@ -123,6 +194,12 @@ class Dispensing:
         else:
             msg = result.get("mensagem", "Erro ao ajustar estoque")
             self._log(f"  Stock adjustment failed: {result}", "ERROR")
+            # Server-side lot-control rejection with no lot we could supply
+            # → skip the item instead of failing the whole retirada.
+            if not loterecnum and "controle de lote" in msg.lower():
+                clean = re.sub(r"<br\s*/?>", " ", msg).strip()
+                self._log(f"  Skipping item: {clean}", "WARN")
+                return None, clean
             return False, msg
 
     def open_attendance(self, patient_sus):
@@ -441,7 +518,11 @@ class Dispensing:
         if current_saldo < quantity:
             self._log(f"  Insufficient stock (have {current_saldo}, need {quantity})")
             success, error_msg = self.add_stock(material_recnum, quantity, current_saldo,
-                                              loterecnum, lote_desc, lote_validade)
+                                              loterecnum, lote_desc, lote_validade,
+                                              material_lot_controlled=is_lot_controlled)
+            if success is None:
+                self._log(f"  Skipping item: {error_msg}", "WARN")
+                return None
             if not success:
                 self._log(f"  Cannot proceed without stock: {error_msg}", "ERROR")
                 self._last_error = f"Erro de estoque: {error_msg}"
@@ -927,9 +1008,12 @@ class Dispensing:
 
         self._log(f"\n=== Dispensing {len(valid_items)} item(s) in {len(groups)} group(s) ===")
 
-        # Track successes
+        # Track successes; failed holds (desc, error) tuples. Items skipped
+        # for lack of an accessible lot (None from add_item) are excluded
+        # from failed so they don't trigger a rollback of the whole retirada.
         succeeded = []
         failed = []
+        skipped_no_lot = []
 
         # Step 4: Process each group. Any exception (e.g. network failure)
         # rolls the attendance back before the message reaches the UI.
@@ -942,20 +1026,25 @@ class Dispensing:
                 if not self.open_dispensacao_direta(patient_sus, action_type, notif):
                     self._log(f"Failed to open dispensacao for action {action_type}", "ERROR")
                     for item in group_items:
-                        failed.append(item["material_desc"])
+                        failed.append((item["material_desc"], "Falha ao abrir dispensação"))
                     continue
 
                 for item in group_items:
-                    if not self.add_item(
+                    res = self.add_item(
                         patient_sus,
                         item["material_code"],
                         item["material_desc"],
                         item["quantity"],
                         action_type,
                         item.get("dias", 0),
-                    ):
+                    )
+                    if res is None:
+                        self._log(f"  SKIPPED: {item['material_desc']} (sem lote acessível)", "WARN")
+                        skipped_no_lot.append(item["material_desc"])
+                    elif not res:
                         self._log(f"  FAILED: {item['material_desc']}", "ERROR")
-                        failed.append(item["material_desc"])
+                        failed.append((item["material_desc"], self._last_error))
+                        self._last_error = ""
                     else:
                         self._log(f"  OK: {item['material_desc']} x{item['quantity']}")
                         succeeded.append(item["material_desc"])
@@ -966,16 +1055,34 @@ class Dispensing:
             )
 
         # Report results
-        self._log(f"\n=== Results: {len(succeeded)} succeeded, {len(failed)} failed ===")
+        self._log(
+            f"\n=== Results: {len(succeeded)} succeeded, {len(failed)} failed, "
+            f"{len(skipped_no_lot)} skipped ==="
+        )
         if failed:
-            self._log(f"Failed items: {', '.join(failed)}", "WARN")
+            self._log(f"Failed items: {', '.join(d for d, _ in failed)}", "WARN")
+        if skipped_no_lot:
+            self._log(f"Skipped items (sem lote acessível): {', '.join(skipped_no_lot)}", "WARN")
 
         # If any item failed, don't conclude - roll back so no
         # orphaned-open attendance (or partial dispensation) is left behind.
         if failed:
+            details = "\n".join(
+                f"• {desc}" + (f" — {err}" if err else "")
+                for desc, err in failed
+            )
             return False, self._rollback_after_failure(
                 succeeded,
-                self._last_error or "Falha na dispensação — ver detalhes no emissor.log",
+                f"Falha na dispensação:\n{details}",
+            )
+
+        # Nothing dispensed at all (everything skipped): roll the attendance
+        # back cleanly and report why.
+        if not succeeded and skipped_no_lot:
+            return False, self._rollback_after_failure(
+                succeeded,
+                "Nenhum item dispensado. Itens pulados por falta de lote "
+                "acessível: " + ", ".join(skipped_no_lot),
             )
 
         # Step 5: Conclude. Exceptions here only surface the message without
@@ -988,7 +1095,10 @@ class Dispensing:
             self._log(f"  Unexpected error while concluding: {e}", "ERROR")
             return False, f"Erro ao concluir a dispensação: {e}"
 
-        return True, "Registrado com sucesso"
+        msg = "Registrado com sucesso"
+        if skipped_no_lot:
+            msg += f". Itens pulados (sem lote acessível): {', '.join(skipped_no_lot)}"
+        return True, msg
 
     def _rollback_after_failure(self, succeeded: list, message: str) -> str:
         """Roll back the open attendance/dispensation after a failure.
