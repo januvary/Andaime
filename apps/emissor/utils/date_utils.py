@@ -250,7 +250,7 @@ class DateCalculator(_BaseDateCalculator):
 
     # ========== Bloqueio de balanço do almoxarifado ==========
 
-    BALANCO_BLOCK_DAYS: int = 5
+    BALANCO_BLOCK_DAYS: int = 6
 
     @staticmethod
     def _is_business_day(check_date: date) -> bool:
