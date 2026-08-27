@@ -400,6 +400,24 @@ def _cleanup_old_dirs(root: Path) -> None:
                         _delete_file_force(stale)
 
 
+def _sweep_stale_update_temps() -> None:
+    """Remove leftover monitoring temp dirs (``andaime_update_*``).
+
+    ``_launch_with_monitoring`` creates one per apply; if the process dies
+    mid-monitor (crash, kill, power loss) the dir leaks in ``%TEMP%``.
+    Anything older than the rollout window plus margin is definitely not
+    being monitored by a live apply, so it is swept on every app start.
+    """
+    import tempfile
+
+    cutoff = time.time() - (ROLLOUT_TIMEOUT + 600)
+    with contextlib.suppress(Exception):
+        for d in Path(tempfile.gettempdir()).glob("andaime_update_*"):
+            with contextlib.suppress(Exception):
+                if d.is_dir() and d.stat().st_mtime < cutoff:
+                    shutil.rmtree(d, ignore_errors=True)
+
+
 # ============================================================================
 # Install format detection
 # ============================================================================
@@ -489,8 +507,10 @@ def apply_pending_update() -> bool:
     """
     root = get_install_root()
 
-    # Always clean up stale rollback artifacts first.
+    # Always clean up stale rollback artifacts first, and sweep leaked
+    # monitoring temp dirs from previous crashed/killed updates.
     _cleanup_old_dirs(root)
+    _sweep_stale_update_temps()
 
     if not staging_path().is_dir():
         return False

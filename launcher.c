@@ -182,6 +182,12 @@ delete_tree_log(const char *path, int depth, int *failures)
 {
     if (!path || !*path) return;
 
+    /* Missing target = nothing to delete = success. Check first so we
+     * don't log scary "failed (2)" lines for dirs that simply aren't
+     * there yet (e.g. _update_staging on a fresh install). */
+    DWORD attr = GetFileAttributesA(path);
+    if (attr == INVALID_FILE_ATTRIBUTES) return;
+
     char pattern[MAX_PATH * 2];
     snprintf(pattern, sizeof(pattern), "%s\\*", path);
 
@@ -193,9 +199,11 @@ delete_tree_log(const char *path, int depth, int *failures)
             log_message("delete_tree: attrs failed (%lu): %s",
                         GetLastError(), path);
         if (!DeleteFileA(path)) {
-            (*failures)++;
-            log_message("delete_tree: DeleteFileA failed (%lu): %s",
-                        GetLastError(), path);
+            DWORD err = GetLastError();
+            if (err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND) {
+                (*failures)++;
+                log_message("delete_tree: DeleteFileA failed (%lu): %s", err, path);
+            }
         }
         return;
     }
@@ -214,19 +222,25 @@ delete_tree_log(const char *path, int depth, int *failures)
                 log_message("delete_tree: attrs failed (%lu): %s",
                             GetLastError(), child);
             if (!DeleteFileA(child)) {
-                (*failures)++;
-                log_message("delete_tree: DeleteFileA failed (%lu): %s",
-                            GetLastError(), child);
+                DWORD err = GetLastError();
+                if (err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND) {
+                    (*failures)++;
+                    log_message("delete_tree: DeleteFileA failed (%lu): %s",
+                                err, child);
+                }
             }
         }
     } while (FindNextFileA(hFind, &fd));
 
     FindClose(hFind);
     if (!RemoveDirectoryA(path)) {
-        (*failures)++;
-        log_message("delete_tree: RemoveDirectoryA failed (%lu): %s "
-                    "(%d failures beneath)",
-                    GetLastError(), path, *failures);
+        DWORD err = GetLastError();
+        if (err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND) {
+            (*failures)++;
+            log_message("delete_tree: RemoveDirectoryA failed (%lu): %s "
+                        "(%d failures beneath)",
+                        err, path, *failures);
+        }
     }
 }
 

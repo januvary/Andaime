@@ -103,6 +103,16 @@ if [ ! -f "$SISTEMAS/dist.zip" ] || [ ! -f "$SISTEMAS/VERSION" ]; then
     exit 1
 fi
 
+# Re-read the datestamp actually built into VERSION so the release tag
+# matches it exactly — the build recomputes its own DSTAMP and can cross
+# a minute boundary mid-build (observed tag/VERSION drift of 1 minute).
+TAG="$(head -1 "$SISTEMAS/VERSION" | tr -d '\r')"
+if [[ ! "$TAG" =~ ^[0-9]{2}\.[0-9]{2}\.[0-9]{2}-[0-9]{4}$ ]]; then
+    echo -e "${RED}[ERROR]${NC} Invalid datestamp in built VERSION: '${TAG}'"
+    exit 1
+fi
+ok "Release tag aligned with VERSION: ${TAG}"
+
 # ============================================
 # Guard: every expected hash must be present in VERSION.
 # A missing/absent hash makes the launcher/Python treat the release as an

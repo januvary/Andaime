@@ -402,15 +402,23 @@ PYEOF
         ok "holidays trimmed to Brazil"
     fi
 
-    # --- Remove build-tool packages ---
-    for pkg in pip setuptools wheel _distutils_hack \
-               pyinstaller PyInstaller pyinstaller-hooks-contrib _pyinstaller_hooks_contrib \
-               pikepdf pikepdf.libs pikepdf-*.dist-info \
-               pythonwin customtkinter darkdetect PyWin32.chm; do
+    # --- Remove build-tool packages (dirs AND metadata ghosts) ---
+    # dist-info/egg-info leftovers make `pip freeze` (and the runtime
+    # hash) still list removed packages — strip them alongside the code.
+    local -a build_tools=(
+        pip setuptools wheel _distutils_hack
+        pyinstaller PyInstaller pyinstaller-hooks-contrib _pyinstaller_hooks_contrib
+        pyinstaller_hooks_contrib
+        pikepdf pikepdf.libs
+        pythonwin customtkinter darkdetect PyWin32.chm
+        altgraph pefile pefile.py
+    )
+    for pkg in "${build_tools[@]}"; do
         rm -rf "$sp/$pkg"
+        rm -rf "$sp/${pkg}"-*.dist-info "$sp/${pkg}"-*.egg-info
     done
     rm -f "$sp/distutils-precedence.pth"
-    ok "Build tools removed (pip, setuptools, pyinstaller, pikepdf, pythonwin, customtkinter)"
+    ok "Build tools removed (pip, setuptools, pyinstaller, pikepdf, customtkinter, altgraph, pefile)"
 
     # --- Remove Tcl/Tk ---
     rm -rf "$stage/python/tcl" "$stage/python/Lib/tkinter" "$sp/_tkinter"

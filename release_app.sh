@@ -91,7 +91,7 @@ echo ""
 # ============================================
 # Check for uncommitted changes in source repo
 # ============================================
-echo "Checking source repo for uncommitted changes..."
+echo "[1/4] Checking source repo for uncommitted changes..."
 cd "$APP_SRC"
 if ! git diff --quiet || ! git diff --cached --quiet; then
     echo -e "${YELLOW}[WARN]${NC} Uncommitted changes in $APP_SRC:"
@@ -124,27 +124,6 @@ echo -e "  ${GREEN}Clean working tree.${NC}"
 echo ""
 
 # ============================================
-# 2. Set datestamp in source repo
-# ============================================
-echo "[2/6] Setting datestamp in source repo..."
-VERSION_FILE_SRC="$APP_SRC/src/__init__.py"
-if [ -f "$VERSION_FILE_SRC" ] && grep -q '^__version__ = ' "$VERSION_FILE_SRC"; then
-    sed -i "s/^__version__ = .*/__version__ = \"${TAG}\"/" "$VERSION_FILE_SRC"
-    # Commit only if the sed actually changed the line (an unchanged file
-    # would make `git commit` exit 1 under set -e).
-    if ! git diff --quiet -- "$VERSION_FILE_SRC"; then
-        git add "$VERSION_FILE_SRC"
-        git commit -m "Bump version to ${TAG}" >/dev/null
-        echo -e "  ${GREEN}src/__init__.py${NC} → ${TAG}"
-    else
-        echo -e "  ${YELLOW}__version__ already ${TAG}, nothing to commit${NC}"
-    fi
-else
-    echo -e "  ${YELLOW}[WARN]${NC} no __version__ in src/__init__.py, skipping version bump"
-fi
-echo ""
-
-# ============================================
 # Build
 # ============================================
 echo "Building standalone distribution..."
@@ -163,7 +142,7 @@ fi
 # ============================================
 # 4. Read datestamp + hashes from VERSION file
 # ============================================
-echo "[4/6] Reading build metadata..."
+echo "[2/4] Reading build metadata..."
 DSTAMP=""
 RUNTIME_HASH=""
 APP_HASH=""
@@ -197,7 +176,7 @@ echo ""
 # ============================================
 # 6. Tag + push source repo
 # ============================================
-echo "[6/6] Tagging + pushing source repo..."
+echo "[3/4] Tagging + pushing source repo..."
 cd "$APP_SRC"
 if git tag -l "$TAG" | grep -q "$TAG"; then
     echo -e "${RED}[ERROR]${NC} Tag ${TAG} already exists in $APP_REPO."
@@ -210,7 +189,7 @@ echo ""
 # ============================================
 # Create GitHub release (app repo only)
 # ============================================
-echo "Creating GitHub release..."
+echo "[4/4] Creating GitHub release..."
 
 USER_SIZE=$(du -sh "$USER_ZIP" | cut -f1)
 
