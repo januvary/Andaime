@@ -63,7 +63,9 @@ fi
 if [ -z "${2:-}" ]; then
     echo -e "${YELLOW}${APP_DISPLAY} — Release ${TAG}${NC}"
     echo ""
-    read -rp "Notes [optional]: " NOTES
+    # `|| true` so a non-interactive stdin (EOF) doesn't kill the script
+    # under set -e — notes just fall through to the default.
+    read -rp "Notes [optional]: " NOTES || true
     NOTES="${NOTES:-Release ${TAG}}"
 else
     NOTES="${2:-Release ${TAG}}"
@@ -126,13 +128,19 @@ echo ""
 # ============================================
 echo "[2/6] Setting datestamp in source repo..."
 VERSION_FILE_SRC="$APP_SRC/src/__init__.py"
-if [ -f "$VERSION_FILE_SRC" ]; then
+if [ -f "$VERSION_FILE_SRC" ] && grep -q '^__version__ = ' "$VERSION_FILE_SRC"; then
     sed -i "s/^__version__ = .*/__version__ = \"${TAG}\"/" "$VERSION_FILE_SRC"
-    git add "$VERSION_FILE_SRC"
-    git commit -m "Bump version to ${TAG}" >/dev/null
-    echo -e "  ${GREEN}src/__init__.py${NC} → ${TAG}"
+    # Commit only if the sed actually changed the line (an unchanged file
+    # would make `git commit` exit 1 under set -e).
+    if ! git diff --quiet -- "$VERSION_FILE_SRC"; then
+        git add "$VERSION_FILE_SRC"
+        git commit -m "Bump version to ${TAG}" >/dev/null
+        echo -e "  ${GREEN}src/__init__.py${NC} → ${TAG}"
+    else
+        echo -e "  ${YELLOW}__version__ already ${TAG}, nothing to commit${NC}"
+    fi
 else
-    echo -e "  ${YELLOW}[WARN]${NC} src/__init__.py not found, skipping version bump"
+    echo -e "  ${YELLOW}[WARN]${NC} no __version__ in src/__init__.py, skipping version bump"
 fi
 echo ""
 
