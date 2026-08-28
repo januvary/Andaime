@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QProgressBar,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -28,6 +29,17 @@ ACTION_LABELS = {
     9: "Notificacao Talidomida",
 }
 NOTIFICATION_ACTIONS = {6, 7, 9}
+
+
+class NoScrollComboBox(QComboBox):
+    """ComboBox que nao altera a selecao com o scroll do mouse.
+
+    Dentro do dialogo rolavel, o scroll deve navegar a lista de itens,
+    nao mudar o tipo de receita por engano.
+    """
+
+    def wheelEvent(self, event) -> None:  # noqa: N802
+        event.ignore()
 
 
 class RegistrationWorker(QThread):
@@ -103,16 +115,27 @@ def show_olostech_dialog(
     """
     dialog = QDialog(parent)
     dialog.setWindowTitle("Registrar Olostech")
-    dialog.setMinimumWidth(500)
+    dialog.setMinimumWidth(640)
 
     layout = QVBoxLayout(dialog)
     layout.setSpacing(12)
+
+    # Area rolável: info do paciente + itens
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+    scroll.setMaximumHeight(560)
+
+    content = QWidget()
+    content_layout = QVBoxLayout(content)
+    content_layout.setContentsMargins(0, 0, 0, 0)
+    content_layout.setSpacing(12)
 
     # Info do paciente
     patient_name = getattr(patient, "nome", "?") or "?"
     info = QLabel(f"Paciente: {patient_name}")
     info.setStyleSheet("font-weight: bold;")
-    layout.addWidget(info)
+    content_layout.addWidget(info)
 
     # Itens
     form = QFormLayout()
@@ -143,7 +166,7 @@ def show_olostech_dialog(
         label.setMinimumWidth(200)
         row_layout.addWidget(label)
 
-        combo = QComboBox()
+        combo = NoScrollComboBox()
         combo.setMaximumWidth(180)
         for action_id, action_label in ACTION_LABELS.items():
             combo.addItem(action_label, action_id)
@@ -170,7 +193,10 @@ def show_olostech_dialog(
 
         form.addRow(row_widget)
 
-    layout.addLayout(form)
+    content_layout.addLayout(form)
+
+    scroll.setWidget(content)
+    layout.addWidget(scroll)
 
     # Progress bar (hidden initially)
     progress = QProgressBar()
@@ -181,6 +207,7 @@ def show_olostech_dialog(
     # Status label
     status_label = QLabel("")
     status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    status_label.setWordWrap(True)
     status_label.setVisible(False)
     layout.addWidget(status_label)
 
@@ -194,7 +221,11 @@ def show_olostech_dialog(
     worker: RegistrationWorker | None = None
 
     def _collect_items() -> list[dict[str, Any]]:
-        collected = []
+        # Mescla itens que mapeiam para o mesmo material Olostech (mesmo
+        # tipo de receita): o servidor rejeita material duplicado na
+        # dispensação ("Material já entregue nessa dispensação!").
+        merged: dict[tuple[str, int], dict[str, Any]] = {}
+        order: list[tuple[str, int]] = []
         for idx, item in enumerate(items):
             csv_code = mapped_codes[idx]
             if not csv_code:
@@ -208,15 +239,26 @@ def show_olostech_dialog(
             )
             quantity = _to_int(getattr(item, "quantidade", 0), 0)
             dias = _to_int(getattr(item, "dias", 0), 0)
-            collected.append({
+
+            key = (csv_code, action_type)
+            if key in merged:
+                merged[key]["quantity"] += quantity
+                if dias > merged[key].get("dias", 0):
+                    merged[key]["dias"] = dias
+                if not merged[key].get("notificacao_nr") and notif_nr:
+                    merged[key]["notificacao_nr"] = notif_nr
+                continue
+
+            merged[key] = {
                 "material_code": csv_code,
                 "material_desc": getattr(item, "descricao", "") or "",
                 "quantity": quantity,
                 "action_type": action_type,
                 "notificacao_nr": notif_nr,
                 "dias": dias,
-            })
-        return collected
+            }
+            order.append(key)
+        return [merged[k] for k in order]
 
     def _on_accepted() -> None:
         nonlocal result, worker

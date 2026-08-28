@@ -110,7 +110,7 @@ class DateCalculator(_BaseDateCalculator):
             enable_distribution: habilita distribuição inteligente
             distribution_window_days: dias para trás na janela (1-7)
             retirada_count_fn: callable(start, end) → dict data→contagem
-            bloquear_balanco: evita últimos 5 dias úteis do mês
+            bloquear_balanco: evita últimos 6 dias úteis do mês
         """
         result: dict[str, Any] = {
             "proxima_vez": None,
@@ -165,7 +165,7 @@ class DateCalculator(_BaseDateCalculator):
             result["proxima_vez_foi_ajustada"] = foi_ajustada
             result["proxima_vez_data_original"] = data_original
 
-            # Bloqueio de balanço: deslocar para fora dos últimos 5 dias úteis
+            # Bloqueio de balanço: deslocar para fora dos últimos 6 dias úteis
             if bloquear_balanco:
                 proxima_vez_ajustada = DateCalculator.adjust_for_balanco(proxima_vez)
                 if proxima_vez_ajustada != proxima_vez:
@@ -333,7 +333,7 @@ class RetiradaDateDistributor:
         Args:
             max_days_back: janela para trás (padrão 3)
             retirada_count_fn: callable(start, end) → dict data→contagem
-            bloquear_balanco: exclui últimos 5 dias úteis do mês
+            bloquear_balanco: exclui últimos 6 dias úteis do mês
         """
         if retirada_count_fn is None:
             raise ValueError("retirada_count_fn deve ser fornecido")
@@ -350,7 +350,7 @@ class RetiradaDateDistributor:
             if candidate.weekday() < 5 and candidate not in br_holidays:
                 business_day_candidates.append(candidate)
 
-        # Excluir dias do bloqueio de balanço (últimos 5 dias úteis do mês)
+        # Excluir dias do bloqueio de balanço (últimos 6 dias úteis do mês)
         if bloquear_balanco:
             blocked = {
                 d
