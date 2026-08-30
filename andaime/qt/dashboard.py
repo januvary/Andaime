@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,24 @@ def _format_blob_size(length: int | None) -> str:
     return f"{length / (1024 * 1024):.1f} MB"
 
 
+@dataclass(frozen=True)
+class SearchJoin:
+    """Describes a JOIN used only for search/filter on a table.
+
+    Example::
+
+        SearchJoin(
+            table="items_catalog",
+            on="retirada_items.item_id = items_catalog.item_id",
+            search_columns=["items_catalog.descricao"],
+        )
+    """
+
+    table: str
+    on: str
+    search_columns: list[str] = field(default_factory=list)
+
+
 # ======================================================================
 # Service
 # ======================================================================
@@ -69,6 +88,7 @@ class DashboardService:
         self,
         database_paths: dict[str, Path | Callable[[], Path]],
         non_editable_columns: dict[str, list[str]] | None = None,
+        search_joins: dict[str, list[SearchJoin]] | None = None,
     ) -> None:
         """
         Args:
@@ -76,9 +96,12 @@ class DashboardService:
                 Callable entries are resolved lazily on ``connect_databases``.
             non_editable_columns: Per-table columns that cannot be edited
                 (e.g. ``{"pacientes": ["id"]}``).
+            search_joins: Per-table JOIN configs for cross-table search
+                (e.g. ``{"retirada_items": [SearchJoin(...)]}``).
         """
         self._database_paths = database_paths
         self._non_editable_columns = non_editable_columns or {}
+        self._search_joins = search_joins or {}
         self._db_paths: dict[str, Path] = {}
 
     @classmethod
@@ -87,6 +110,7 @@ class DashboardService:
         data_dir: Path,
         *,
         non_editable_columns: dict[str, list[str]] | None = None,
+        search_joins: dict[str, list[SearchJoin]] | None = None,
     ) -> DashboardService:
         """Auto-detect ``*.db`` files in *data_dir* and build a service.
 
@@ -97,7 +121,7 @@ class DashboardService:
         if data_dir.is_dir():
             for db_file in sorted(data_dir.glob("*.db")):
                 paths[db_file.stem] = db_file
-        return cls(paths, non_editable_columns)
+        return cls(paths, non_editable_columns, search_joins)
 
     # ---------- connection ----------
 
@@ -192,23 +216,64 @@ class DashboardService:
             column_names = [col[1] for col in columns_info]
             blob_columns = {col[1] for col in columns_info if col[2].upper() == "BLOB"}
 
+            # Build JOINs for cross-table search
+            join_clauses: list[str] = []
+            extra_where_parts: list[str] = []
+            params: list[Any] = []
+            has_joins = False
+
+            if filter_text and table_name in self._search_joins:
+                seen_tables: set[str] = set()
+                for sj in self._search_joins[table_name]:
+                    if sj.table not in seen_tables:
+                        join_clauses.append(
+                            f"LEFT JOIN {sj.table} ON {sj.on}"
+                        )
+                        seen_tables.add(sj.table)
+                    for col in sj.search_columns:
+                        extra_where_parts.append(
+                            f"CAST({col} AS TEXT) LIKE ?"
+                        )
+                        params.append(f"%{filter_text}%")
+                has_joins = bool(join_clauses)
+
             # BLOB columns → LENGTH() (size in bytes, never loads the data)
+            # Prefix with table name when JOINs are present to avoid ambiguity
             select_parts = []
             for c in column_names:
+                qualified = f"{table_name}.{c}" if has_joins else c
                 if c in blob_columns:
-                    select_parts.append(f"LENGTH({c}) AS {c}")
+                    select_parts.append(f"LENGTH({qualified}) AS {c}")
                 else:
-                    select_parts.append(c)
+                    select_parts.append(
+                        f"{qualified} AS {c}" if has_joins else c
+                    )
 
             cursor = conn.cursor()
             cols_sql = ", ".join(select_parts)
+
             if filter_text:
-                where = " OR ".join(
-                    f"CAST({col} AS TEXT) LIKE ?" for col in column_names
+                # Base WHERE: search all original columns (qualified if JOINs)
+                base_where = " OR ".join(
+                    f"CAST({table_name}.{col} AS TEXT) LIKE ?"
+                    if has_joins
+                    else f"CAST({col} AS TEXT) LIKE ?"
+                    for col in column_names
                 )
+                all_where_parts = [base_where]
+                params = [f"%{filter_text}%"] * len(column_names) + params
+                if extra_where_parts:
+                    all_where_parts.append(
+                        " OR ".join(extra_where_parts)
+                    )
+                where = " OR ".join(
+                    f"({p})" if " OR " in p else p
+                    for p in all_where_parts
+                )
+                join_sql = f" {' '.join(join_clauses)}" if join_clauses else ""
                 cursor.execute(
-                    f"SELECT {cols_sql} FROM {table_name} WHERE {where}",
-                    [f"%{filter_text}%"] * len(column_names),
+                    f"SELECT {cols_sql} FROM {table_name}{join_sql} WHERE {where}",
+                    params,
                 )
             else:
                 cursor.execute(f"SELECT {cols_sql} FROM {table_name}")

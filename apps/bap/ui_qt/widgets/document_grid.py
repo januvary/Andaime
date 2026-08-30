@@ -9,7 +9,6 @@ from contextlib import contextmanager
 
 from PySide6.QtCore import (
     Qt,
-    QSize,
     QMimeData,
     QPoint,
     Signal,

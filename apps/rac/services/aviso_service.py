@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from rac.database.rac_database import RACDatabase
-from rac.utils.date_calculator import add_months, month_idx
+from rac.utils.date_calculator import add_months
 
 
 @dataclass

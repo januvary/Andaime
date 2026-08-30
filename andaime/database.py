@@ -2,7 +2,6 @@
 Base SQLite database class with connection management, retries, and backups.
 """
 
-import os
 import re
 import sqlite3
 import sys

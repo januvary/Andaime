@@ -1,6 +1,5 @@
 """Database do Sistema de Negativas"""
 
-import sqlite3
 import json
 from typing import Optional, List
 from pathlib import Path

@@ -5,7 +5,7 @@ from pathlib import Path
 from contextlib import contextmanager
 
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QImage, QPixmap, QIcon
+from PySide6.QtGui import QImage, QIcon
 from PySide6.QtWidgets import QPushButton
 
 from bap.models import GridItem

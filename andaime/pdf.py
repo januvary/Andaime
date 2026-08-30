@@ -43,7 +43,7 @@ def page_count(src: Union[bytes, str, Path]) -> int:
 
 def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:
     """Divide um PDF em N PDFs de página única."""
-    from pypdf import PdfReader, PdfWriter
+    from pypdf import PdfWriter
 
     reader = open_pdf(src)
     out: list[bytes] = []
@@ -58,7 +58,7 @@ def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:
 
 def extract_page(src: Union[bytes, str, Path], page: int) -> bytes:
     """Extrai uma única página como PDF de página única (bytes)."""
-    from pypdf import PdfReader, PdfWriter
+    from pypdf import PdfWriter
 
     reader = open_pdf(src)
     if not reader.pages:
@@ -72,7 +72,7 @@ def extract_page(src: Union[bytes, str, Path], page: int) -> bytes:
 
 def merge_pdfs(conteudos: Iterable[Union[bytes, str, Path]], output_path: str) -> str:
     """Concatena vários PDFs em um arquivo."""
-    from pypdf import PdfReader, PdfWriter
+    from pypdf import PdfWriter
 
     writer = PdfWriter()
     for blob in conteudos:

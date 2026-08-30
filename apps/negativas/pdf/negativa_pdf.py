@@ -47,7 +47,6 @@ class NegativaPDF:
         Returns:
             ``BytesIO`` com o PDF (quando ``output_path`` é ``None``) ou ``None``.
         """
-        from reportlab.platypus import SimpleDocTemplate
 
         elements = self._build_elements(data)
 
@@ -226,7 +225,6 @@ class NegativaPDF:
 
         if not data.itens:
             from reportlab.lib.styles import ParagraphStyle
-            from reportlab.lib.enums import TA_LEFT
 
             italic = ParagraphStyle(
                 "Italic",
@@ -252,7 +250,6 @@ class NegativaPDF:
         return elements
 
     def _build_item(self, item, ceaf_cache, text_style, center_bold) -> list:
-        from reportlab.platypus import Paragraph
 
         if item.categoria in ("CEAF", "USAFA", "CAPS II"):
             return self._build_medicamento(item, ceaf_cache, text_style, center_bold)
