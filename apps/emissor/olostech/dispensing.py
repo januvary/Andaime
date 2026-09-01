@@ -45,15 +45,14 @@ class Dispensing:
             print(f"[{level}] {msg}")
 
     def add_stock(self, material_recnum, quantity_needed, current_saldo=0,
-                  loterecnum="", lote_desc="", lote_validade="",
-                  material_lot_controlled=False):
+                  loterecnum="", lote_desc="", lote_validade=""):
         """Add stock via acerto (acrescimo) to cover a dispensation.
 
         Adds exactly: quantity_needed - current_saldo.
         For lot-controlled materials, pass loterecnum/lote_desc/lote_validade;
-        when omitted, a single dispensable lot is auto-fetched from Olostech.
+        a zero-stock lot (even past validity) accepts stock and dispenses fine.
         Returns (True, ""), (False, msg) on failure, or (None, msg) when the
-        item should be skipped (no accessible lots at all).
+        item should be skipped.
         """
         shortfall = quantity_needed - current_saldo
         if shortfall <= 0:
@@ -93,69 +92,7 @@ class Dispensing:
         for m in re.finditer(r"<(\w+)><!\[CDATA\[([^\]]*)\]\]></\1>", resp_mat.text):
             mat_info[m.group(1)] = m.group(2)
         controlalote = mat_info.get("controlalote", "")
-        # Fall back to the dispensação-side flag when the acerto lookup
-        # returns nothing useful (e.g. materials from another almoxarifado).
-        lot_controlled = controlalote == "1" if controlalote else bool(material_lot_controlled)
-        self._log(
-            f"  Material {material_recnum}: controlalote={controlalote or '?'} "
-            f"(lot_controlled={lot_controlled})"
-        )
-
-        # Step 4b: lot-controlled material without a lot → fetch lots via the
-        # acerto flow's own endpoint (ObterLoteMaterial). Lots that exist for
-        # acerto may still be undispensable (near/expired validity): the
-        # dispensação lot endpoint filters them out, so stock added to them
-        # can never be dispensed ("Não existem registro de Saldo de Lote").
-        # Cross-check both lists and only auto-select dispensable lots.
-        if not loterecnum and lot_controlled:
-            self._log(f"  No lot provided, fetching lots for material {material_recnum}")
-            resp_lots = self.auth.session.post(
-                f"{self.base}/saudeweb/AMFB/MOV/acerto.ajax.asp",
-                data={"funcao": "ObterLoteMaterial",
-                      "dados": f"{self.estoque}|#{material_recnum}|#true|#false"},
-                timeout=60,
-            )
-            lot_matches = re.findall(r"<recnum><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
-            lote_descs = re.findall(r"<lote><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
-            validades = re.findall(r"<data_validade><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
-
-            if not lot_matches:
-                msg = f"Material {material_recnum} possui controle de lote, mas nenhum lote cadastrado no Olostech."
-                self._log(f"  {msg} Item pulado.", "WARN")
-                return None, msg
-
-            resp_disp = self.auth.session.post(
-                f"{self.base}/saudeweb/amfb/fb/dispensacao.ajax.asp",
-                data={"funcao": "obterLotesMedicamento", "dados": f"{material_recnum}#"},
-                timeout=60,
-            )
-            dispensable = set(re.findall(r"<loterecnum><!\[CDATA\[([^\]]*)\]\]>", resp_disp.text))
-            self._log(f"  Lots: {len(lot_matches)} no acerto, {len(dispensable)} dispensável(is)")
-
-            candidates = [l for l in lot_matches if l in dispensable]
-            if len(candidates) == 1:
-                idx = lot_matches.index(candidates[0])
-                loterecnum = candidates[0]
-                lote_desc = lote_descs[idx] if idx < len(lote_descs) else ""
-                lote_validade = validades[idx] if idx < len(validades) else ""
-                self._log(f"  Auto-selected lot: {loterecnum} ({lote_desc}, validade: {lote_validade})")
-            elif len(candidates) > 1:
-                lot_list = ", ".join([
-                    lote_descs[lot_matches.index(l)] if lot_matches.index(l) < len(lote_descs) else l
-                    for l in candidates
-                ])
-                msg = f"Material possui multiplos lotes dispensáveis: {lot_list}. Selecione um lote no Olostech antes de continuar."
-                self._log(f"  {msg}", "ERROR")
-                return False, msg
-            else:
-                lot_list = ", ".join([
-                    f"{lote_descs[i] if i < len(lote_descs) else lot_matches[i]} (val. {validades[i] if i < len(validades) else '?'})"
-                    for i in range(len(lot_matches))
-                ])
-                msg = (f"Nenhum lote acessível para o material {material_recnum} "
-                       f"(lotes existentes: {lot_list} — vencidos ou próximos do vencimento).")
-                self._log(f"  {msg} Item pulado.", "WARN")
-                return None, msg
+        self._log(f"  Material {material_recnum}: controlalote={controlalote or '?'}")
 
         # Step 5: GravarAcertoEstoque - add the stock
         # Field order from JS: true, motivo, date, estoque, material,
@@ -477,7 +414,8 @@ class Dispensing:
             timeout=60,
         )
         
-        # Get lot info (critical for lot-controlled items like insulin)
+        # Get lot info (critical for lot-controlled items like insulin).
+        # obterLotesMedicamento only lists lots WITH stock.
         loterecnum = ""
         lote_desc = ""
         lote_validade = ""
@@ -489,19 +427,17 @@ class Dispensing:
                       "dados": f"{material_recnum}#"},
                 timeout=60,
             )
-            # Extract all lot fields
-            lot_match = re.search(r"<loterecnum><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
-            lote_desc_match = re.search(r"<lote><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
-            validade_match = re.search(r"<data_validade><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
-            lot_count = len(re.findall(
+            disp_matches = re.findall(
                 r"<loterecnum><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text
-            ))
-            self._log(
-                f"  Lots: {lot_count} encontrado(s), capturado: "
-                f"{lot_match.group(1) if lot_match else '-'}"
             )
-            if lot_match:
-                loterecnum = lot_match.group(1)
+            self._log(
+                f"  Lots: {len(disp_matches)} encontrado(s), capturado: "
+                f"{disp_matches[0] if disp_matches else '-'}"
+            )
+            if disp_matches:
+                lote_desc_match = re.search(r"<lote><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
+                validade_match = re.search(r"<data_validade><!\[CDATA\[([^\]]*)\]\]>", resp_lots.text)
+                loterecnum = disp_matches[0]
                 lote_desc = lote_desc_match.group(1) if lote_desc_match else ""
                 lote_validade = validade_match.group(1) if validade_match else ""
                 self._log(f"  Lot: {loterecnum} ({lote_desc}, validade: {lote_validade})")
@@ -513,13 +449,51 @@ class Dispensing:
                 timeout=60,
             )
 
+        # No lot with stock: fall back to the acerto lot list (ObterLoteMaterial
+        # returns lots regardless of stock). A zero-stock lot — even past
+        # validity — accepts stock via acerto and dispenses fine afterwards
+        # (verified manually).
+        if is_lot_controlled and not loterecnum:
+            resp_acerto = self.auth.session.post(
+                f"{self.base}/saudeweb/AMFB/MOV/acerto.ajax.asp",
+                data={"funcao": "ObterLoteMaterial",
+                      "dados": f"{self.estoque}|#{material_recnum}|#true|#false"},
+                timeout=60,
+            )
+            acerto_lots = re.findall(r"<recnum><!\[CDATA\[([^\]]*)\]\]>", resp_acerto.text)
+            lote_descs = re.findall(r"<lote><!\[CDATA\[([^\]]*)\]\]>", resp_acerto.text)
+            validades = re.findall(r"<data_validade><!\[CDATA\[([^\]]*)\]\]>", resp_acerto.text)
+
+            if not acerto_lots:
+                msg = (f"Material {material_recnum} possui controle de lote, "
+                       f"mas nenhum lote cadastrado no Olostech.")
+                self._log(f"  {msg} Item pulado.", "WARN")
+                return None
+
+            # Auto-pick the first lot, mirroring the with-stock behavior
+            # (first lot wins there too). Stock lands in it via acerto and
+            # it dispenses fine.
+            loterecnum = acerto_lots[0]
+            lote_desc = lote_descs[0] if lote_descs else ""
+            lote_validade = validades[0] if validades else ""
+            if len(acerto_lots) > 1:
+                self._log(
+                    f"  Multiple zero-stock lots ({len(acerto_lots)}), "
+                    f"auto-selected first: {loterecnum} "
+                    f"({lote_desc}, validade: {lote_validade})"
+                )
+            else:
+                self._log(
+                    f"  Auto-selected zero-stock lot: {loterecnum} "
+                    f"({lote_desc}, validade: {lote_validade})"
+                )
+
         # Check stock before attempting dispensation
         current_saldo = int(saldo) if str(saldo).isdigit() else 0
         if current_saldo < quantity:
             self._log(f"  Insufficient stock (have {current_saldo}, need {quantity})")
             success, error_msg = self.add_stock(material_recnum, quantity, current_saldo,
-                                              loterecnum, lote_desc, lote_validade,
-                                              material_lot_controlled=is_lot_controlled)
+                                              loterecnum, lote_desc, lote_validade)
             if success is None:
                 self._log(f"  Skipping item: {error_msg}", "WARN")
                 return None
