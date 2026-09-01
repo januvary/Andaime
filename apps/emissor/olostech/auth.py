@@ -307,10 +307,15 @@ class OlostechAuth:
         self.active_domain = domain_match.group(1) if domain_match else None
         self._log(f"  verifica.asp: redirecionado para {self.active_domain}")
 
-        self.session.get(redirect_url, timeout=60)
+        redirect_resp = self.session.get(redirect_url, timeout=60)
 
-        lst_match = re.search(
-            r'name="lstAcesso"[^>]*value="([^"]+)"', resp.text
+        # lstAcesso fica na página do redirect (domínio w[x]), não no
+        # verifica.asp. O valor embute o id2 da máquina — o fallback da
+        # configuração só vale para a máquina que o gerou.
+        lst_match = (
+            re.search(r'name="lstAcesso"[^>]*value="([^"]+)"', redirect_resp.text)
+            or re.search(r'value="([^"]+)"[^>]*name="lstAcesso"', redirect_resp.text)
+            or re.search(r'name="lstAcesso"[^>]*value="([^"]+)"', resp.text)
         )
         if lst_match:
             self.lst_acesso = lst_match.group(1)
