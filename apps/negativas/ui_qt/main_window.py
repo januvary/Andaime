@@ -1,7 +1,10 @@
 """UI do Sistema de Negativas - PySide6 com preview dinâmico."""
 
+import sys
 import webbrowser
 import copy
+from pathlib import Path
+from datetime import datetime
 from typing import Optional, Dict, List
 
 from PySide6.QtCore import Qt, QTimer, QDate
@@ -46,6 +49,8 @@ from negativas.ui_qt.theme import (
 )
 
 
+from negativas.database.negativas_database import NegativasDatabase
+from negativas.config import NegativasConfig
 from negativas.models import ItemSelecionado, NegativaData
 from negativas.constants import (
     APP_DISPLAY_NAME,

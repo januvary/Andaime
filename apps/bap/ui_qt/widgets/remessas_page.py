@@ -951,14 +951,11 @@ class RemessasPage(QWidget):
         if processo.lote_id is None:
             return
         selected = self._select_lote_dialog(processo.lote_id)
-        if selected is None or getattr(selected, "id", None) is None:
-            return
-        selected_id = getattr(selected, "id", None)
-        if selected_id is None:
+        if selected is None:
             return
         if self._db is None:
             return
-        self._db.reassign_processo_lote(processo_id, selected_id)
+        self._db.reassign_processo_lote(processo_id, selected.id)
         self.refresh()
 
     def _select_lote_dialog(self, current_lote_id: object) -> object | None:

@@ -296,6 +296,21 @@ class _Tile(QWidget):
         else:
             event.ignore()
 
+    def _refresh_theme(self) -> None:
+        c = colors()
+        self._normal_style = (
+            f"_Tile {{ background: {c['panel_bg']}; "
+            f"border: 1px solid {c['panel_border']}; "
+            f"border-radius: 6px; }}"
+            f"_Tile:hover {{ border: 1px solid {c['text_dim']}; }}"
+        )
+        self._ghost_style = (
+            f"_Tile {{ background: {c['panel_bg']}; "
+            f"border: 2px dotted {c['text_dim']}; "
+            f"border-radius: 6px; }}"
+        )
+        self.setStyleSheet(self._ghost_style if self._ghost else self._normal_style)
+
     def _copy(self):
         if self._pixmap is not None and not self._pixmap.isNull():
             QApplication.clipboard().setPixmap(self._pixmap)
@@ -500,7 +515,6 @@ class DocumentGrid(QWidget):
         self.setEnabled(not self.is_busy())
 
     def _setup_ui(self):
-        self._apply_style()
         self.setAcceptDrops(True)
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
 
@@ -539,6 +553,7 @@ class DocumentGrid(QWidget):
         self._empty.raise_()
 
         self._add_tile = _AddTile(self._open_file_picker, self)
+        self._apply_style()
         self._rebuild()
 
     def _apply_style(self):
@@ -546,16 +561,16 @@ class DocumentGrid(QWidget):
         self.setStyleSheet(
             f"DocumentGrid {{ background: {c['window_bg']}; }}"
         )
-        if hasattr(self, "_add_tile"):
-            self._add_tile.apply_theme()
-        if hasattr(self, "_empty"):
-            self._empty.setStyleSheet(
-                f"color: {c['text_dim']}; font-size: 14px;"
-            )
+        self._add_tile.apply_theme()
+        self._empty.setStyleSheet(
+            f"color: {c['text_dim']}; font-size: 14px;"
+        )
 
     def refresh_theme(self):
         self._apply_style()
-        self._rebuild()
+        self._add_tile.apply_theme()
+        for tile in self._tiles:
+            tile._refresh_theme()
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls() or event.mimeData().hasFormat(_Tile._INTERNAL_MIME):
@@ -913,7 +928,7 @@ class DocumentGrid(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self._tiles or getattr(self, "_add_tile", None) is not None:
+        if self._tiles or self._add_tile:
             self._relayout()
 
     def _open_preview(self, item: GridItem):

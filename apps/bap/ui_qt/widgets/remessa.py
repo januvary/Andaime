@@ -215,7 +215,7 @@ def _populate_remessa_tree(
         is_past_year = year < current_year
 
         child = QTreeWidgetItem()
-        lote_id = getattr(lote, "id", None)
+        lote_id = lote.id
         is_active = lote_id == active_id
         prefix = "✓ " if is_active else "    "
         count = cnt

@@ -152,6 +152,7 @@ def confirm_past_malote(
     parent: QWidget,
     malote: Malote,
 ) -> MaloteDecision:
+    from andaime.qt.dialogs import scaffold_dialog
 
     dlg, layout = scaffold_dialog(parent, "Malote já enviado")
     layout.addSpacing(4)

@@ -405,8 +405,9 @@ class SS54Database(BaseDatabase):
 
     @db_op("read")
     def get_active_lote(self) -> Optional[Lote]:
+        """Latest unsent lote (DESC to match UI's latest-by-date), or None."""
         row = self._fetch_one(
-            "SELECT * FROM lotes WHERE sent_at IS NULL ORDER BY date ASC LIMIT 1"
+            "SELECT * FROM lotes WHERE sent_at IS NULL ORDER BY date DESC LIMIT 1"
         )
         return Lote.from_row(row) if row else None
 

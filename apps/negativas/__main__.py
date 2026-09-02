@@ -16,7 +16,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 import andaime  # noqa: E402
 from andaime.shutdown import setup_shutdown_handlers  # noqa: E402
 from andaime.updater import get_shared_root  # noqa: E402
-from PySide6.QtGui import QIcon  # noqa: E402
+from PySide6.QtGui import QFont, QIcon  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from negativas.constants import APP_NAME, APP_DISPLAY_NAME

@@ -168,7 +168,7 @@ class Header(QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        if getattr(self, "_novo_btn", None) is not None and getattr(self, "_cycle_btn", None) is not None:
+        if self._novo_btn and self._cycle_btn:
             self._cycle_btn.setFixedWidth(self._novo_btn.width())
 
     # ========== Backend ==========

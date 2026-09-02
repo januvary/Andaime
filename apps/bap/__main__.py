@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import os
 
 
 
@@ -48,6 +49,7 @@ def _start_update_check(window):
 
 
 def main():
+    from pathlib import Path
 
     # Set AppUserModelID + register icon in registry BEFORE QApplication.
     from andaime.win32 import register_taskbar_identity

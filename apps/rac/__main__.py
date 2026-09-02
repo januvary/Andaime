@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -134,7 +135,7 @@ def main():
                       font=FontSpec("Geist", 11, bundled=True))
 
     from PySide6.QtWidgets import QApplication
-    from PySide6.QtGui import QIcon
+    from PySide6.QtGui import QFont, QIcon
 
     from rac.gui.styles import set_theme, get_stylesheet
 

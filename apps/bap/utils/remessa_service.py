@@ -144,15 +144,10 @@ def ensure_remessas(db: SS54Database, root: Path | None = None) -> dict:
 
 
 def ensure_next_open_lote(db: SS54Database, root: Path | None = None) -> dict:
-    """Garante que exista uma remessa aberta (não enviada) para novos processos.
-
-    Chamado após uma remessa ser marcada como enviada. Se já houver uma
-    remessa aberta, não faz nada. Caso contrário, cria a próxima remessa
-    (última data + 14 dias, ajustada ao dia útil). Quando uma nova remessa é
-    criada, arquiva as anteriores. Retorna relatório da operação.
+    """Cria sempre uma nova remessa após envio (última data + 14d, ajustada
+    ao dia útil), ignorando ``sent_at``. A criação dispara o sweep de
+    incompletos. Arquiva as anteriores se ``root`` for passado.
     """
-    if db.get_active_lote() is not None:
-        return {"criados": 0, "archive": {"processos": 0, "arquivados": 0, "erros": 0}}
     created, lote = _ensure_lote_at_next_or_today(db, root, db.get_all_lotes())
     archive_report = {"processos": 0, "arquivados": 0, "erros": 0}
     if created and lote is not None and root is not None:

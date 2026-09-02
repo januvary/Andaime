@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from rac.models import Malote, RegistroItem
 
-from andaime.dates import format_date
+from andaime.dates import parse_date, format_date
 
 
 def format_malote_date(malote: Optional[Malote]) -> str:

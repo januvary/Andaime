@@ -279,7 +279,7 @@ class MainWindow(QMainWindow):
         from andaime.qt.db_runner import run_or_sync
 
         run_or_sync(
-            getattr(self, "_db_runner", None),
+            self._db_runner,
             fn,
             on_done=on_done,
             on_error=on_error,
@@ -333,7 +333,7 @@ class MainWindow(QMainWindow):
     def _init_remessa_with(self, active) -> None:
         self._doc_page.set_remessa_db(self.db)
         self._remessa_page.set_remessa_db(self.db)
-        runner = getattr(self, "_db_runner", None)
+        runner = self._db_runner
         if runner is not None:
             self._remessa_page.set_async_runner(runner)
         self._sender.set_db(self.db)
@@ -798,19 +798,6 @@ class MainWindow(QMainWindow):
             if processo is None:
                 return None
 
-            # Move incompletos/em_analise para a remessa mais recente.
-            if not processo.is_archived and processo.status in (
-                Status.INCOMPLETO, Status.EM_ANALISE
-            ):
-                lotes = self.db.get_all_lotes()
-                latest = lotes[0] if lotes else None
-                if latest is not None and latest.id != processo.lote_id:
-                    reassigned = self.db.reassign_processo_lote(
-                        processo.id, latest.id
-                    )
-                    if reassigned is not None:
-                        processo = reassigned
-
             lote = self.db.get_lote_by_id(processo.lote_id)
             paciente = (
                 self.db.get_paciente_by_id(processo.paciente_id)
@@ -863,7 +850,7 @@ class MainWindow(QMainWindow):
             self.config.set("last_lote_id", active.id)
         # wait=False: o worker pode estar em I/O de rede (scan DRS / Gmail);
         # aguardar congelaria a janela. O close do banco roda no atexit.
-        worker = getattr(self, "_db_worker", None)
+        worker = self._db_worker
         if worker is not None:
             try:
                 worker.shutdown(wait=False)

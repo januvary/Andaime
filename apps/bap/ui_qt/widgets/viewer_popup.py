@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -60,7 +62,7 @@ class ViewerPopup(QDialog):
 
     def __init__(self, items, parent=None, start_index: int = 0, loader: "Callable[[GridItem], bytes | None] | None" = None, grid: "object | None" = None):
         super().__init__(parent)
-        self._items = list(items) if items else []
+        self._items = list(items)
         self._index = max(0, min(start_index, len(self._items) - 1))
         self._img: QImage | None = None
         self._loader = loader
@@ -70,13 +72,13 @@ class ViewerPopup(QDialog):
         self.setWindowTitle("Documento")
         self._setup_ui()
         self._render_index(self._index)
-        self.showFullScreen()
+        self.showMaximized()
 
     def contextMenuEvent(self, event):
-        if self._grid is None or not self._items:
+        if not self._items:
             return
         current = self._items[self._index].tipo_documento
-        exclusions = getattr(self._grid, "_doc_exclusions", set())
+        exclusions = self._grid._doc_exclusions
         menu = build_checkable_menu(
             self,
             items=DOC_TYPE_LABELS,
@@ -87,12 +89,10 @@ class ViewerPopup(QDialog):
         menu.exec(event.globalPos())
 
     def _classify_current(self, doc_type: str) -> None:
-        if self._grid is None or not self._items:
+        if not self._items:
             return
         item = self._items[self._index]
-        classify_method = getattr(self._grid, "_classify", None)
-        if classify_method is not None:
-            classify_method(item, doc_type)
+        self._grid._classify(item, doc_type)
         self._update_type_label()
 
     def _setup_ui(self):
@@ -275,19 +275,17 @@ class ViewerPopup(QDialog):
             QApplication.clipboard().setImage(self._img)
 
     def _rotate_current(self):
-        if self._grid is None or not self._items:
+        if not self._items:
             return
         item = self._items[self._index]
         if self._grid.rotate_item(item):
             self._render_index(self._index)
 
     def _remove_current(self):
-        if self._grid is None or not self._items:
+        if not self._items:
             return
-        item = self._items[self._index]
-        self._items.pop(self._index)
-        if self._grid.items() and item in self._grid.items():
-            self._grid._remove_item(item)
+        item = self._items.pop(self._index)
+        self._grid._remove_item(item)
         if not self._items:
             self.reject()
         else:
