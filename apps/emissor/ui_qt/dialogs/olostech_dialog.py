@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import tempfile
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -85,12 +88,21 @@ class RegistrationWorker(QThread):
             if not auth.user_login():
                 self.finished_with_result.emit(False, "Falha no login")
                 return
-            disp = Dispensing(auth, log_callback=_log_cb)
+            # Falhas de dispensação gravam form+resposta aqui (última falha
+            # da execução) para diagnóstico.
+            debug_path = Path(tempfile.gettempdir()) / (
+                "olostech_debug_"
+                + datetime.now().strftime("%Y%m%d_%H%M%S")
+                + ".html"
+            )
+            disp = Dispensing(auth, log_callback=_log_cb, debug_file=str(debug_path))
             success, message = disp.dispense_retirada(
                 patient_sus=self.patient_sus,
                 professional_code=self.professional_code,
                 items=self.items,
             )
+            if not success and debug_path.exists():
+                _log_cb(f"Debug da falha salvo em: {debug_path}")
             self.finished_with_result.emit(success, message)
         except Exception as e:
             self.finished_with_result.emit(False, f"Erro: {e}")

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
 
 from emissor.olostech.auth import OlostechAuth
 from emissor.olostech.patient_attendance import PatientAttendance
@@ -246,7 +245,7 @@ class Dispensing:
             fields[m.group(1)] = m.group(2)
 
         if not fields or "chavepu" not in fields:
-            self._log(f"  Not found", "ERROR")
+            self._log("  Not found", "ERROR")
             return False
 
         self.chavepu = fields["chavepu"]
@@ -923,6 +922,75 @@ class Dispensing:
         }
         return self.dispense_retirada(patient_sus, professional_code, [item])
 
+    @staticmethod
+    def _model_name_to_action(model_name: str) -> int | None:
+        """Map the server's receita-model name to an action type."""
+        name = (model_name or "").lower()
+        if "talidomida" in name:
+            return 9
+        if "notifica" in name:
+            if re.search(r"receita\s+b\b", name) or name.strip().endswith("b"):
+                return 6
+            if re.search(r"receita\s+a\b", name) or name.strip().endswith("a"):
+                return 7
+            return None
+        if "especial" in name:
+            return 4
+        if "simples" in name or "comum" in name:
+            return 2
+        return None
+
+    def _detect_action_type(self, material_code, current_action, patient_sus):
+        """Find the recipe type the server expects for this material.
+
+        ObterMedicamentoDispensacao returns the material's required recipe
+        model (nome_receita_modelo) regardless of the requested action.
+        Map it to the action type; probe other actions only as fallback.
+        Returns (action, model_name) or None when undeterminable.
+        """
+        mat = self._lookup_material(material_code)
+        if not mat:
+            return None
+        med = mat.get("medicamentorecnum", "")
+        if not med:
+            return current_action, None
+
+        last_vals = {}
+        for action in [current_action] + [a for a in (2, 4, 6, 7, 9) if a != current_action]:
+            # ObterMedicamentoDispensacao only answers with the dispensação
+            # page context loaded — open it (side-effect-free; the
+            # dispensação record is created lazily on first item add).
+            self.open_dispensacao_direta(patient_sus, action, "")
+            # NOTE: this endpoint joins fields with '#|#' (unlike most
+            # others that use '|#') — the browser sends
+            # '546#|#2#|#209519#|#0' and anything else returns empty.
+            resp = self.auth.session.post(
+                f"{self.base}/saudeweb/amfb/fb/dispensacao.ajax.asp",
+                data={"funcao": "ObterMedicamentoDispensacao",
+                      "dados": "#|#".join([str(med), str(action), str(patient_sus), "0"])},
+                timeout=60,
+            )
+            vals = {}
+            for m in re.finditer(r"<(\w+)><!\[CDATA\[([^\]]*)\]\]></\1>", resp.text):
+                vals[m.group(1)] = m.group(2)
+            last_vals = vals or last_vals
+            model_name = vals.get("nome_receita_modelo", "")
+            self._log(
+                f"  Probe acao={action}: modelo={vals.get('modelorecnum', '?')}/"
+                f"'{model_name}' disp={vals.get('disponivelacao', '?')} "
+                f"msg='{vals.get('msg_operador', '')}'"
+            )
+            mapped = self._model_name_to_action(model_name)
+            if mapped is not None:
+                # The material's cadastro dictates the model — trust it over
+                # whatever action we probed with.
+                return mapped, model_name
+        self._log(
+            f"  Modelo de receita não determinado para {material_code} "
+            f"(última resposta: {last_vals.get('nome_receita_modelo', '?')})", "WARN"
+        )
+        return None
+
     def dispense_retirada(self, patient_sus, professional_code, items):
         """Multi-item, multi-type dispensing for a full retirada.
 
@@ -973,6 +1041,40 @@ class Dispensing:
                 [], "Nenhum item com quantidade maior que zero"
             )
 
+        # Step 3b: Auto-detect the recipe type per item — the server only
+        # rejects incompatible action/material pairs at finalize time
+        # ("Ação de Dispensação é incompatível com o Medicamento Informado").
+        # ObterMedicamentoDispensacao tells us upfront which action fits.
+        skipped_action = []
+        adjusted = []
+        for item in valid_items[:]:
+            detected = self._detect_action_type(
+                item["material_code"], item.get("action_type", 2), patient_sus
+            )
+            if detected is None:
+                self._log(
+                    f"  SKIPPED: {item['material_desc']} "
+                    f"(nenhum tipo de receita compatível no Olostech)", "WARN"
+                )
+                skipped_action.append(item["material_desc"])
+                valid_items.remove(item)
+                continue
+            action, model_name = detected
+            if action != item.get("action_type", 2):
+                adjusted.append((item["material_desc"], item.get("action_type", 2), action, model_name))
+                item["action_type"] = action
+        for desc, old, new, model in adjusted:
+            self._log(
+                f"  {desc}: tipo de receita ajustado {old} -> {new} "
+                f"({model or 'auto-detectado'})", "WARN"
+            )
+        if not valid_items:
+            return False, self._rollback_after_failure(
+                [],
+                "Nenhum item com tipo de receita compatível: "
+                + ", ".join(skipped_action),
+            )
+
         groups = {}
         for item in valid_items:
             at = item.get("action_type", 2)
@@ -981,7 +1083,6 @@ class Dispensing:
             groups[at].append(item)
 
         self._log(f"\n=== Dispensing {len(valid_items)} item(s) in {len(groups)} group(s) ===")
-
         # Track successes; failed holds (desc, error) tuples. Items skipped
         # for lack of an accessible lot (None from add_item) are excluded
         # from failed so they don't trigger a rollback of the whole retirada.
@@ -1028,7 +1129,8 @@ class Dispensing:
                 succeeded, f"Erro durante a dispensação: {e}"
             )
 
-        # Report results
+        # Report results (skips include no-lot and incompatible-recipe items)
+        skipped_no_lot.extend(skipped_action)
         self._log(
             f"\n=== Results: {len(succeeded)} succeeded, {len(failed)} failed, "
             f"{len(skipped_no_lot)} skipped ==="
@@ -1055,8 +1157,7 @@ class Dispensing:
         if not succeeded and skipped_no_lot:
             return False, self._rollback_after_failure(
                 succeeded,
-                "Nenhum item dispensado. Itens pulados por falta de lote "
-                "acessível: " + ", ".join(skipped_no_lot),
+                "Nenhum item dispensado. Itens pulados: " + ", ".join(skipped_no_lot),
             )
 
         # Step 5: Conclude. Exceptions here only surface the message without
@@ -1071,7 +1172,7 @@ class Dispensing:
 
         msg = "Registrado com sucesso"
         if skipped_no_lot:
-            msg += f". Itens pulados (sem lote acessível): {', '.join(skipped_no_lot)}"
+            msg += f". Itens pulados: {', '.join(skipped_no_lot)}"
         return True, msg
 
     def _rollback_after_failure(self, succeeded: list, message: str) -> str:
