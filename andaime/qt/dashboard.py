@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -528,6 +528,21 @@ class DashboardWindow(QMainWindow):
 
         self._setup_ui()
         self._connect_databases()
+        self._setup_shortcuts()
+
+    # ----------------------------------------------------------- shortcuts
+
+    def _setup_shortcuts(self) -> None:
+        """Registra atalhos de teclado para as ações do painel."""
+        QShortcut(QKeySequence("Ctrl+N"), self, self._add_record)
+        QShortcut(QKeySequence("Delete"), self, self._delete_record)
+        QShortcut(QKeySequence("Ctrl+S"), self, self._save_changes)
+        QShortcut(QKeySequence("Ctrl+E"), self, self._export_table)
+        QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
+
+    def _focus_search(self) -> None:
+        """Foca o campo de pesquisa do painel."""
+        self._search_entry.setFocus()
 
     # ---------------------------------------------------------------- UI
 
