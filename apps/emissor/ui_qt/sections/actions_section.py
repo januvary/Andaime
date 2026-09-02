@@ -30,9 +30,9 @@ class ActionsSection(QtSection):
         self._save_data_btn = make_button("Salvar Dados", "action-1", self)
         self._print_btn = make_button("Imprimir", "action-2", self)
         self._save_pdf_btn = make_button("Salvar Recibo", "action-3", self)
-        self._olostech_btn = make_button("Olostech", "action-3", self)
+        self._olostech_btn = make_button("Olostech", "action-4", self)
         self._open_pdf_btn = make_button("Abrir PDF", "action-4", self)
-        self._scan_btn = make_button("Digitalizar", "action-4", self)
+        self._scan_btn = make_button("Digitalizar", "action-3", self)
 
         self._olostech_enabled = False
         self._current_retirada = None
@@ -57,8 +57,8 @@ class ActionsSection(QtSection):
         # Pesos verticais espelhando ActionsSectionV3 (CTk)
         grid.setRowStretch(0, 2)  # Salvar Dados
         grid.setRowStretch(1, 5)  # Imprimir
-        grid.setRowStretch(2, 4)  # Salvar PDF + Registrar Olostech
-        grid.setRowStretch(3, 2)  # Abrir PDF + Digitalizar
+        grid.setRowStretch(2, 4)  # Salvar PDF + Digitalizar
+        grid.setRowStretch(3, 2)  # Abrir PDF + Olostech
 
         # Salvar Dados: mais estreito, centralizado horizontalmente
         self._save_data_btn.setMinimumWidth(150)
@@ -81,19 +81,19 @@ class ActionsSection(QtSection):
         self._print_btn.clicked.connect(self.app.handle_print)
         grid.addWidget(self._print_btn, 1, 0, 1, 2)
 
-        # Salvar Recibo + Registrar Olostech na mesma linha
+         # Salvar Recibo + Digitalizar na mesma linha
         self._save_pdf_btn.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self._save_pdf_btn.clicked.connect(self.app.handle_save_pdf)
         grid.addWidget(self._save_pdf_btn, 2, 0)
 
-        self._olostech_btn.setEnabled(False)
-        self._olostech_btn.setSizePolicy(
+        self._scan_btn.setEnabled(False)
+        self._scan_btn.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self._olostech_btn.clicked.connect(self.app.handle_olostech_registration)
-        grid.addWidget(self._olostech_btn, 2, 1)
+        self._scan_btn.clicked.connect(self.app.handle_scan)
+        grid.addWidget(self._scan_btn, 2, 1)
 
         self._open_pdf_btn.setEnabled(False)
         self._open_pdf_btn.setSizePolicy(
@@ -102,14 +102,14 @@ class ActionsSection(QtSection):
         self._open_pdf_btn.clicked.connect(self.app.handle_open_pdf)
         grid.addWidget(self._open_pdf_btn, 3, 0)
 
-        # Digitalizar: exige paciente + data selecionados (começa desabilitado)
+        # Olostech: exige paciente + data selecionados (começa desabilitado)
         # Mesma linha e cor de "Abrir PDF"
-        self._scan_btn.setEnabled(False)
-        self._scan_btn.setSizePolicy(
+        self._olostech_btn.setEnabled(False)
+        self._olostech_btn.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self._scan_btn.clicked.connect(self.app.handle_scan)
-        grid.addWidget(self._scan_btn, 3, 1)
+        self._olostech_btn.clicked.connect(self.app.handle_olostech_registration)
+        grid.addWidget(self._olostech_btn, 3, 1)
 
         content.addLayout(grid, stretch=1)
 

@@ -18,7 +18,6 @@ import hashlib
 import os
 import platform
 import re
-import socket
 import subprocess
 import sys
 import time

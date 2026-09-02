@@ -270,13 +270,19 @@ class QtApp(QMainWindow):
             "Ctrl+S", self.save_patient_data, self.actions_section._save_data_btn
         )
         self.shortcuts.bind(
-            "Ctrl+G", self.handle_print, self.actions_section._print_btn
+            "Ctrl+E", self.handle_print, self.actions_section._print_btn
         )
         self.shortcuts.bind(
-            "Ctrl+F", self.handle_open_pdf, self.actions_section._open_pdf_btn
+            "Ctrl+G", self.handle_olostech_registration, self.actions_section._olostech_btn
+        )
+        self.shortcuts.bind(
+            "Ctrl+R", self.handle_save_pdf, self.actions_section._save_pdf_btn
+        )
+        self.shortcuts.bind(
+            "Ctrl+H", self.handle_open_pdf, self.actions_section._open_pdf_btn
         )
         self.shortcuts.bind("Ctrl+D", self.handle_scan, self.actions_section._scan_btn)
-        self.shortcuts.bind("Ctrl+R", self.search_section.focus_search)
+        self.shortcuts.bind("Ctrl+F", self.search_section.focus_search)
         self.shortcuts.bind("Ctrl+T", self.dates_section.focus_retirada)
 
     # ========== Tema ==========
@@ -853,10 +859,9 @@ class QtApp(QMainWindow):
 
     def launch_dashboard(self) -> None:
         """Abre o Dashboard interno como janela filha."""
-        from pathlib import Path
 
         from andaime.paths import get_root_directory
-        from andaime.qt.dashboard import DashboardService, open_dashboard
+        from andaime.qt.dashboard import DashboardService, SearchJoin, open_dashboard
         from emissor.utils.masks import apply_mask_for_field
 
         existing = getattr(self, "_dashboard_window", None)
@@ -866,7 +871,30 @@ class QtApp(QMainWindow):
             return
 
         data_dir = get_root_directory() / "data"
-        service = DashboardService.from_directory(data_dir)
+        service = DashboardService.from_directory(
+            data_dir,
+            search_joins={
+                "retirada_items": [
+                    SearchJoin(
+                        table="items_catalog",
+                        on="retirada_items.item_id = items_catalog.item_id",
+                        search_columns=["items_catalog.descricao"],
+                    ),
+                ],
+                "retiradas": [
+                    SearchJoin(
+                        table="retirada_items",
+                        on="retiradas.id = retirada_items.retirada_id",
+                        search_columns=["retirada_items.descricao"],
+                    ),
+                    SearchJoin(
+                        table="items_catalog",
+                        on="retirada_items.item_id = items_catalog.item_id",
+                        search_columns=["items_catalog.descricao"],
+                    ),
+                ],
+            },
+        )
         self._dashboard_window = open_dashboard(
             self,
             service,

@@ -5,7 +5,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Any
 
-from andaime.pdf import PDFConfig as BasePDFConfig, CM
+from andaime.pdf import PDFConfig as BasePDFConfig
 from reportlab.lib import colors
 
 from emissor.utils.date_utils import get_receitas_aviso
