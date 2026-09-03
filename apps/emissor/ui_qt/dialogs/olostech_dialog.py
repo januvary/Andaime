@@ -88,8 +88,7 @@ class RegistrationWorker(QThread):
             if not auth.user_login():
                 self.finished_with_result.emit(False, "Falha no login")
                 return
-            # Falhas de dispensação gravam form+resposta aqui (última falha
-            # da execução) para diagnóstico.
+            # Failed dispensations dump form+response here for diagnosis.
             debug_path = Path(tempfile.gettempdir()) / (
                 "olostech_debug_"
                 + datetime.now().strftime("%Y%m%d_%H%M%S")

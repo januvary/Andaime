@@ -233,6 +233,20 @@ class NegativasDatabase(BaseDatabase):
     def get_modelo_por_tipo(self, tipo: str) -> Optional[ModeloTexto]:
         return self._modelos_cache.get(tipo)
 
+    # Categoria do formulário -> tipo em modelos_texto.
+    # "CAPS II" não vira "fornecimento_caps ii" — o modelo é "fornecimento_caps".
+    _CATEGORIA_MODELO = {
+        "CEAF": "fornecimento_ceaf",
+        "USAFA": "fornecimento_usafa",
+        "CAPS II": "fornecimento_caps",
+    }
+
+    @db_op("read")
+    def get_modelo_por_categoria(self, categoria: str) -> Optional[ModeloTexto]:
+        """Retorna o modelo de fornecimento para uma categoria do formulário."""
+        tipo = self._CATEGORIA_MODELO.get(categoria)
+        return self.get_modelo_por_tipo(tipo) if tipo else None
+
     @db_op("read")
     def get_todos_modelos(self) -> List[ModeloTexto]:
         """Retorna todos os modelos de texto."""

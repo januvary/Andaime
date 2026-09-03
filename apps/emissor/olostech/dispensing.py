@@ -448,10 +448,8 @@ class Dispensing:
                 timeout=60,
             )
 
-        # No lot with stock: fall back to the acerto lot list (ObterLoteMaterial
-        # returns lots regardless of stock). A zero-stock lot — even past
-        # validity — accepts stock via acerto and dispenses fine afterwards
-        # (verified manually).
+        # No lot with stock: fall back to the acerto lot list. A zero-stock
+        # lot — even past validity — accepts stock and dispenses fine.
         if is_lot_controlled and not loterecnum:
             resp_acerto = self.auth.session.post(
                 f"{self.base}/saudeweb/AMFB/MOV/acerto.ajax.asp",
@@ -469,9 +467,7 @@ class Dispensing:
                 self._log(f"  {msg} Item pulado.", "WARN")
                 return None
 
-            # Auto-pick the first lot, mirroring the with-stock behavior
-            # (first lot wins there too). Stock lands in it via acerto and
-            # it dispenses fine.
+            # Auto-pick the first lot (first lot wins with stock too).
             loterecnum = acerto_lots[0]
             lote_desc = lote_descs[0] if lote_descs else ""
             lote_validade = validades[0] if validades else ""
@@ -943,9 +939,6 @@ class Dispensing:
     def _detect_action_type(self, material_code, current_action, patient_sus):
         """Find the recipe type the server expects for this material.
 
-        ObterMedicamentoDispensacao returns the material's required recipe
-        model (nome_receita_modelo) regardless of the requested action.
-        Map it to the action type; probe other actions only as fallback.
         Returns (action, model_name) or None when undeterminable.
         """
         mat = self._lookup_material(material_code)
@@ -957,13 +950,10 @@ class Dispensing:
 
         last_vals = {}
         for action in [current_action] + [a for a in (2, 4, 6, 7, 9) if a != current_action]:
-            # ObterMedicamentoDispensacao only answers with the dispensação
-            # page context loaded — open it (side-effect-free; the
-            # dispensação record is created lazily on first item add).
+            # Endpoint only answers with the dispensação page loaded; the
+            # record itself is created lazily on first item add.
             self.open_dispensacao_direta(patient_sus, action, "")
-            # NOTE: this endpoint joins fields with '#|#' (unlike most
-            # others that use '|#') — the browser sends
-            # '546#|#2#|#209519#|#0' and anything else returns empty.
+            # This endpoint joins fields with '#|#', not '|#'.
             resp = self.auth.session.post(
                 f"{self.base}/saudeweb/amfb/fb/dispensacao.ajax.asp",
                 data={"funcao": "ObterMedicamentoDispensacao",
@@ -982,8 +972,7 @@ class Dispensing:
             )
             mapped = self._model_name_to_action(model_name)
             if mapped is not None:
-                # The material's cadastro dictates the model — trust it over
-                # whatever action we probed with.
+                # The cadastro dictates the model — trust it.
                 return mapped, model_name
         self._log(
             f"  Modelo de receita não determinado para {material_code} "
@@ -1041,10 +1030,8 @@ class Dispensing:
                 [], "Nenhum item com quantidade maior que zero"
             )
 
-        # Step 3b: Auto-detect the recipe type per item — the server only
-        # rejects incompatible action/material pairs at finalize time
-        # ("Ação de Dispensação é incompatível com o Medicamento Informado").
-        # ObterMedicamentoDispensacao tells us upfront which action fits.
+        # Step 3b: detect the recipe type per item — the server only
+        # rejects incompatible pairs at finalize time.
         skipped_action = []
         adjusted = []
         for item in valid_items[:]:

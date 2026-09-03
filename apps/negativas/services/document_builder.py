@@ -134,9 +134,7 @@ class DocumentBuilder:
         self, item: ItemSelecionado, medicamentos_cache: dict
     ) -> str:
         """Constrói HTML para medicamentos padronizados."""
-        modelo_obj = self.db.get_modelo_por_tipo(
-            f"fornecimento_{item.categoria.lower()}"
-        )
+        modelo_obj = self.db.get_modelo_por_categoria(item.categoria)
         modelo_texto = modelo_obj.texto if modelo_obj else ""
 
         parts = [f"<p><b>{item.nome}</b>: {modelo_texto}"]

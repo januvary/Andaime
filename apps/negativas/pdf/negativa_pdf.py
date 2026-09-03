@@ -261,9 +261,7 @@ class NegativaPDF:
     def _build_medicamento(self, item, ceaf_cache, text_style, center_bold) -> list:
         from reportlab.platypus import Paragraph
 
-        modelo_obj = self.db.get_modelo_por_tipo(
-            f"fornecimento_{item.categoria.lower()}"
-        )
+        modelo_obj = self.db.get_modelo_por_categoria(item.categoria)
         modelo_texto = modelo_obj.texto if modelo_obj else ""
 
         parts = [f"<b>{item.nome}</b>: {modelo_texto}"]
