@@ -10,7 +10,6 @@ Os handlers rodam após o loop de eventos, fora da thread de UI.
 import atexit
 import signal
 import sys
-from contextlib import suppress
 from typing import Any, Callable, List, Tuple, Optional
 
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
@@ -44,9 +43,11 @@ def _run_cleanup_handlers() -> None:
     # Close log file handlers first to avoid "I/O on closed file" errors
     # when logging handlers are torn down during shutdown.
     for handler in logging.root.handlers.copy():
-        with suppress(Exception):
+        try:
             handler.close()
             logging.root.removeHandler(handler)
+        except OSError:
+            pass
 
     for cleanup_func, name in reversed(_cleanup_handlers):  # reverse order
         try:

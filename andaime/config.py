@@ -98,7 +98,7 @@ class ConfigManager:
                 level=ErrorLevel.INFO,
                 context="Configuration",
             )
-        except Exception as e:
+        except OSError as e:
             ErrorHandler.handle_error(
                 e,
                 context="Configuration",
@@ -133,13 +133,6 @@ class ConfigManager:
             type(self)._save_to_file(type(self)._config)
             return True
         except (ValueError, TypeError):
-            return False
-        except Exception as e:
-            ErrorHandler.log(
-                f"Falha ao atualizar config: {e}",
-                level=ErrorLevel.ERROR,
-                context="Configuration",
-            )
             return False
 
     def get_all(self) -> Any:

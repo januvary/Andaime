@@ -354,8 +354,7 @@ class QtConfigDialog(QDialog):
 
         for label, callback in self._center_buttons:
             btn = make_button(label, "flat", self)
-            if callback is not None:
-                btn.clicked.connect(callback)
+            btn.clicked.connect(callback)
             btn_row.addWidget(btn)
 
         if self._center_buttons:

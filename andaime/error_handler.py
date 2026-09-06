@@ -53,10 +53,10 @@ class ErrorHandler:
         return context if isinstance(context, str) else str(context)
 
     def __init__(self) -> None:
-        if not self._initialized and self._logger is None:
+        if self._logger is None:
             self._logger = logging.getLogger("andaime-fallback")
             self._logger.setLevel(logging.DEBUG)
-            if not self._logger.handlers and sys.stdout is not None:
+            if not self._logger.handlers:
                 handler = logging.StreamHandler(sys.stdout)
                 handler.setLevel(logging.INFO)
                 handler.setFormatter(
@@ -79,22 +79,20 @@ class ErrorHandler:
             datefmt="%Y-%m-%d %H:%M:%S",
         )
 
-        if sys.stdout is not None:
-            console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setLevel(logging.INFO)
-            console_handler.setFormatter(formatter)
-            cls._logger.addHandler(console_handler)
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        cls._logger.addHandler(console_handler)
 
         if root is not None:
-            with suppress(Exception):
-                log_dir = root / "data"
-                log_dir.mkdir(parents=True, exist_ok=True)
-                log_file = log_dir / f"{app_name.lower()}.log"
+            log_dir = root / "data"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / f"{app_name.lower()}.log"
 
-                file_handler = logging.FileHandler(str(log_file), encoding="utf-8")
-                file_handler.setLevel(logging.DEBUG)
-                file_handler.setFormatter(formatter)
-                cls._logger.addHandler(file_handler)
+            file_handler = logging.FileHandler(str(log_file), encoding="utf-8")
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            cls._logger.addHandler(file_handler)
 
         cls._initialized = True
 
@@ -264,24 +262,6 @@ class ErrorHandler:
             return None
 
     @staticmethod
-    def _setup_logging() -> None:
-        if ErrorHandler._logger is None:
-            ErrorHandler._logger = logging.getLogger("andaime-fallback")
-            ErrorHandler._logger.setLevel(logging.DEBUG)
-            if not ErrorHandler._logger.handlers and sys.stdout is not None:
-                handler = logging.StreamHandler(sys.stdout)
-                handler.setLevel(logging.INFO)
-                handler.setFormatter(
-                    logging.Formatter(
-                        "[%(asctime)s] [%(levelname)s] %(message)s",
-                        datefmt="%Y-%m-%d %H:%M:%S",
-                    )
-                )
-                ErrorHandler._logger.addHandler(handler)
-
-    @staticmethod
     def get_logger() -> logging.Logger:
-        handler = ErrorHandler()
-        if handler._logger is None:
-            handler._setup_logging()
-        return handler._logger  # type: ignore[return-value]
+        ErrorHandler()
+        return ErrorHandler._logger  # type: ignore[return-value]

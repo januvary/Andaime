@@ -7,23 +7,24 @@ Provides holiday-aware date adjustments using Brazil/SP national holidays
 and optional pontos facultativos (optional holidays) loaded from JSON.
 """
 
-import json
 import re
 import shutil
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import holidays as _holidays_lib
 
-from typing import cast
-
 from andaime.paths import get_root_directory
+from andaime.pontos import PontosStore
 
 
 class DateCalculator:
     _holidays_cache: set[date] | None = None
 
     @staticmethod
-    def _load_pontos_facultativos() -> dict[str, list[str]]:
+    def _resolve_pontos_path() -> Path:
+        """Return the user's ``pontos_facultativos.json``, seeding from
+        bundled or package data if it doesn't exist yet."""
         root_dir = get_root_directory()
         user_path = root_dir / "data" / "pontos_facultativos.json"
         bundled_path = root_dir / "_internal" / "data" / "pontos_facultativos.json"
@@ -32,41 +33,18 @@ class DateCalculator:
             user_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(bundled_path, user_path)
 
-        config_path = user_path if user_path.exists() else bundled_path
-
-        if not config_path.exists():
+        if not user_path.exists():
             try:
                 import andaime.data as _pkg_data
-                from pathlib import Path
 
                 pkg_path = Path(_pkg_data.__file__).parent / "pontos_facultativos.json"
                 if pkg_path.exists():
                     user_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(pkg_path, user_path)
-                    config_path = user_path
-            except Exception:
+            except (ImportError, OSError):
                 pass
 
-        if not config_path.exists():
-            return {}
-
-        try:
-            with config_path.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-                return cast("dict[str, list[str]]", data.get("pontos_facultativos", {}))
-        except (json.JSONDecodeError, Exception):
-            return {}
-
-    @staticmethod
-    def _convert_pontos_to_dates(year: int, pontos_list: list[str]) -> set[date]:
-        dates: set[date] = set()
-        for date_str in pontos_list:
-            try:
-                day, month = map(int, date_str.split("/"))
-                dates.add(date(year, month, day))
-            except (ValueError, AttributeError):
-                continue
-        return dates
+        return user_path
 
     @staticmethod
     def get_holidays() -> set[date]:
@@ -82,18 +60,12 @@ class DateCalculator:
             try:
                 br_holidays = _holidays_lib.country_holidays("BR", subdiv="SP")
                 holidays_set.update(br_holidays.keys())
-            except Exception:
+            except (ImportError, AttributeError, TypeError):
                 pass
 
-        pontos_data = DateCalculator._load_pontos_facultativos()
-        for year_str, pontos_list in pontos_data.items():
-            try:
-                year = int(year_str)
-                holidays_set.update(
-                    DateCalculator._convert_pontos_to_dates(year, pontos_list)
-                )
-            except ValueError:
-                continue
+        pontos_path = DateCalculator._resolve_pontos_path()
+        store = PontosStore(pontos_path)
+        holidays_set.update(store.get_all_dates())
 
         DateCalculator._holidays_cache = holidays_set
         return holidays_set

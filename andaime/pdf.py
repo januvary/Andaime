@@ -11,8 +11,10 @@ Facade sobre as melhores bibliotecas por tarefa:
 
 from __future__ import annotations
 
+import hashlib
 import io
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Union
 
@@ -70,7 +72,12 @@ def extract_page(src: Union[bytes, str, Path], page: int) -> bytes:
     return buf.getvalue()
 
 
-def merge_pdfs(conteudos: Iterable[Union[bytes, str, Path]], output_path: str) -> str:
+def merge_pdfs(
+    conteudos: Iterable[Union[bytes, str, Path]],
+    output_path: str,
+    *,
+    hash_algo: "hashlib._Hash | None" = None,
+) -> str:
     """Concatena vários PDFs em um arquivo."""
     from pypdf import PdfWriter
 
@@ -80,8 +87,32 @@ def merge_pdfs(conteudos: Iterable[Union[bytes, str, Path]], output_path: str) -
             continue
         writer.append(open_pdf(blob))
     with open(output_path, "wb") as f:
-        writer.write(f)
+        if hash_algo is not None:
+            _write_hashing(writer, f, hash_algo)
+        else:
+            writer.write(f)
     return output_path
+
+
+class _HashingWriter:
+    """Wrapper que repassa ``write`` ao arquivo e ao hash ao mesmo tempo."""
+
+    __slots__ = ("_f", "_hash")
+
+    def __init__(self, f, hash_algo):
+        self._f = f
+        self._hash = hash_algo
+
+    def write(self, data: bytes) -> int:
+        self._hash.update(data)
+        return self._f.write(data)
+
+    def __getattr__(self, name):
+        return getattr(self._f, name)
+
+
+def _write_hashing(writer, f, hash_algo):
+    writer.write(_HashingWriter(f, hash_algo))
 
 
 # ---------------------------------------------------------------------------
@@ -283,9 +314,6 @@ def load_svg_drawing(
 # ---------------------------------------------------------------------------
 # Configuração e estilos base para criação de PDF (reportlab)
 # ---------------------------------------------------------------------------
-
-
-from dataclasses import dataclass
 
 
 @dataclass

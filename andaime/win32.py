@@ -46,5 +46,5 @@ def register_taskbar_identity(
         ctypes.windll.shell32.SHChangeNotify(
             SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None
         )
-    except Exception:
+    except (OSError, AttributeError):
         pass
