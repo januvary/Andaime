@@ -191,7 +191,7 @@ class TwainBackend:
                 # xfer_image_natively) which gives more control over driver
                 # UI than the convenience acquire() wrapper.
                 images = self._do_acquire(src, twain, dpi)
-                return [img for img in images if img is not None]
+                return images
             finally:
                 try:
                     src.close()

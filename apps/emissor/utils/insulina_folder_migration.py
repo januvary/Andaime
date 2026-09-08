@@ -24,6 +24,7 @@ from pathlib import Path
 
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from andaime.paths import find_parent_dir
+from andaime.text import to_upper_normalized
 
 from emissor.utils.paths import (
     INSULINA_PARENT_FOLDER,
@@ -45,9 +46,14 @@ def _log(level: ErrorLevel, msg: str) -> None:
 
 
 def _drop_empty_duplicate(parent: Path, original_name: str) -> None:
-    """Remove duplicata vazia ou avisa se não vazia."""
-    duplicate = parent / original_name
-    if not (duplicate.exists() and duplicate.is_dir()):
+    """Remove duplicata vazia ou avisa se não vazia (match case/acento-insensível)."""
+    key = to_upper_normalized(original_name)
+    duplicate: Path | None = None
+    for entry in sorted(parent.iterdir()):
+        if entry.is_dir() and to_upper_normalized(entry.name) == key:
+            duplicate = entry
+            break
+    if duplicate is None:
         return
     if _is_empty(duplicate):
         _log(ErrorLevel.INFO, f"duplicata vazia removida: {duplicate}")
@@ -71,7 +77,14 @@ def _move_to_insulina(
 
     _drop_empty_duplicate(parent, original_name)
 
-    if dest.exists():
+    dest_key = to_upper_normalized(dest.name)
+    if dest.exists() or (
+        insulina_dir.is_dir()
+        and any(
+            entry.is_dir() and to_upper_normalized(entry.name) == dest_key
+            for entry in insulina_dir.iterdir()
+        )
+    ):
         _log(ErrorLevel.WARNING, f"destino já existe, pulando: {dest}")
         return
 
@@ -98,10 +111,12 @@ def migrate_insulina_folders(save_root: Path | None) -> None:
 
     try:
         sources: list[tuple[Path, str]] = []
+        parent_key = to_upper_normalized(INSULINA_PARENT_FOLDER)
+        suffix_key = to_upper_normalized(INSULINA_SUFFIX)
         for entry in sorted(parent.iterdir()):
-            if not entry.is_dir() or entry.name == INSULINA_PARENT_FOLDER:
+            if not entry.is_dir() or to_upper_normalized(entry.name) == parent_key:
                 continue
-            if entry.name.endswith(INSULINA_SUFFIX):
+            if to_upper_normalized(entry.name).endswith(suffix_key):
                 original_name = entry.name[: -len(INSULINA_SUFFIX)]
                 sources.append((entry, original_name))
 

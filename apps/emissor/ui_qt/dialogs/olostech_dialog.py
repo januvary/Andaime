@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread, Signal
+from emissor.database.models import Patient, Retirada
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -109,8 +110,8 @@ class RegistrationWorker(QThread):
 
 def show_olostech_dialog(
     parent: QWidget,
-    retirada: Any,
-    patient: Any,
+    retirada: Retirada,
+    patient: Patient,
     olostech_cfg: dict[str, Any],
 ) -> tuple[bool, str] | None:
     """Abre dialogo para coletar tipo de receita por item e registrar.

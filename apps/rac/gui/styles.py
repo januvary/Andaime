@@ -192,6 +192,9 @@ QMainWindow {{
 QWidget#central {{
     background-color: {c["bg_main"]};
 }}
+QLabel {{
+    color: {c["text_primary"]};
+}}
 
 /* -- Section headings -- */
 QLabel[heading="true"] {{
@@ -302,7 +305,7 @@ QPushButton[class="stepper"]:disabled {{
     background-color: transparent;
 }}
 
-/* -- Inputs / ComboBox -- */
+/* -- Inputs / ComboBox / SpinBox -- */
 QLineEdit {{
     border: 1px solid {c["border"]};
     border-radius: 6px;
@@ -315,7 +318,19 @@ QLineEdit {{
     selection-color: {c["selection_text"]};
 }}
 
-QLineEdit:focus {{
+QSpinBox {{
+    border: 1px solid {c["border"]};
+    border-radius: 6px;
+    padding: 5px 8px;
+    background: {c["bg_input"]};
+    color: {c["text_primary"]};
+    font-size: 14px;
+    min-height: 22px;
+    selection-background-color: {c["selection_bg"]};
+    selection-color: {c["selection_text"]};
+}}
+
+QLineEdit:focus, QSpinBox:focus {{
     border-color: #3B82F6;
 }}
 
@@ -426,6 +441,7 @@ QTreeWidget {{
     border: 1px solid {c["border_light"]};
     border-radius: 6px;
     background: {c["bg_card"]};
+    alternate-background-color: {c["table_alt_bg"]};
     color: {c["text_primary"]};
     outline: none;
     padding: 2px;

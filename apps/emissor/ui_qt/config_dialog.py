@@ -104,7 +104,7 @@ class QtConfigDialog(_QtConfigDialog):
 
     def _open_holidays(self) -> None:
         """Abre o diálogo de gerenciamento de feriados facultativos."""
-        from emissor.ui_qt.holidays_dialog import show_holidays_dialog
+        from andaime.qt.holidays import show_holidays_dialog
 
         show_holidays_dialog(self)
 

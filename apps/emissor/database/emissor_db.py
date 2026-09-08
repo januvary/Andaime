@@ -10,6 +10,7 @@ from andaime.database import BaseDatabase, db_op
 from andaime.paths import resolve_db_path
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from andaime.dates import parse_date
+from andaime.text import to_upper_normalized
 from emissor.utils.patient_fields_config import (
     TYPE_ENUM,
     get_all_patient_data_fields,
@@ -64,6 +65,11 @@ class EmissorDatabase(BaseDatabase):
         assert self.conn is not None
         cursor = self.conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON")
+
+        # Registra função de normalização para uso em indexes
+        self.conn.create_function(
+            "to_upper_normalized", 1, to_upper_normalized, deterministic=True
+        )
 
         pacientes_columns = [
             "id INTEGER PRIMARY KEY AUTOINCREMENT",
@@ -161,6 +167,12 @@ class EmissorDatabase(BaseDatabase):
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_retiradas_proxima ON retiradas(data_proxima_retirada)"
         )
+        # Unique index normalizado: impede duplicatas case/acento via qualquer
+        # caminho (app layer, dashboard, SQL direto)
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_pacientes_nome_norm
+            ON pacientes(to_upper_normalized(nome))
+        """)
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_retirada_items_retirada ON retirada_items(retirada_id)"
         )
@@ -260,20 +272,19 @@ class EmissorDatabase(BaseDatabase):
 
     @db_op("write")
     def add_patient(self, nome: str) -> Dict:
-        """Adiciona novo paciente."""
+        """Adiciona novo paciente (nome armazenado sem acentos/caixa alta)."""
+        nome = to_upper_normalized((nome or "").strip())
         with self._cursor() as cur:
-            cur.execute(
-                "INSERT INTO pacientes (nome) VALUES (?)", (nome.strip().upper(),)
-            )
+            cur.execute("INSERT INTO pacientes (nome) VALUES (?)", (nome,))
             new_id = cur.lastrowid
             self._commit()
 
         ErrorHandler.log(
-            f"Novo paciente criado: {nome.strip().upper()} (ID: {new_id})",
+            f"Novo paciente criado: {nome} (ID: {new_id})",
             level=ErrorLevel.INFO,
             context=ErrorContext.DATABASE,
         )
-        return {"id": new_id, "nome": nome.strip().upper()}
+        return {"id": new_id, "nome": nome}
 
     @db_op("write")
     def update_patient(self, patient_id: int, data: Dict) -> bool:
@@ -310,7 +321,10 @@ class EmissorDatabase(BaseDatabase):
             elif key == "bloquear_balanco":
                 values.append("1" if v else "0")
             elif isinstance(v, str) and not _is_enum_field(key):
-                values.append(v.strip().upper())
+                if key == "nome":
+                    values.append(to_upper_normalized(v.strip()))
+                else:
+                    values.append(v.strip().upper())
             else:
                 values.append(v)
             set_clauses.append(f"{key} = ?")
@@ -348,6 +362,15 @@ class EmissorDatabase(BaseDatabase):
                     (descricao,),
                 )
                 existing_by_desc = cur.fetchone()
+                if existing_by_desc is None and descricao:
+                    desc_key = to_upper_normalized(descricao)
+                    cur.execute(
+                        "SELECT item_id, unidade, descricao FROM items_catalog"
+                    )
+                    for cat_row in cur.fetchall():
+                        if to_upper_normalized(cat_row["descricao"]) == desc_key:
+                            existing_by_desc = cat_row
+                            break
 
                 if existing_by_desc and descricao:
                     ErrorHandler.log(
@@ -450,9 +473,15 @@ class EmissorDatabase(BaseDatabase):
         crm = (crm or "").strip().upper()
 
         with self._cursor() as cur:
-            cur.execute("SELECT id, crm FROM profissionais WHERE nome = ?", (nome,))
-            row = cur.fetchone()
-            if row is None:
+            prof_id: Optional[int] = None
+            existing_crm = ""
+            cur.execute("SELECT id, nome, crm FROM profissionais")
+            for row in cur.fetchall():
+                if to_upper_normalized(row["nome"]) == to_upper_normalized(nome):
+                    prof_id = row["id"]
+                    existing_crm = row["crm"] or ""
+                    break
+            if prof_id is None:
                 cur.execute(
                     "INSERT INTO profissionais (nome, crm) VALUES (?, ?)",
                     (nome, crm),
@@ -463,14 +492,11 @@ class EmissorDatabase(BaseDatabase):
                     level=ErrorLevel.INFO,
                     context=ErrorContext.DATABASE,
                 )
-            else:
-                prof_id = row["id"]
-                existing_crm = row["crm"] or ""
-                if crm and crm != existing_crm:
-                    cur.execute(
-                        "UPDATE profissionais SET crm = ? WHERE id = ?",
-                        (crm, prof_id),
-                    )
+            elif crm and crm != existing_crm:
+                cur.execute(
+                    "UPDATE profissionais SET crm = ? WHERE id = ?",
+                    (crm, prof_id),
+                )
             self._commit()
         return cast(int, prof_id)
 
@@ -724,7 +750,7 @@ class EmissorDatabase(BaseDatabase):
         """Retorna todas as retiradas (para agenda), incluindo tipo do paciente."""
         with self._cursor() as cur:
             cur.execute(
-                "SELECT r.id, r.patient_id, r.patient_name, r.data_retirada, "
+                "SELECT r.id, r.patient_id, COALESCE(p.nome, r.patient_name) AS patient_name, r.data_retirada, "
                 "r.data_proxima_retirada, r.created_at, r.updated_at, p.tipo "
                 "FROM retiradas r LEFT JOIN pacientes p ON r.patient_id = p.id "
                 "WHERE r.substituida = 0 "

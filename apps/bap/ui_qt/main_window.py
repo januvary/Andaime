@@ -602,39 +602,40 @@ class MainWindow(QMainWindow):
         Toda leitura/escrita de DB e toda codificação de PDF/BLOB acontece
         aqui; a thread principal só recebe o resultado em ``_on_salvar_done``.
         """
-        paciente = self.db.find_paciente_by_name(nome)
         paciente_info = ""
-        if paciente is None:
-            paciente = self.db.create_paciente(nome, telefone)
-            paciente_info = " (paciente novo)"
-        elif telefone and telefone != (paciente.telefone or ""):
-            self.db.update_paciente(paciente.id, telefone=telefone)
-            paciente = self.db.get_paciente_by_id(paciente.id)
-            paciente_info = " (paciente atualizado)"
+        with self.db.transaction():
+            paciente = self.db.find_paciente_by_name(nome)
+            if paciente is None:
+                paciente = self.db.create_paciente(nome, telefone)
+                paciente_info = " (paciente novo)"
+            elif telefone and telefone != (paciente.telefone or ""):
+                self.db.update_paciente(paciente.id, telefone=telefone)
+                paciente = self.db.get_paciente_by_id(paciente.id)
+                paciente_info = " (paciente atualizado)"
 
-        if processo_id is None:
-            processo = self.db.create_processo(
-                paciente_id=paciente.id,
-                lote_id=lote_id,
-                tipo=tipo,
-                solicitacao=solicitacao,
-                descricao=descricao,
-            )
-            processo_id = processo.id
-        elif descricao and descricao != (
-            self.db.get_processo_by_id(processo_id).descricao or ""
-        ):
-            self.db.update_processo(processo_id, descricao=descricao)
+            if processo_id is None:
+                processo = self.db.create_processo(
+                    paciente_id=paciente.id,
+                    lote_id=lote_id,
+                    tipo=tipo,
+                    solicitacao=solicitacao,
+                    descricao=descricao,
+                )
+                processo_id = processo.id
+            elif descricao and descricao != (
+                self.db.get_processo_by_id(processo_id).descricao or ""
+            ):
+                self.db.update_processo(processo_id, descricao=descricao)
 
-        # Persiste a mudança de status (com a observação pendente) ou, se o
-        # status não mudou, registra a observação isolada — para não perdê-la.
-        fresh = self.db.get_processo_by_id(processo_id)
-        if status != NULL_STATUS and fresh is not None and fresh.status != status:
-            self.db.update_processo_status(
-                processo_id, status, observacoes=pending_obs or None
-            )
-        elif pending_obs:
-            self.db.add_status_observation(processo_id, pending_obs)
+            # Persiste a mudança de status (com a observação pendente) ou, se o
+            # status não mudou, registra a observação isolada — para não perdê-la.
+            fresh = self.db.get_processo_by_id(processo_id)
+            if status != NULL_STATUS and fresh is not None and fresh.status != status:
+                self.db.update_processo_status(
+                    processo_id, status, observacoes=pending_obs or None
+                )
+            elif pending_obs:
+                self.db.add_status_observation(processo_id, pending_obs)
 
         if fresh is not None and fresh.is_archived:
             self._salvar_work_archived(processo_id, fresh, items)
@@ -704,9 +705,9 @@ class MainWindow(QMainWindow):
             if pdf_bytes is not None:
                 conteudos.append(pdf_bytes)
         if conteudos:
-            merge_pdfs(conteudos, str(pdf_path))
-            pdf_sig = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
-            self.db.set_processo_pdf_sig(processo_id, pdf_sig)
+            pdf_sig = hashlib.sha256()
+            merge_pdfs(conteudos, str(pdf_path), hash_algo=pdf_sig)
+            self.db.set_processo_pdf_sig(processo_id, pdf_sig.hexdigest())
             for i, item in enumerate(items):
                 item.path = str(pdf_path)
                 item.page = i

@@ -12,10 +12,7 @@ def validate_file_path(file_path: str, allow_nonexistent: bool = False) -> Path:
     if not file_path or not isinstance(file_path, str):
         raise ValueError("File path must be a non-empty string")
 
-    try:
-        path = Path(file_path)
-    except (OSError, ValueError) as e:
-        raise ValueError(f"Invalid file path: {e}")
+    path = Path(file_path)
 
     if not allow_nonexistent and not path.exists():
         raise ValueError(f"File path does not exist: {path}")
@@ -32,10 +29,7 @@ def validate_directory_path(dir_path: str, create_if_missing: bool = False) -> P
     if not dir_path or not isinstance(dir_path, str):
         raise ValueError("Directory path must be a non-empty string")
 
-    try:
-        path = Path(dir_path)
-    except (OSError, ValueError) as e:
-        raise ValueError(f"Invalid directory path: {e}")
+    path = Path(dir_path)
 
     if not path.exists():
         if create_if_missing:

@@ -707,21 +707,33 @@ class SS54Database(BaseDatabase):
         """Marca que os bancos precisam ser compactados após o commit."""
         self._vacuum_pending = True
 
-    def _flush_pending_vacuum(self) -> None:
-        """Executa o VACUUM pendente, fora de qualquer transação.
+    def _dead_space_ratio(self, db_name: str = "") -> float:
+        """Fração de páginas livres (0.0–1.0). Retorna 1.0 em caso de erro."""
+        pragma_db = f"{db_name}." if db_name else ""
+        try:
+            with self._cursor() as cur:
+                cur.execute(f"PRAGMA {pragma_db}page_count")
+                total = cur.fetchone()[0]
+                cur.execute(f"PRAGMA {pragma_db}freelist_pages")
+                free = cur.fetchone()[0]
+            return free / total if total > 0 else 0.0
+        except Exception:
+            return 1.0
 
-        Chamado automaticamente ao fim da transação mais externa (ver
-        ``transaction``). Falhas são registradas, mas não derrubam a operação
-        de escrita que originou a deleção.
-        """
+    _VACUUM_THRESHOLD = 0.25
+
+    def _flush_pending_vacuum(self) -> None:
+        """Executa VACUUM pendente só se dead space >= _VACUUM_THRESHOLD."""
         if not self._vacuum_pending or self._in_transaction:
             return
         self._vacuum_pending = False
         try:
-            with self._cursor() as cur:
-                cur.execute(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
-            with self._cursor() as cur:
-                cur.execute("VACUUM")
+            if self._dead_space_ratio(self.ARQUIVOS_DB_ALIAS) >= self._VACUUM_THRESHOLD:
+                with self._cursor() as cur:
+                    cur.execute(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
+            if self._dead_space_ratio() >= self._VACUUM_THRESHOLD:
+                with self._cursor() as cur:
+                    cur.execute("VACUUM")
         except Exception as e:
             ErrorHandler.handle_database_error(
                 e, operation="compactar bancos de dados (VACUUM)"

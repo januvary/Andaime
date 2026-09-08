@@ -110,8 +110,8 @@ class StateManager:
 
     def set_selected_patient(self, patient_data: Any) -> None:
         """Define o paciente selecionado e notifica observadores."""
-        if not patient_data:
-            raise ValueError("patient_data não pode ser None ou vazio")
+        if patient_data is None:
+            raise ValueError("patient_data não pode ser None")
 
         if not isinstance(patient_data, Patient):
             patient_data = Patient.from_row(patient_data)

@@ -19,7 +19,7 @@ def get_field_str(source: Any, key: str, default: str = "") -> str:
     if hasattr(source, "__getitem__"):
         try:
             value = source[key]
-        except (KeyError, TypeError, IndexError):
+        except KeyError:
             value = None
         return "" if value is None else str(value)
     value = getattr(source, key, default)

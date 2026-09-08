@@ -279,6 +279,11 @@ class ViewerPopup(QDialog):
             return
         item = self._items[self._index]
         if self._grid.rotate_item(item):
+            for tile in self._grid._tiles:
+                if tile._item is item:
+                    tile._pixmap = self._grid._thumb_for(item)
+                    tile._update_thumb()
+                    break
             self._render_index(self._index)
 
     def _remove_current(self):

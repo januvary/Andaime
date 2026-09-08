@@ -6,6 +6,7 @@ do Emissor ficam aqui."""
 from pathlib import Path
 
 from andaime import paths as _andaime_paths
+from andaime.text import to_upper_normalized
 
 from emissor.utils.net_io import network_mkdir
 
@@ -48,14 +49,26 @@ def resolve_archive_dir(
     safe_patient_name: str,
     create: bool = True,
 ) -> Path:
+    """Resolve a pasta de arquivo do paciente; matching case/acento-insensível
+    (reaproveita pasta existente com grafia diferente em vez de duplicar)."""
     save_root = Path(save_root)
 
     parent = save_root / RECIBOS_PARENT_FOLDER
     if patient_tipo == "insulina":
         parent = parent / INSULINA_PARENT_FOLDER
-        archive_dir = parent / f"{safe_patient_name}{INSULINA_SUFFIX}"
+        target_name = f"{safe_patient_name}{INSULINA_SUFFIX}"
     else:
-        archive_dir = parent / safe_patient_name
+        target_name = safe_patient_name
+
+    archive_dir = parent / target_name
+    if archive_dir.is_dir():
+        return archive_dir
+
+    target_key = to_upper_normalized(target_name)
+    if target_key and parent.is_dir():
+        for entry in sorted(parent.iterdir()):
+            if entry.is_dir() and to_upper_normalized(entry.name) == target_key:
+                return entry
 
     if create:
         network_mkdir(archive_dir)

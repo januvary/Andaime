@@ -136,7 +136,7 @@ class GridItem:
         self, loader: Callable[[GridItem], bytes | None] | None = None
     ) -> bytes | None:
         """Extrai a página do item como PDF de página única (bytes)."""
-        if self.data is not None and self.path is None:
+        if self.data is not None and (self.path is None or (self.page or 0) == 0):
             return bytes(self.data)
 
         raw = self.raw_bytes(loader)
