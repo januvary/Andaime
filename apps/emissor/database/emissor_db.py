@@ -66,11 +66,6 @@ class EmissorDatabase(BaseDatabase):
         cursor = self.conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON")
 
-        # Registra função de normalização para uso em indexes
-        self.conn.create_function(
-            "to_upper_normalized", 1, to_upper_normalized, deterministic=True
-        )
-
         pacientes_columns = [
             "id INTEGER PRIMARY KEY AUTOINCREMENT",
             "nome TEXT NOT NULL UNIQUE",
@@ -167,12 +162,6 @@ class EmissorDatabase(BaseDatabase):
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_retiradas_proxima ON retiradas(data_proxima_retirada)"
         )
-        # Unique index normalizado: impede duplicatas case/acento via qualquer
-        # caminho (app layer, dashboard, SQL direto)
-        cursor.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_pacientes_nome_norm
-            ON pacientes(to_upper_normalized(nome))
-        """)
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_retirada_items_retirada ON retirada_items(retirada_id)"
         )
