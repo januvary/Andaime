@@ -57,7 +57,8 @@ VERSION_FILE = "VERSION"
 UPDATE_TAG = ".update_tag"
 POST_UPDATE_ENV = "ANDAIME_POST_UPDATE"
 SUCCESS_FILE = "success"
-ROLLOUT_TIMEOUT = 120  # seconds to wait for launch signature
+ROLLOUT_TIMEOUT = 150  # crash-detection window; undershooting is
+# harmless (a live process past the deadline is trusted)
 
 ANDAIME_REPO = "januvary/andaime"
 
@@ -235,14 +236,8 @@ def _is_reserved_win_name(name: str) -> bool:
 
 
 def _delete_file_force(path: Path) -> None:
-    """Delete a file, handling Windows reserved device names.
-
-    ``nul``/``con``/… cannot be removed through the normal Win32 namespace —
-    deletion requires an extended-path prefix (``\\\\?\\`` or ``\\\\.\\``).
-    Note: ``os.path.abspath`` is NOT usable here — ``GetFullPathName``
-    resolves a trailing reserved name to the device itself (``.\\\\nul``).
-    Resolve the parent instead and rejoin the name.
-    """
+    """Delete a file (handles Windows reserved names like nul/con
+    via the \\\\?\\ prefix)."""
     if os.name == "nt" and _is_reserved_win_name(path.name):
         parent = path.parent if path.is_absolute() else Path(
             os.path.abspath(path.parent)
@@ -287,12 +282,7 @@ def _delete_file_force(path: Path) -> None:
 
 
 def _rmtree_force(path: Path) -> None:
-    """rmtree that survives trees containing reserved-name files.
-
-    Uses ``os.rmdir`` success as the authoritative "empty" signal —
-    ``os.path.lexists`` reports nonsense for reserved names, and deleting
-    them can be flaky, so we retry a few passes before giving up.
-    """
+    """rmtree that survives trees containing reserved-name files."""
     if path.is_dir() and not path.is_symlink():
         for _attempt in range(3):
             for entry in path.iterdir():
@@ -312,11 +302,7 @@ def _rmtree_force(path: Path) -> None:
 
 
 def _free_rollback_name(current: Path) -> Path:
-    """Return a rollback path for *current* that is not already occupied.
-
-    Prefers the classic ``<name>.old``; if a previous failed update left an
-    undeletable ``.old`` behind, falls back to ``.old.2``, ``.old.3``, …
-    """
+    """Free rollback path for *current* (``<name>.old``, else ``.old.N``)."""
     base = current.with_name(current.name + ".old")
     if not base.exists() and not base.is_symlink():
         return base
@@ -349,11 +335,7 @@ def _swap_directory(current: Path, new: Path) -> list[tuple[Path, Path]]:
 
 
 def _rollback(swaps: list[tuple[Path, Path]]) -> None:
-    """Revert all directory swaps in reverse order.
-
-    Best-effort: individual step failures are logged (ERROR) but do not
-    abort the remaining swaps.
-    """
+    """Revert swaps in reverse order (best-effort, failures logged)."""
     for old, current in reversed(swaps):
         try:
             if current.exists():
@@ -401,13 +383,7 @@ def _cleanup_old_dirs(root: Path) -> None:
 
 
 def _sweep_stale_update_temps() -> None:
-    """Remove leftover monitoring temp dirs (``andaime_update_*``).
-
-    ``_launch_with_monitoring`` creates one per apply; if the process dies
-    mid-monitor (crash, kill, power loss) the dir leaks in ``%TEMP%``.
-    Anything older than the rollout window plus margin is definitely not
-    being monitored by a live apply, so it is swept on every app start.
-    """
+    """Remove stale ``andaime_update_*`` temp dirs (older than the rollout window)."""
     import tempfile
 
     cutoff = time.time() - (ROLLOUT_TIMEOUT + 600)
@@ -625,10 +601,6 @@ def _apply_pending_update_locked() -> bool:
         )
 
         # 6. Launch with monitoring (monopolises this process)
-        # Small delay to let Windows release file handles from the swap
-        # before starting the new process. Prevents [WinError 6] on
-        # slower machines where handle release takes longer.
-        time.sleep(0.5)
         _launch_with_monitoring(app_module, swaps, old_version_content)
         return True  # unreachable — _launch_with_monitoring exits
 
@@ -663,34 +635,6 @@ def _apply_pending_update_locked() -> bool:
         return False
 
 
-def _terminate_process_tree(proc: subprocess.Popen) -> None:
-    """Kill ``proc`` and wait for it to fully exit.
-
-    Best-effort: ``kill()`` + bounded ``wait()``; on Windows a still-alive
-    process gets ``taskkill /F /T`` as fallback before another bounded wait.
-    """
-    with contextlib.suppress(Exception):
-        proc.kill()
-    try:
-        proc.wait(timeout=5)
-        return
-    except subprocess.TimeoutExpired:
-        pass
-    except Exception:  # noqa: BLE001
-        return
-
-    if os.name == "nt" and proc.pid:
-        with contextlib.suppress(Exception):
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                capture_output=True,
-                timeout=15,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-    with contextlib.suppress(Exception):
-        proc.wait(timeout=10)
-
-
 def _get_python_exe() -> Path:
     """Return the Python executable for (re)launching."""
     root = get_install_root()
@@ -709,11 +653,11 @@ def _launch_with_monitoring(
     swaps: list[tuple[Path, Path]],
     old_version_content: str | None = None,
 ) -> None:
-    """Launch the updated app and monitor for a success signature.
+    """Launch the updated app, watch for its success marker.
 
-    On success → exit (the new process takes over).
-    On failure → rollback and relaunch the old version.
-    """
+    Success marker → exit (new process takes over). Fast crash → rollback
+    + relaunch the old version. Timeout → trust the live process and exit
+    (it may just be slow; killing it destroyed installs)."""
     python_exe = _get_python_exe()
     root = get_install_root()
     temp_dir = Path(tempfile.mkdtemp(prefix="andaime_update_"))
@@ -721,23 +665,15 @@ def _launch_with_monitoring(
     env = os.environ.copy()
     env[POST_UPDATE_ENV] = str(temp_dir)
 
-    for attempt in range(2):
-        try:
-            proc = subprocess.Popen(
-                [str(python_exe), "-m", app_module],
-                start_new_session=True,
-                env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            break
-        except OSError:
-            if attempt == 0:
-                time.sleep(0.5)
-            else:
-                raise
+    proc = subprocess.Popen(
+        [str(python_exe), "-m", app_module],
+        start_new_session=True,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
 
     success_marker = temp_dir / SUCCESS_FILE
     deadline = time.monotonic() + ROLLOUT_TIMEOUT
@@ -758,14 +694,18 @@ def _launch_with_monitoring(
 
         time.sleep(0.5)
     else:
-        # Timeout. The process may still be running — it MUST be dead
-        # before rollback touches its directory, or locked files survive
-        # the rmtree and leave a gutted install behind.
-        rc = -1
-        stderr = b"timeout"
-        _terminate_process_tree(proc)
+        # Timeout with a live process: trust it. Temp dir is left behind
+        # on purpose — the age-based sweep cleans it, and a late marker
+        # write is harmless.
+        ErrorHandler.log(
+            "Post-update launch still running after timeout — "
+            "trusting the new version.",
+            level=ErrorLevel.INFO,
+            context="Updater",
+        )
+        os._exit(0)
 
-    # --- Failure path ---
+    # --- Failure path (fast crash only) ---
     stderr_text = ""
     with contextlib.suppress(Exception):
         stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""

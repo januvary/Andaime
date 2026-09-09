@@ -491,6 +491,18 @@ class _AddRecordDialog(QDialog):
         return result
 
 
+class _EnterEditableTable(QTableWidget):
+    """QTableWidget that opens the current cell for editing on Enter/Return."""
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            item = self.currentItem()
+            if item is not None and self.state() != QAbstractItemView.State.EditingState:
+                self.editItem(item)
+                return
+        super().keyPressEvent(event)
+
+
 class DashboardWindow(QMainWindow):
     """Generic SQLite browser/editor window."""
 
@@ -629,7 +641,7 @@ class DashboardWindow(QMainWindow):
 
         layout.addLayout(search_row)
 
-        self._table = QTableWidget()
+        self._table = _EnterEditableTable()
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)

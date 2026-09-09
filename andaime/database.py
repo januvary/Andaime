@@ -208,8 +208,10 @@ class BaseDatabase(ABC):
         return False
 
     def __del__(self) -> None:
-        with suppress(Exception):
+        try:
             self.close()
+        except Exception:
+            pass
 
     def _apply_pragmas(self, cur: sqlite3.Cursor) -> None:
         cur.execute("PRAGMA foreign_keys=ON")
