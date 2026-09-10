@@ -16,6 +16,8 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+
 
 class PontosStore:
     """Persistent store for optional-holiday (pontos facultativos) data.
@@ -39,10 +41,15 @@ class PontosStore:
         try:
             with self._path.open("r", encoding="utf-8") as f:
                 raw = json.load(f)
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as e:
             # Backup corrupt file so data isn't silently lost forever.
             backup = self._path.with_suffix(".json.bak")
             shutil.copy2(self._path, backup)
+            ErrorHandler.log(
+                f"pontos_facultativos corrompido ({e}); backup em {backup}",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.FILE_IO,
+            )
             self._data = {}
             return
 
@@ -68,12 +75,22 @@ class PontosStore:
             try:
                 yr = int(yr_str)
             except ValueError:
+                ErrorHandler.log(
+                    f"Ponto ignorado (ano inválido): {yr_str!r}",
+                    level=ErrorLevel.DEBUG,
+                    context=ErrorContext.FILE_IO,
+                )
                 continue
             for ps in plist:
                 try:
                     d, m = map(int, ps.split("/"))
                     result.add(date(yr, m, d))
                 except (ValueError, AttributeError):
+                    ErrorHandler.log(
+                        f"Ponto ignorado (entrada inválida): {ps!r}",
+                        level=ErrorLevel.DEBUG,
+                        context=ErrorContext.FILE_IO,
+                    )
                     continue
         return result
 

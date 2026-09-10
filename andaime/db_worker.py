@@ -18,6 +18,8 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, TypeVar
 
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+
 _R = TypeVar("_R")
 
 
@@ -82,4 +84,9 @@ class DatabaseWorker:
         """
         with self._lock:
             self._shutdown = True
+        ErrorHandler.log(
+            "DatabaseWorker encerrado",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )
         self._executor.shutdown(wait=wait)

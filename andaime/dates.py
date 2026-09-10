@@ -14,6 +14,7 @@ from pathlib import Path
 
 import holidays as _holidays_lib
 
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 from andaime.paths import get_root_directory
 from andaime.pontos import PontosStore
 
@@ -41,8 +42,12 @@ class DateCalculator:
                 if pkg_path.exists():
                     user_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(pkg_path, user_path)
-            except (ImportError, OSError):
-                pass
+            except (ImportError, OSError) as e:
+                ErrorHandler.log(
+                    f"Dados de feriados embutidos indisponíveis: {e}",
+                    level=ErrorLevel.WARNING,
+                    context=ErrorContext.CONFIGURATION,
+                )
 
         return user_path
 
@@ -56,12 +61,21 @@ class DateCalculator:
         try:
             br_holidays = _holidays_lib.Brazil(state="SP", years=range(2020, 2031))  # type: ignore[attr-defined]
             holidays_set.update(br_holidays.keys())
-        except (ImportError, AttributeError, TypeError):
+        except (ImportError, AttributeError, TypeError) as e:
+            ErrorHandler.log(
+                f"API holidays.Brazil falhou ({e}); tentando country_holidays",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.CONFIGURATION,
+            )
             try:
                 br_holidays = _holidays_lib.country_holidays("BR", subdiv="SP")
                 holidays_set.update(br_holidays.keys())
-            except (ImportError, AttributeError, TypeError):
-                pass
+            except (ImportError, AttributeError, TypeError) as e2:
+                ErrorHandler.log(
+                    f"Calendário de feriados vazio: {e2}",
+                    level=ErrorLevel.ERROR,
+                    context=ErrorContext.CONFIGURATION,
+                )
 
         pontos_path = DateCalculator._resolve_pontos_path()
         store = PontosStore(pontos_path)

@@ -14,9 +14,12 @@ from __future__ import annotations
 import hashlib
 import io
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Union
+
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 
 from PySide6.QtGui import QImage
 
@@ -47,6 +50,7 @@ def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:
     """Divide um PDF em N PDFs de página única."""
     from pypdf import PdfWriter
 
+    t0 = time.monotonic()
     reader = open_pdf(src)
     out: list[bytes] = []
     for i in range(len(reader.pages)):
@@ -55,6 +59,13 @@ def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:
         buf = io.BytesIO()
         w.write(buf)
         out.append(buf.getvalue())
+    elapsed = time.monotonic() - t0
+    if elapsed >= 2.0:
+        ErrorHandler.log(
+            f"split_pages: {len(out)} página(s) em {elapsed:.1f}s",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.PDF_GENERATION,
+        )
     return out
 
 
@@ -81,6 +92,7 @@ def merge_pdfs(
     """Concatena vários PDFs em um arquivo."""
     from pypdf import PdfWriter
 
+    t0 = time.monotonic()
     writer = PdfWriter()
     for blob in conteudos:
         if not blob:
@@ -91,6 +103,13 @@ def merge_pdfs(
             _write_hashing(writer, f, hash_algo)
         else:
             writer.write(f)
+    elapsed = time.monotonic() - t0
+    if elapsed >= 2.0:
+        ErrorHandler.log(
+            f"merge_pdfs: concluído em {elapsed:.1f}s ({output_path})",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.PDF_GENERATION,
+        )
     return output_path
 
 
@@ -173,10 +192,16 @@ def render_page_pil(
     import pypdfium2 as pdfium  # type: ignore[import-untyped]
     from PIL import Image  # noqa: F401  (garante dependência disponível)
 
+    t0 = time.monotonic()
     with _PDFIUM_LOCK:
         doc = pdfium.PdfDocument(str(src) if isinstance(src, (str, Path)) else src)
         try:
             if len(doc) == 0:
+                ErrorHandler.log(
+                    "render_page_pil: PDF sem páginas",
+                    level=ErrorLevel.WARNING,
+                    context=ErrorContext.PDF_GENERATION,
+                )
                 raise ValueError("PDF has no pages")
 
             page_index = page
@@ -189,6 +214,13 @@ def render_page_pil(
 
     if pil.mode != "RGB":
         pil = pil.convert("RGB")
+    elapsed = time.monotonic() - t0
+    if elapsed >= 2.0:
+        ErrorHandler.log(
+            f"render_page_pil: página {page} em {elapsed:.1f}s (scale={scale})",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.PDF_GENERATION,
+        )
     return pil
 
 
@@ -199,6 +231,7 @@ def render_pages_pil(
     import pypdfium2 as pdfium  # type: ignore[import-untyped]
     from PIL import Image  # noqa: F401
 
+    t0 = time.monotonic()
     out = []
     with _PDFIUM_LOCK:
         doc = pdfium.PdfDocument(str(src) if isinstance(src, (str, Path)) else src)
@@ -210,6 +243,13 @@ def render_pages_pil(
                 out.append(pil)
         finally:
             doc.close()
+    elapsed = time.monotonic() - t0
+    if elapsed >= 2.0:
+        ErrorHandler.log(
+            f"render_pages_pil: {len(out)} página(s) em {elapsed:.1f}s (scale={scale})",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.PDF_GENERATION,
+        )
     return out
 
 
@@ -289,16 +329,31 @@ def load_svg_drawing(
 
     path = Path(svg_path)
     if not path.exists():
+        ErrorHandler.log(
+            f"SVG ausente: {path}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.PDF_GENERATION,
+        )
         return None
 
     drawing = svg2rlg(str(path))
     if drawing is None:
+        ErrorHandler.log(
+            f"SVG ilegível: {path}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.PDF_GENERATION,
+        )
         return None
 
     original_width = drawing.width
     original_height = drawing.height
 
     if original_width <= 0:
+        ErrorHandler.log(
+            f"SVG sem largura: {path}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.PDF_GENERATION,
+        )
         return None
 
     scale_factor = target_size / original_width

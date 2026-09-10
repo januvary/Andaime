@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+
 
 def register_taskbar_identity(
     app_id: str, display_name: str, icon_path: Path | str | None = None
@@ -46,5 +48,9 @@ def register_taskbar_identity(
         ctypes.windll.shell32.SHChangeNotify(
             SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None
         )
-    except (OSError, AttributeError):
-        pass
+    except (OSError, AttributeError) as e:
+        ErrorHandler.log(
+            f"Identidade da taskbar não registrada: {e}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.APP,
+        )
