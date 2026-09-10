@@ -144,7 +144,7 @@ class QtApp(QMainWindow):
     @property
     def pdf_generator(self) -> Any:
         """Lazy-load do gerador de PDF."""
-        if not hasattr(self, "_pdf_generator") or self._pdf_generator is None:
+        if self._pdf_generator is None:
             from emissor.pdf.pdf_generator_reportlab import ReportLabPDFGenerator
 
             self._pdf_generator = ReportLabPDFGenerator()
@@ -703,11 +703,10 @@ class QtApp(QMainWindow):
         palette = get_palette(self._current_dark_mode)
 
         retirada_date: str | None = None
-        if getattr(self, "dates_section", None) is not None:
-            try:
-                _, retirada_date = self.dates_section.get_data_retirada_for_pdf()
-            except Exception:
-                retirada_date = None
+        try:
+            _, retirada_date = self.dates_section.get_data_retirada_for_pdf()
+        except Exception:
+            retirada_date = None
 
         show_pdf_picker_dialog(
             self, patient.nome, grupos, palette, highlight_date=retirada_date

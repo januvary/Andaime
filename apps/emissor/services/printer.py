@@ -13,6 +13,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+
 if TYPE_CHECKING:
     from PIL import Image
 
@@ -171,7 +173,12 @@ class Win32SpoolerBackend:
 
         try:
             printer_name = win32print.GetDefaultPrinter()
-        except Exception:
+        except Exception as e:
+            ErrorHandler.log(
+                f"Falha ao obter impressora padrão: {e}",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.APP,
+            )
             return PrintResult(
                 status=PrintStatus.NO_PRINTER,
                 message=_STATUS_MESSAGES[PrintStatus.NO_PRINTER],
@@ -215,7 +222,12 @@ class Win32SpoolerBackend:
 
         try:
             self._spool_pages(printer_name, pages, copies, job_title)
-        except Exception:
+        except Exception as e:
+            ErrorHandler.log(
+                f"Falha de spool para '{printer_name}' ({pdf_path}): {e}",
+                level=ErrorLevel.ERROR,
+                context=ErrorContext.APP,
+            )
             return PrintResult(
                 status=PrintStatus.SPOOL_FAILED,
                 message=_STATUS_MESSAGES[PrintStatus.SPOOL_FAILED],

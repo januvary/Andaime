@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from andaime.dates import DateCalculator, parse_date
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 
 from bap.database.ss54_database import SS54Database
 from bap.models import Lote, Processo
@@ -72,11 +73,21 @@ def _archive_processo(db: SS54Database, root: Path, processo: Processo | object)
     if not pdf_path.exists():
         pdf_path, has_docs = ensure_processo_pdf(db, root, processo)
         if not has_docs or pdf_path is None:
+            ErrorHandler.log(
+                f"Arquivamento ignorado (sem documentos): processo #{processo.id}",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.FILE_IO,
+            )
             return False
         pdf_path = Path(pdf_path)
 
     db.delete_conteudos_for_processo(processo.id)
     db.set_processo_archived(processo.id, True)
+    ErrorHandler.log(
+        f"Processo #{processo.id} arquivado ({pdf_path})",
+        level=ErrorLevel.INFO,
+        context=ErrorContext.FILE_IO,
+    )
     return True
 
 
@@ -103,6 +114,18 @@ def archive_previous_lotes(
             except Exception as e:  # noqa: BLE001
                 report["erros"] += 1
                 report["error_detail"].append(str(e))
+                ErrorHandler.log(
+                    f"Falha ao arquivar processo: {e}",
+                    level=ErrorLevel.ERROR,
+                    context=ErrorContext.FILE_IO,
+                )
+    if report["processos"]:
+        ErrorHandler.log(
+            f"Arquivamento: {report['arquivados']}/{report['processos']} arquivado(s), "
+            f"{report['erros']} erro(s)",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.FILE_IO,
+        )
     return report
 
 

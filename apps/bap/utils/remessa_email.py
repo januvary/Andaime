@@ -10,10 +10,12 @@ grupo. O envio em si (criação do rascunho no Gmail) é responsabilidade do
 from __future__ import annotations
 
 import html
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 from bap.constants import TIPO_LABELS, SOLICITACAO_LABELS, Status
 from bap.database.ss54_database import SS54Database
 from bap.models import Lote, Processo
@@ -105,12 +107,18 @@ def ensure_processo_pdf(
         if dest.exists():
             return str(dest), True
         # BLOBs removidos: não é possível regenerar.
+        ErrorHandler.log(
+            f"PDF arquivado ausente e sem BLOBs: processo #{processo.id}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.FILE_IO,
+        )
         return None, False
 
     sig = compute_processo_sig(arqs)
     if dest.exists() and processo.pdf_sig == sig:
         return str(dest), True
 
+    t0 = time.monotonic()
     dest.parent.mkdir(parents=True, exist_ok=True)
     # Uma única query para todos os BLOBs (em vez de um round-trip por
     # arquivo) — decisivo quando o banco está em share de rede.
@@ -119,6 +127,12 @@ def ensure_processo_pdf(
     conteudos = (conteudos_by_id.get(a.id) or b"" for a in arqs if a.id is not None)
     merge_conteudos_to_pdf(conteudos, str(dest))
     db.set_processo_pdf_sig(processo.id, sig)
+    elapsed = time.monotonic() - t0
+    ErrorHandler.log(
+        f"PDF regenerado: processo #{processo.id} ({len(arquivo_ids)} arquivo(s)) em {elapsed:.1f}s",
+        level=ErrorLevel.INFO,
+        context=ErrorContext.PDF_GENERATION,
+    )
     return str(dest), True
 
 

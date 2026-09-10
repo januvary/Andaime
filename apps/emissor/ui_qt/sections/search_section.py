@@ -188,12 +188,9 @@ class SearchSection(QtSection):
         self.state.clear_selected_patient()
         self.app.dirty_tracker.reset()
 
-        # Habilitar edição na seção de paciente (quando existir)
-        patient_section = getattr(self.app, "patient_section", None)
-        if patient_section is not None and hasattr(
-            patient_section, "set_name_id_editable"
-        ):
-            patient_section.set_name_id_editable(True)
+        # Habilitar edição na seção de paciente
+        patient_section = self.app.patient_section
+        patient_section.set_name_id_editable(True)
 
         self.set_status("Modo: Novo Paciente")
 

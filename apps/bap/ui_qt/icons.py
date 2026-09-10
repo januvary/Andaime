@@ -14,16 +14,18 @@ from andaime.pdf import render_page
 
 _ICON_DIR = Path(__file__).resolve().parent / "img"
 
-BTN_STYLE = (
-    "QPushButton {"
-    " background: transparent;"
-    f" border: 1px solid {colors()['panel_border']};"
-    " border-radius: 4px; padding: 0px;"
-    f" color: {colors()['text']}; }}"
-    " QPushButton:hover {"
-    f" background: {colors()['bg_hover']};"
-    f" border: 1px solid {colors()['text_dim']}; }}"
-)
+def btn_style() -> str:
+    c = colors()
+    return (
+        "QPushButton {"
+        " background: transparent;"
+        f" border: 1px solid {c['panel_border']};"
+        " border-radius: 4px; padding: 0px;"
+        f" color: {c['text']}; }}"
+        " QPushButton:hover {"
+        f" background: {c['bg_hover']};"
+        f" border: 1px solid {c['text_dim']}; }}"
+    )
 
 
 def icon_path(base: str) -> str:
@@ -46,7 +48,7 @@ def make_icon_button(
     btn.setFixedSize(26, 22)
     btn.setToolTip(tooltip)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn.setStyleSheet(BTN_STYLE)
+    btn.setStyleSheet(btn_style())
     btn.clicked.connect(handler)
     return btn
 

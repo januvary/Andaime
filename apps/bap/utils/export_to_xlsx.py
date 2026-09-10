@@ -10,12 +10,14 @@ processo administrativo SS-54.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 from andaime.dates import parse_date
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 from bap.constants import SOLICITACAO_LABELS, TIPO_UPPER, STATUS_LABELS, Status
 from bap.database.ss54_database import SS54Database
 from bap.utils.text_utils import format_phone
@@ -105,6 +107,7 @@ def export_processos_to_xlsx(
     output_path: str | Path = DEFAULT_OUTPUT,
 ) -> str:
     """Exporta processos para uma planilha Excel com uma aba por remessa."""
+    t0 = time.monotonic()
     rows = db.get_processos_for_export()
 
     # Agrupa por remessa e, dentro dela, por tipo de solicitação
@@ -197,6 +200,12 @@ def export_processos_to_xlsx(
             current_row += 1  # linha em branco entre seções
 
     wb.save(output_path)
+    elapsed = time.monotonic() - t0
+    ErrorHandler.log(
+        f"Exportação XLSX: {len(rows)} linha(s) em {elapsed:.1f}s ({output_path})",
+        level=ErrorLevel.INFO,
+        context=ErrorContext.EXPORT,
+    )
     return str(output_path)
 
 

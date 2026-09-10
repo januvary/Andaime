@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, Callable, ClassVar
 
 from typing_extensions import Self
 
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 from bap.constants import Status
 from andaime.pdf import extract_page, image_to_pdf, open_pdf
 
@@ -93,7 +95,17 @@ class Arquivo(RowModel):
 
 def image_to_pdf_bytes(source: str | bytes) -> bytes:
     """Converte uma imagem (caminho ou bytes) em um PDF de página única."""
-    return image_to_pdf(source)
+    t0 = time.monotonic()
+    out = image_to_pdf(source)
+    elapsed = time.monotonic() - t0
+    if elapsed >= 1.0:
+        label = source if isinstance(source, str) else f"{len(source)} bytes"
+        ErrorHandler.log(
+            f"image_to_pdf_bytes: {label} em {elapsed:.1f}s",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.PDF_GENERATION,
+        )
+    return out
 
 
 @dataclass

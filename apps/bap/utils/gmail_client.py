@@ -28,6 +28,8 @@ from pathlib import Path
 
 from bap.utils.config import bap_data_dir
 
+from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/gmail.metadata",
@@ -234,13 +236,21 @@ def _http_error_message(exc: Exception) -> str:
                     msg = data.get("error", {}).get("message")
                     if msg:
                         return msg
-                except (ValueError, AttributeError):
-                    pass
+                except (ValueError, AttributeError) as e:
+                    ErrorHandler.log(
+                        f"Falha ao interpretar erro do Google: {e}",
+                        level=ErrorLevel.WARNING,
+                        context=ErrorContext.NETWORK,
+                    )
                 reason = getattr(exc, "_get_reason", lambda: "")()
                 if reason:
                     return reason
-    except Exception:
-        pass
+    except Exception as e:
+        ErrorHandler.log(
+            f"Falha ao formatar erro HTTP do Google: {e}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.NETWORK,
+        )
     return str(exc)
 
 
@@ -268,8 +278,12 @@ def _is_scope_error(exc: Exception) -> bool:
             status_code = getattr(exc, "status_code", None)
             if status_code == 403 and any(m in body for m in markers):
                 return True
-    except Exception:
-        pass
+    except Exception as e:
+        ErrorHandler.log(
+            f"Falha ao verificar erro de escopo: {e}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.NETWORK,
+        )
     return False
 
 

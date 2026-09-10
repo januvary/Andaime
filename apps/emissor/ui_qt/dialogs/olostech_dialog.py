@@ -157,7 +157,7 @@ def show_olostech_dialog(
     notif_edits: dict[int, QLineEdit] = {}
     mapped_codes: dict[int, str] = {}
 
-    items = getattr(retirada, "itens", []) or []
+    items = getattr(retirada, "itens", [])
 
     # Obtem DB via parent (MainWindow tem atributo db)
     db_obj = getattr(parent, "db", None)

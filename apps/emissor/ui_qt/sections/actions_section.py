@@ -223,10 +223,7 @@ class ActionsSection(QtSection):
             self.disable_olostech_button()
             return
 
-        dates_section = getattr(self.app, "dates_section", None)
-        if dates_section is None:
-            self.disable_olostech_button()
-            return
+        dates_section = self.app.dates_section
 
         try:
             _, date_str = dates_section.get_data_retirada_for_pdf()

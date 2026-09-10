@@ -1,9 +1,10 @@
 import hashlib
 import sqlite3
 import json
+import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Callable, Iterator, Optional
 from datetime import datetime
 
 from andaime.database import BaseDatabase, db_op
@@ -39,6 +40,8 @@ class SS54Database(BaseDatabase):
         # VACUUM pendente: setado pelas deleções e executado só após o commit
         # da transação mais externa (VACUUM não roda dentro de transação).
         self._vacuum_pending = False
+        # Callback de status quando um VACUUM vai começar (thread do worker).
+        self.on_vacuum: Callable[[str], None] | None = None
 
     @staticmethod
     def _compute_arquivos_db_path(db_path: str) -> str:
@@ -630,6 +633,11 @@ class SS54Database(BaseDatabase):
             "VALUES (?, ?, ?, ?, ?)",
             (processo_id, current.status or "", final_status or "", observacoes or "", now),
         )
+        ErrorHandler.log(
+            f"Status do processo #{processo_id}: {current.status or '—'} → {final_status or '—'}",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )
         return True
 
     @db_op("write")
@@ -714,10 +722,15 @@ class SS54Database(BaseDatabase):
             with self._cursor() as cur:
                 cur.execute(f"PRAGMA {pragma_db}page_count")
                 total = cur.fetchone()[0]
-                cur.execute(f"PRAGMA {pragma_db}freelist_pages")
+                cur.execute(f"PRAGMA {pragma_db}freelist_count")
                 free = cur.fetchone()[0]
             return free / total if total > 0 else 0.0
-        except Exception:
+        except Exception as e:
+            ErrorHandler.log(
+                f"Erro ao medir dead space de {db_name or 'principal'}: {e}",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.DATABASE,
+            )
             return 1.0
 
     _VACUUM_THRESHOLD = 0.25
@@ -728,12 +741,33 @@ class SS54Database(BaseDatabase):
             return
         self._vacuum_pending = False
         try:
-            if self._dead_space_ratio(self.ARQUIVOS_DB_ALIAS) >= self._VACUUM_THRESHOLD:
+            arq_ratio = self._dead_space_ratio(self.ARQUIVOS_DB_ALIAS)
+            main_ratio = self._dead_space_ratio()
+            ErrorHandler.log(
+                f"VACUUM: dead space arqdb={arq_ratio:.0%}, principal={main_ratio:.0%}",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.DATABASE,
+            )
+            run_arq = arq_ratio >= self._VACUUM_THRESHOLD
+            run_main = main_ratio >= self._VACUUM_THRESHOLD
+            if not (run_arq or run_main):
+                return
+            if self.on_vacuum is not None:
+                self.on_vacuum("Compactando banco de dados…")
+            t0 = time.monotonic()
+            if run_arq:
                 with self._cursor() as cur:
                     cur.execute(f"VACUUM {self.ARQUIVOS_DB_ALIAS}")
-            if self._dead_space_ratio() >= self._VACUUM_THRESHOLD:
+            if run_main:
                 with self._cursor() as cur:
                     cur.execute("VACUUM")
+            elapsed = time.monotonic() - t0
+            if elapsed >= 1.0:
+                ErrorHandler.log(
+                    f"VACUUM concluído em {elapsed:.1f}s",
+                    level=ErrorLevel.INFO,
+                    context=ErrorContext.DATABASE,
+                )
         except Exception as e:
             ErrorHandler.handle_database_error(
                 e, operation="compactar bancos de dados (VACUUM)"
@@ -769,6 +803,11 @@ class SS54Database(BaseDatabase):
                 )
                 count = cur.rowcount
             if count > 0:
+                ErrorHandler.log(
+                    f"delete_conteudos: {count} BLOB(s) removido(s) do processo #{processo_id}",
+                    level=ErrorLevel.INFO,
+                    context=ErrorContext.DATABASE,
+                )
                 self._request_vacuum()
         return count
 
@@ -909,6 +948,7 @@ class SS54Database(BaseDatabase):
         content_sha256 = (
             hashlib.sha256(conteudo).hexdigest() if conteudo is not None else ""
         )
+        t0 = time.monotonic()
         with self.transaction():
             last_id = self._insert_row(
                 "arquivos",
@@ -926,6 +966,13 @@ class SS54Database(BaseDatabase):
                     "(arquivo_id, conteudo) VALUES (?, ?)",
                     (last_id, sqlite3.Binary(conteudo)),
                 )
+        elapsed = time.monotonic() - t0
+        if conteudo is not None and elapsed >= 0.5:
+            ErrorHandler.log(
+                f"create_arquivo #{last_id}: {len(conteudo)} bytes em {elapsed:.1f}s",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.DATABASE,
+            )
         return Arquivo(
             id=last_id,
             processo_id=processo_id,
@@ -951,11 +998,19 @@ class SS54Database(BaseDatabase):
 
     @db_op("read")
     def get_arquivo_conteudo(self, arquivo_id: int) -> bytes | None:
+        t0 = time.monotonic()
         row = self._fetch_one(
             f"SELECT conteudo FROM {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
             "WHERE arquivo_id = ?",
             (arquivo_id,),
         )
+        elapsed = time.monotonic() - t0
+        if elapsed >= 1.0:
+            ErrorHandler.log(
+                f"get_arquivo_conteudo #{arquivo_id}: {elapsed:.1f}s",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.DATABASE,
+            )
         if not row:
             return None
         blob = row["conteudo"]
@@ -971,17 +1026,26 @@ class SS54Database(BaseDatabase):
         """
         if not arquivo_ids:
             return {}
+        t0 = time.monotonic()
         placeholders = ", ".join("?" for _ in arquivo_ids)
         rows = self._fetch_all(
             f"SELECT arquivo_id, conteudo FROM {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
             f"WHERE arquivo_id IN ({placeholders})",
             tuple(arquivo_ids),
         )
-        return {
+        result = {
             r["arquivo_id"]: bytes(r["conteudo"])
             for r in rows
             if r["conteudo"] is not None
         }
+        elapsed = time.monotonic() - t0
+        if elapsed >= 1.0:
+            ErrorHandler.log(
+                f"get_arquivos_conteudos: {len(result)}/{len(arquivo_ids)} BLOBs em {elapsed:.1f}s",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.DATABASE,
+            )
+        return result
 
     @db_op("write")
     def update_arquivo_conteudo(self, arquivo_id: int, conteudo: bytes) -> bool:
@@ -991,6 +1055,7 @@ class SS54Database(BaseDatabase):
         content_sha256 = (
             hashlib.sha256(conteudo).hexdigest() if conteudo is not None else ""
         )
+        t0 = time.monotonic()
         with self.transaction():
             self._execute_write(
                 f"UPDATE {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos "
@@ -999,6 +1064,13 @@ class SS54Database(BaseDatabase):
             )
             self._update_row(
                 "arquivos", arquivo_id, content_sha256=content_sha256,
+            )
+        elapsed = time.monotonic() - t0
+        if elapsed >= 0.5:
+            ErrorHandler.log(
+                f"update_arquivo_conteudo #{arquivo_id}: {len(conteudo)} bytes em {elapsed:.1f}s",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.DATABASE,
             )
         return True
 

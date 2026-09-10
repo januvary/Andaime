@@ -1,4 +1,5 @@
 import copy
+import time
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -114,6 +115,10 @@ class MainWindow(QMainWindow):
         self._grid.files_dropped.connect(self._on_files_dropped)
         self._grid.status_message.connect(
             lambda text, color=None: self.set_status(text, color)
+        )
+        # Signal Qt atravessa threads (queued): status atualiza durante o VACUUM.
+        self.db.on_vacuum = lambda msg: self._grid.status_message.emit(
+            msg, "status_warning"
         )
         self._grid.set_bytes_loader(self._grid_item_bytes)
         self.theme_changed.connect(dp.grid.refresh_theme)
@@ -602,6 +607,14 @@ class MainWindow(QMainWindow):
         Toda leitura/escrita de DB e toda codificação de PDF/BLOB acontece
         aqui; a thread principal só recebe o resultado em ``_on_salvar_done``.
         """
+        from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+
+        t0 = time.monotonic()
+        ErrorHandler.log(
+            f"_salvar_work: inicio (processo_id={processo_id}, itens={len(items)})",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )
         paciente_info = ""
         with self.db.transaction():
             paciente = self.db.find_paciente_by_name(nome)
@@ -643,6 +656,12 @@ class MainWindow(QMainWindow):
             self._salvar_work_active(processo_id, items)
 
         fresh_processo = self.db.get_processo_by_id(processo_id)
+        elapsed = time.monotonic() - t0
+        ErrorHandler.log(
+            f"_salvar_work: concluído em {elapsed:.1f}s (processo #{processo_id})",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )
         return {
             "processo_id": processo_id,
             "saved": len(items),
@@ -661,6 +680,7 @@ class MainWindow(QMainWindow):
 
         import hashlib
 
+        from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
         from bap.utils.remessa_email import processo_pdf_path
 
         arqs = self.db.get_arquivos_by_processo(processo_id)
@@ -699,6 +719,7 @@ class MainWindow(QMainWindow):
         root = resolve_arquivos_root(self.config.get_all())
         pdf_path = processo_pdf_path(root, fresh)
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        t0 = time.monotonic()
         conteudos = []
         for item in items:
             pdf_bytes = item.to_pdf_bytes()
@@ -708,6 +729,12 @@ class MainWindow(QMainWindow):
             pdf_sig = hashlib.sha256()
             merge_pdfs(conteudos, str(pdf_path), hash_algo=pdf_sig)
             self.db.set_processo_pdf_sig(processo_id, pdf_sig.hexdigest())
+            elapsed = time.monotonic() - t0
+            ErrorHandler.log(
+                f"PDF arquivado: {len(conteudos)} página(s), {pdf_path.stat().st_size} bytes em {elapsed:.1f}s",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.FILE_IO,
+            )
             for i, item in enumerate(items):
                 item.path = str(pdf_path)
                 item.page = i
@@ -717,12 +744,15 @@ class MainWindow(QMainWindow):
         self, processo_id: int, items: list[GridItem]
     ) -> None:
         """Persiste um processo ativo: BLOBs no banco."""
+        from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+
         arqs = self.db.get_arquivos_by_processo(processo_id)
         existing = {a.id: a for a in arqs}
         seen: set[int] = set()
 
         # Toda a mutação de metadados + BLOBs em uma única transação:
         # atômica e um só commit (commits individuais são caros em rede).
+        t0 = time.monotonic()
         with self.db.transaction():
             for ordem, item in enumerate(items, start=1):
                 aid = item.arquivo_id
@@ -758,6 +788,14 @@ class MainWindow(QMainWindow):
             for aid in existing:
                 if aid not in seen:
                     self.db.delete_arquivo(aid)
+
+        elapsed = time.monotonic() - t0
+        if elapsed >= 1.0:
+            ErrorHandler.log(
+                f"BLOBs ativos: {len(items)} item(ns) em {elapsed:.1f}s (processo #{processo_id})",
+                level=ErrorLevel.INFO,
+                context=ErrorContext.DATABASE,
+            )
 
     def _on_salvar_done(self, res: dict | None, is_update: bool) -> None:
         # Destrava a grade travada no início do Save (ver ``_on_salvar``).

@@ -19,6 +19,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QPixmap,
+    QIcon,
     QDrag,
 )
 from PySide6.QtWidgets import (
@@ -37,7 +38,7 @@ from PySide6.QtWidgets import (
 from bap.ui_qt.styles import colors
 from bap.constants import DOC_TYPE_LABELS, DOC_TYPE_ORDER, doc_type_label
 from bap.models import GridItem, image_to_pdf_bytes
-from bap.ui_qt.icons import make_icon_button, resolve_item_image
+from bap.ui_qt.icons import btn_style, icon_path, make_icon_button, resolve_item_image
 from andaime.pdf import page_count, split_pages
 from bap.ui_qt.widgets.viewer_popup import ViewerPopup
 from andaime.qt import build_checkable_menu
@@ -106,6 +107,12 @@ class _Tile(QWidget):
             btn.raise_()
 
         self._action_btns = [copy_btn, open_btn, rotate_btn, remove_btn]
+        self._action_icons = {
+            copy_btn: "copy-icon",
+            open_btn: "preview-icon",
+            rotate_btn: "rotate-icon",
+            remove_btn: "X-icon",
+        }
 
         self._badge = QLabel(self)
         self._badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -310,6 +317,10 @@ class _Tile(QWidget):
             f"border-radius: 6px; }}"
         )
         self.setStyleSheet(self._ghost_style if self._ghost else self._normal_style)
+        style = btn_style()
+        for b in self._action_btns:
+            b.setStyleSheet(style)
+            b.setIcon(QIcon(icon_path(self._action_icons[b])))
 
     def _copy(self):
         if self._pixmap is not None and not self._pixmap.isNull():
