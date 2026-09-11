@@ -198,6 +198,7 @@ class EmissorDatabase(BaseDatabase):
 
         if self.db_path != ":memory:":
             DatabaseMigrator.run_all(cursor, self.conn, self.db_path)
+            self._commit()
 
     # ========================================================================
     # HELPERS
@@ -268,11 +269,6 @@ class EmissorDatabase(BaseDatabase):
             new_id = cur.lastrowid
             self._commit()
 
-        ErrorHandler.log(
-            f"Novo paciente criado: {nome} (ID: {new_id})",
-            level=ErrorLevel.INFO,
-            context=ErrorContext.DATABASE,
-        )
         return {"id": new_id, "nome": nome}
 
     @db_op("write")
