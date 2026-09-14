@@ -132,7 +132,7 @@ def _get_app_module() -> str:
     try:
         import __main__
 
-        pkg = getattr(__main__, "__package__", None)
+        pkg: str | None = getattr(__main__, "__package__", None)
         if pkg:
             return pkg
     except (ImportError, AttributeError):

@@ -16,8 +16,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QSize, Qt
+from PySide6.QtGui import QColor, QPalette, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QHeaderView,
@@ -91,7 +91,7 @@ class NoElideDelegate(QStyledItemDelegate):
 
     _TEXT_HMARGIN = 8
 
-    def paint(self, painter, option, index):
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> None:
         painter.save()
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
@@ -121,7 +121,7 @@ class NoElideDelegate(QStyledItemDelegate):
         painter.drawText(rect, flags, opt.text)
         painter.restore()
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> QSize:
         size = super().sizeHint(option, index)
         padding = index.data(_PADDING_ROLE) or 0
         extra = int(padding) * 2 + self._TEXT_HMARGIN * 2

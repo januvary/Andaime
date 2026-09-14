@@ -21,7 +21,7 @@ from typing import Optional
 
 from PySide6.QtGui import QPalette, QColor
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QPushButton, QWidget
 
 # ============================================================================
 # Fonte base por plataforma
@@ -771,7 +771,7 @@ def _build_qss(c: dict) -> str:
 def make_button(
     text: str,
     role: str = "flat",
-    parent=None,
+    parent: QWidget | None = None,
 ) -> QPushButton:
     """Cria QPushButton com papel visual padronizado.
 
@@ -795,7 +795,7 @@ class ThemeToggleButton(QPushButton):
 
     theme_toggled = Signal(bool)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self._dark = get_theme() == "dark"
         self.setFixedSize(28, 28)
@@ -804,10 +804,10 @@ class ThemeToggleButton(QPushButton):
         self.clicked.connect(self._toggle)
         self._update_icon()
 
-    def _toggle(self):
+    def _toggle(self) -> None:
         self._dark = not self._dark
         self._update_icon()
         self.theme_toggled.emit(self._dark)
 
-    def _update_icon(self):
+    def _update_icon(self) -> None:
         self.setText("\u263e" if self._dark else "\u2600")

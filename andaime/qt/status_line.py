@@ -8,7 +8,8 @@ arquivos no caminho ao ser clicado.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QLabel, QWidget
 
 from andaime.qt.fs import reveal_path
 from andaime.qt.theme import colors
@@ -21,7 +22,7 @@ class StatusLine(QLabel):
     vira "mão"; um clique emite ``reveal_path(path)``.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None):
         super().__init__("", parent)
         self.setProperty("class", "dim")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -53,7 +54,7 @@ class StatusLine(QLabel):
             self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setStyleSheet(style)
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if self._path:
             reveal_path(self._path)
         super().mouseReleaseEvent(event)

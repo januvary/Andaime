@@ -179,7 +179,7 @@ def prompt_dialog(
 
     result: list[Any] = []
 
-    def on_confirm_clicked():
+    def on_confirm_clicked() -> None:
         value = on_confirm(widget) if on_confirm else None
         if value is KEEP_OPEN:
             return

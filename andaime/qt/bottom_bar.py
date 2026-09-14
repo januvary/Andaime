@@ -14,7 +14,7 @@ em seguida, e o botão "Salvar" à direita.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from PySide6.QtWidgets import QHBoxLayout, QFrame, QPushButton, QWidget
 
@@ -95,7 +95,7 @@ class BottomBar(QFrame):
         self._right_layout = lay4
         layout.addWidget(col4, stretch=col_weights[3])
 
-    def add_action(self, action) -> None:
+    def add_action(self, action: Any) -> None:
         """Adiciona um botão de ação à coluna central.
 
         ``action`` pode ser um ``QWidget`` ou uma tupla

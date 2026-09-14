@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtGui import QKeyEvent
+from typing import cast
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QLineEdit, QPushButton, QWidget
 
@@ -94,26 +96,27 @@ class ShortcutManager(QObject):
         """Força o peek para oculto (chamar em navegação/reset de página)."""
         self._set_peek(False)
 
-    def eventFilter(self, obj, event):
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         """
         Detecta Ctrl+Shift segurados para ativar/desativar o peek.
         """
         try:
-            etype = event.type()
+            key_event = cast(QKeyEvent, event)
+            etype = key_event.type()
             if etype == QEvent.Type.KeyPress:
                 if (
-                    event.key() == Qt.Key.Key_Shift
-                    and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                    key_event.key() == Qt.Key.Key_Shift
+                    and key_event.modifiers() & Qt.KeyboardModifier.ControlModifier
                 ):
                     self._set_peek(True)
                 elif (
-                    event.key() == Qt.Key.Key_Control
-                    and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+                    key_event.key() == Qt.Key.Key_Control
+                    and key_event.modifiers() & Qt.KeyboardModifier.ShiftModifier
                 ):
                     self._set_peek(True)
             elif etype == QEvent.Type.KeyRelease:
-                if event.key() in (Qt.Key.Key_Shift, Qt.Key.Key_Control):
-                    mods = event.modifiers()
+                if key_event.key() in (Qt.Key.Key_Shift, Qt.Key.Key_Control):
+                    mods = key_event.modifiers()
                     has_ctrl = mods & Qt.KeyboardModifier.ControlModifier
                     has_shift = mods & Qt.KeyboardModifier.ShiftModifier
                     if not (has_ctrl and has_shift):

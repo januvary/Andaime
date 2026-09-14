@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QKeyEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from andaime.qt import ShortcutManager
 from andaime.qt.theme import get_palette, make_button
 from andaime.qt.table import table_batch_populate
 
@@ -89,6 +90,7 @@ class DashboardService:
         database_paths: dict[str, Path | Callable[[], Path]],
         non_editable_columns: dict[str, list[str]] | None = None,
         search_joins: dict[str, list[SearchJoin]] | None = None,
+        editable_pk_columns: dict[str, list[str]] | None = None,
     ) -> None:
         """
         Args:
@@ -98,10 +100,15 @@ class DashboardService:
                 (e.g. ``{"pacientes": ["id"]}``).
             search_joins: Per-table JOIN configs for cross-table search
                 (e.g. ``{"retirada_items": [SearchJoin(...)]}``).
+            editable_pk_columns: Per-table PK columns that stay editable
+                despite being primary keys (e.g.
+                ``{"items_catalog": ["item_id"]}``). PK edits cascade via
+                ``ON UPDATE CASCADE`` when foreign keys are enforced.
         """
         self._database_paths = database_paths
         self._non_editable_columns = non_editable_columns or {}
         self._search_joins = search_joins or {}
+        self._editable_pk_columns = editable_pk_columns or {}
         self._db_paths: dict[str, Path] = {}
 
     @classmethod
@@ -111,6 +118,7 @@ class DashboardService:
         *,
         non_editable_columns: dict[str, list[str]] | None = None,
         search_joins: dict[str, list[SearchJoin]] | None = None,
+        editable_pk_columns: dict[str, list[str]] | None = None,
     ) -> DashboardService:
         """Auto-detect ``*.db`` files in *data_dir* and build a service.
 
@@ -121,7 +129,7 @@ class DashboardService:
         if data_dir.is_dir():
             for db_file in sorted(data_dir.glob("*.db")):
                 paths[db_file.stem] = db_file
-        return cls(paths, non_editable_columns, search_joins)
+        return cls(paths, non_editable_columns, search_joins, editable_pk_columns)
 
     # ---------- connection ----------
 
@@ -146,6 +154,8 @@ class DashboardService:
             raise ValueError(f"Banco de dados não encontrado: {db_name}")
         conn = sqlite3.connect(str(db_path), timeout=30)
         conn.execute("PRAGMA busy_timeout=30000")
+        # Necessário para que ON UPDATE/DELETE CASCADE disparem.
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     # ---------- introspection ----------
@@ -284,6 +294,45 @@ class DashboardService:
     def get_non_editable_columns(self, table_name: str) -> list[str]:
         return self._non_editable_columns.get(table_name, [])
 
+    def get_editable_pk_columns(self, table_name: str) -> list[str]:
+        """PK columns explicitly allowed to stay editable on *table_name*."""
+        return self._editable_pk_columns.get(table_name, [])
+
+    def count_pk_references(
+        self, db_name: str, table_name: str, pk_column: str, pk_value: Any
+    ) -> list[tuple[str, int]]:
+        """Conta linhas em tabelas filhas que referenciam esta PK via FK.
+
+        Retorna ``[(tabela_filha, contagem)]`` apenas para tabelas com
+        contagem > 0. Usado para confirmar renomeações de PK antes de salvar.
+        """
+        self._validate_table(db_name, table_name)
+        conn = self._get_connection(db_name)
+        try:
+            cursor = conn.cursor()
+            counts: list[tuple[str, int]] = []
+            for (child,) in cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall():
+                if child == "sqlite_sequence" or child == table_name:
+                    continue
+                for fk in cursor.execute(
+                    f'PRAGMA foreign_key_list("{child}")'
+                ).fetchall():
+                    # (id, seq, table, from, to, on_update, on_delete, match)
+                    if fk[2] == table_name and fk[4] == pk_column:
+                        cursor.execute(
+                            f'SELECT COUNT(*) FROM "{child}" WHERE "{fk[3]}" = ?',
+                            (pk_value,),
+                        )
+                        n = cursor.fetchone()[0]
+                        if n:
+                            counts.append((child, int(n)))
+                        break
+            return counts
+        finally:
+            conn.close()
+
     # ---------- mutations ----------
 
     def update_record(
@@ -357,9 +406,15 @@ class DashboardService:
         table: str,
         column: str,
         value: str,
+        is_pk: bool = False,
     ) -> str:
         msg = str(error)
         if "UNIQUE constraint failed" in msg:
+            if is_pk:
+                return (
+                    f"'{value}' já existe como chave primária em '{table}' — "
+                    "renomeação cancelada, célula revertida"
+                )
             return f"Valor '{value}' já existe em '{table}'"
         if "NOT NULL constraint failed" in msg:
             return f"Coluna '{column}' não pode ser vazia"
@@ -494,7 +549,7 @@ class _AddRecordDialog(QDialog):
 class _EnterEditableTable(QTableWidget):
     """QTableWidget that opens the current cell for editing on Enter/Return."""
 
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             item = self.currentItem()
             if item is not None and self.state() != QAbstractItemView.State.EditingState:
@@ -545,12 +600,13 @@ class DashboardWindow(QMainWindow):
     # ----------------------------------------------------------- shortcuts
 
     def _setup_shortcuts(self) -> None:
-        """Registra atalhos de teclado para as ações do painel."""
-        QShortcut(QKeySequence("Ctrl+N"), self, self._add_record)
-        QShortcut(QKeySequence("Delete"), self, self._delete_record)
-        QShortcut(QKeySequence("Ctrl+S"), self, self._save_changes)
-        QShortcut(QKeySequence("Ctrl+E"), self, self._export_table)
-        QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
+        """Registra atalhos de teclado com dicas visuais (peek via Ctrl+Shift)."""
+        self._shortcuts = ShortcutManager(self)
+        self._shortcuts.bind("Ctrl+N", self._add_record, self._add_button)
+        self._shortcuts.bind("Delete", self._delete_record, self._delete_button)
+        self._shortcuts.bind("Ctrl+S", self._save_changes, self._save_button)
+        self._shortcuts.bind("Ctrl+E", self._export_table, self._export_button)
+        self._shortcuts.bind("Ctrl+F", self._focus_search, self._search_entry)
 
     def _focus_search(self) -> None:
         """Foca o campo de pesquisa do painel."""
@@ -784,7 +840,10 @@ class DashboardWindow(QMainWindow):
         blob_columns = schema["blob_columns"]
         self._column_names = schema["column_names"]
         self._pk_columns = schema["pk_columns"]
-        non_editable = set(self._service.get_non_editable_columns(table_name)) | set(self._pk_columns)
+        non_editable = (
+            set(self._service.get_non_editable_columns(table_name))
+            | set(self._pk_columns)
+        ) - set(self._service.get_editable_pk_columns(table_name))
 
         with table_batch_populate(self._table):
             self._table.clear()
@@ -899,6 +958,9 @@ class DashboardWindow(QMainWindow):
         if not self._unsaved_changes or not self._current_table:
             return
 
+        if not self._confirm_pk_renames():
+            return
+
         saved = 0
         changes_copy = {
             rk: dict(cols) for rk, cols in self._unsaved_changes.items()
@@ -921,6 +983,12 @@ class DashboardWindow(QMainWindow):
                     self._original_values.setdefault(row_key, {})[col_name] = (
                         new_value if new_value != "" else None
                     )
+                    if col_name in self._pk_columns:
+                        # PK renomeada: atualiza o cache para que edições
+                        # seguintes na mesma linha usem a chave nova no WHERE.
+                        self._pk_values.setdefault(row_key, {})[col_name] = (
+                            new_value if new_value != "" else None
+                        )
                     del self._unsaved_changes[row_key][col_name]
                     if not self._unsaved_changes[row_key]:
                         del self._unsaved_changes[row_key]
@@ -936,7 +1004,11 @@ class DashboardWindow(QMainWindow):
                             self._table.blockSignals(False)
                             break
                     msg = self._service.parse_integrity_error(
-                        e, self._current_table, col_name, str(new_value)
+                        e,
+                        self._current_table,
+                        col_name,
+                        str(new_value),
+                        is_pk=col_name in self._pk_columns,
                     )
                     QMessageBox.critical(self, "Erro ao salvar", msg)
                     del self._unsaved_changes[row_key][col_name]
@@ -948,6 +1020,36 @@ class DashboardWindow(QMainWindow):
             QMessageBox.information(
                 self, "Salvo", f"{saved} alteração(ões) salva(s)."
             )
+
+    def _confirm_pk_renames(self) -> bool:
+        """Pede confirmação para renomeações de PK com referências.
+
+        Retorna False se o usuário cancelar. Renomeações sem linhas
+        filhas não pedem confirmação.
+        """
+        assert self._current_table is not None
+        for row_key, changes in self._unsaved_changes.items():
+            for col_name, new_value in changes.items():
+                if col_name not in self._pk_columns:
+                    continue
+                old_value = self._original_values.get(row_key, {}).get(col_name)
+                refs = self._service.count_pk_references(
+                    self._current_db, self._current_table, col_name, old_value
+                )
+                if not refs:
+                    continue
+                old_display = "-" if old_value is None else str(old_value)
+                new_display = str(new_value) if new_value != "" else "-"
+                detail = ", ".join(f"{n} em {t}" for t, n in refs)
+                reply = QMessageBox.question(
+                    self,
+                    "Confirmar renomeação",
+                    f"Renomear {col_name} '{old_display}' → '{new_display}'?\n"
+                    f"Isso atualiza {detail}.",
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return False
+        return True
 
     # ------------------------------------------------------------- export
 

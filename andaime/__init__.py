@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 _app_name: str = ""
 _app_folder: str = ""
@@ -40,7 +41,7 @@ def get_root_directory() -> Path:
     return _app_root
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazily resolve public attrs so ``import andaime`` stays cheap.
 
     ``App`` and ``SplashScreen`` pull PySide6 + the database/updater stack;

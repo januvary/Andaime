@@ -20,7 +20,7 @@ in jeta um ``search_fn``.
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -220,7 +220,7 @@ class TopBar(QFrame):
 
     # ========== API ==========
 
-    def add_action(self, action) -> None:
+    def add_action(self, action: Any) -> None:
         """Adiciona um botão de ação à coluna 2.
 
         ``action`` pode ser um ``QWidget`` ou uma tupla
