@@ -33,6 +33,7 @@ class Dispensing:
         self.estoque = "505"
         self.unit_code = "2867"
         self._item_chaves = []
+        self._all_dispensacao_ids: list[str] = []
         self._patient_sus = None
         self._action_type = None
         self._last_error = ""
@@ -362,6 +363,18 @@ class Dispensing:
         self._patient_sus = patient_sus
         self._action_type = action_type
 
+        # Controlled actions 6/7/9 need a notification number; the server
+        # rejects without one and returns only a generic "ATENÇÃO!".
+        if action_type in self.NOTIFICATION_ACTIONS and not (
+            getattr(self, "notificacao_nr", "") or ""
+        ).strip():
+            msg = (f"Receita controlada (ação {action_type}) exige número de "
+                   f"notificação — informe a notificação para {material_desc} "
+                   f"antes de dispensar.")
+            self._log(f"  {msg}", "ERROR")
+            self._last_error = msg
+            return False
+
         mat = self._lookup_material(material_code)
         if not mat:
             self._log(f"  Material {material_code} not found", "ERROR")
@@ -669,6 +682,8 @@ class Dispensing:
             disp_match = re.search(r"Dispensacao=(\d+)", resp.text)
             if disp_match:
                 self.dispensacao_id = disp_match.group(1)
+                if self.dispensacao_id not in self._all_dispensacao_ids:
+                    self._all_dispensacao_ids.append(self.dispensacao_id)
                 self._log(f"  Dispensacao ID: {self.dispensacao_id}")
 
             # The origem=1 response does not render the item rows: the browser
@@ -773,7 +788,8 @@ class Dispensing:
                 r"\s*(\d+)", resp.text
             )
         if chaves:
-            self._item_chaves = sorted(set(chaves))
+            merged = sorted(set(self._item_chaves) | set(chaves))
+            self._item_chaves = merged
             self._log(f"  Item chaves: {self._item_chaves}")
         else:
             self._log("  No item chaves found on re-opened dispensation",
@@ -788,6 +804,21 @@ class Dispensing:
         attendance.
         """
         self._log(f"=== Rolling back dispensation (attendance {self.attendance_id}) ===")
+
+        # Re-collect chaves from every dispensation opened in this retirada:
+        # _item_chaves only holds what was captured so far, and a later
+        # group failure must also cancel earlier groups' items — otherwise
+        # the attendance can't be cancelled ("Existem Informações
+        # Registradas no Atendimento!").
+        current_disp = self.dispensacao_id
+        try:
+            for disp_id in list(self._all_dispensacao_ids):
+                if disp_id == current_disp:
+                    continue
+                self.dispensacao_id = disp_id
+                self._refresh_item_chaves()
+        finally:
+            self.dispensacao_id = current_disp
 
         items = list(getattr(self, "_item_chaves", []))
         if not items and self.dispensacao_id:
@@ -1107,6 +1138,8 @@ class Dispensing:
         failed = []
         skipped_no_lot = []
         self._dias_adjusted = []
+        self._item_chaves = []
+        self._all_dispensacao_ids = []
 
         # Step 4: Process each group. Any exception (e.g. network failure)
         # rolls the attendance back before the message reaches the UI.
