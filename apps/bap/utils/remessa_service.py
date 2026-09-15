@@ -75,7 +75,7 @@ def _archive_processo(db: SS54Database, root: Path, processo: Processo | object)
         if not has_docs or pdf_path is None:
             ErrorHandler.log(
                 f"Arquivamento ignorado (sem documentos): processo #{processo.id}",
-                level=ErrorLevel.WARNING,
+                level=ErrorLevel.DEBUG,
                 context=ErrorContext.FILE_IO,
             )
             return False
@@ -97,32 +97,37 @@ def archive_previous_lotes(
     """Arquiva todos os processos de remessas anteriores a ``new_lote``.
 
     Para cada lote com data anterior a ``new_lote.date``, garante o PDF de cada
-    processo e remove seus BLOBs. Retorna relatório com contadores.
+    processo e remove seus BLOBs. O VACUUM automático fica suspenso durante
+    o lote inteiro (``vacuum_hold``): um único VACUUM ao final substitui um
+    por processo. Retorna relatório com contadores.
     """
-    report = {"processos": 0, "arquivados": 0, "erros": 0, "error_detail": []}
-    lotes = db.get_all_lotes()
-    for lote in lotes:
-        if lote.id is None:
-            continue
-        if lote.date >= new_lote.date:
-            continue
-        for processo in db.get_processos_by_lote(lote.id):
-            report["processos"] += 1
-            try:
-                if _archive_processo(db, root, processo):
-                    report["arquivados"] += 1
-            except Exception as e:  # noqa: BLE001
-                report["erros"] += 1
-                report["error_detail"].append(str(e))
-                ErrorHandler.log(
-                    f"Falha ao arquivar processo: {e}",
-                    level=ErrorLevel.ERROR,
-                    context=ErrorContext.FILE_IO,
-                )
+    report = {"processos": 0, "arquivados": 0, "ignorados": 0, "erros": 0, "error_detail": []}
+    with db.vacuum_hold():
+        lotes = db.get_all_lotes()
+        for lote in lotes:
+            if lote.id is None:
+                continue
+            if lote.date >= new_lote.date:
+                continue
+            for processo in db.get_processos_by_lote(lote.id):
+                report["processos"] += 1
+                try:
+                    if _archive_processo(db, root, processo):
+                        report["arquivados"] += 1
+                    else:
+                        report["ignorados"] += 1
+                except Exception as e:  # noqa: BLE001
+                    report["erros"] += 1
+                    report["error_detail"].append(str(e))
+                    ErrorHandler.log(
+                        f"Falha ao arquivar processo: {e}",
+                        level=ErrorLevel.ERROR,
+                        context=ErrorContext.FILE_IO,
+                    )
     if report["processos"]:
         ErrorHandler.log(
             f"Arquivamento: {report['arquivados']}/{report['processos']} arquivado(s), "
-            f"{report['erros']} erro(s)",
+            f"{report['ignorados']} ignorado(s), {report['erros']} erro(s)",
             level=ErrorLevel.INFO,
             context=ErrorContext.FILE_IO,
         )
@@ -158,9 +163,9 @@ def ensure_remessas(db: SS54Database, root: Path | None = None) -> dict:
     """
     lotes = db.get_all_lotes()
     if lotes and (date.today() - _parse(lotes[0].date)).days < 1:
-        return {"criados": 0, "archive": {"processos": 0, "arquivados": 0, "erros": 0}}
+        return {"criados": 0, "archive": {"processos": 0, "arquivados": 0, "ignorados": 0, "erros": 0}}
     created, lote = _ensure_lote_at_next_or_today(db, root, lotes)
-    archive_report = {"processos": 0, "arquivados": 0, "erros": 0}
+    archive_report = {"processos": 0, "arquivados": 0, "ignorados": 0, "erros": 0}
     if created and lote is not None and root is not None:
         archive_report = archive_previous_lotes(db, root, lote)
     return {"criados": created, "archive": archive_report}
@@ -172,7 +177,7 @@ def ensure_next_open_lote(db: SS54Database, root: Path | None = None) -> dict:
     incompletos. Arquiva as anteriores se ``root`` for passado.
     """
     created, lote = _ensure_lote_at_next_or_today(db, root, db.get_all_lotes())
-    archive_report = {"processos": 0, "arquivados": 0, "erros": 0}
+    archive_report = {"processos": 0, "arquivados": 0, "ignorados": 0, "erros": 0}
     if created and lote is not None and root is not None:
         archive_report = archive_previous_lotes(db, root, lote)
     return {"criados": created, "archive": archive_report}
