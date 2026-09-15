@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 from andaime.error_handler import ErrorHandler
+from emissor.utils.security import validate_file_path
 
 
 def open_file(file_path: str) -> None:
@@ -28,8 +29,6 @@ def open_file(file_path: str) -> None:
         FileNotFoundError: Se o caminho for inválido ou o arquivo não existir.
         OSError: Se a abertura falhar.
     """
-    from emissor.utils.security import validate_file_path
-
     try:
         safe_path = validate_file_path(file_path)
     except ValueError as e:

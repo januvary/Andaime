@@ -63,7 +63,7 @@ def get_receitas_aviso(
     if indice_max < 0:
         return default
     tipo_max = list(TIPO_RECEITA_INFO)[indice_max]
-    return TIPO_RECEITA_INFO[tipo_max].get("texto_validade", default)
+    return str(TIPO_RECEITA_INFO[tipo_max]["texto_validade"])
 
 
 class DateCalculator(_BaseDateCalculator):

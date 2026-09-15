@@ -8,6 +8,7 @@ from threading import RLock
 from .state_events import StateEvent, StateEventType, StateObserver
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from emissor.database.models import Patient, PatientItem
+from emissor.utils.date_utils import DateCalculator
 
 if TYPE_CHECKING:
     from emissor.database import Patient
@@ -112,6 +113,9 @@ class StateManager:
         """Define o paciente selecionado e notifica observadores."""
         if patient_data is None:
             raise ValueError("patient_data não pode ser None")
+
+        if not patient_data:
+            raise ValueError("patient_data vazio ou inválido")
 
         if not isinstance(patient_data, Patient):
             patient_data = Patient.from_row(patient_data)
@@ -336,8 +340,6 @@ class StateManager:
             retirada_count_fn: callable(start, end) → dict data→contagem
             bloquear_balanco: evita últimos 5 dias úteis do mês
         """
-        from emissor.utils.date_utils import DateCalculator
-
         if not periodicidade_str:
             self.set_calculated_dates({})
             return {}

@@ -36,6 +36,7 @@ class Dispensing:
         self._patient_sus = None
         self._action_type = None
         self._last_error = ""
+        self._dias_adjusted: list[str] = []
 
     def _log(self, msg, level="INFO"):
         if self._log_cb:
@@ -559,38 +560,19 @@ class Dispensing:
             total_units = quantity * unid
             real_dias = dias if dias and dias > 0 else quantity
 
-            # The server rejects a posology whose duration (txtQtdeDias)
-            # exceeds the medication's max treatment duration
-            # (txtDuracaoTratamento). Pick an integer (dose, dias) pair with
-            #   dias <= duracao_max  and  dias * dose == quantity * unid
-            # so the server's prescrita (dose*apps*days/unid) equals the
-            # quantity exactly and no '.' decimal is ever sent.
-            dose_val = dose_dias = None
-            if duracao_max >= real_dias and total_units % real_dias == 0:
-                dose_val = total_units // real_dias
-                dose_dias = real_dias
-            else:
-                for d in range(max(1, duracao_max), 0, -1):
+            # Os dias pedidos vao como estao: duracao_tratamento_max NAO e
+            # um teto confiavel (o servidor costuma aceitar dias acima
+            # dele). Ele so e usado como fallback se o servidor recusar.
+            # dose*dias == quantity*unid e mantido com inteiros para a
+            # prescrita calculada pelo servidor bater com a quantidade.
+            def _pick(target: int) -> tuple[int, int]:
+                if target >= 1 and total_units % target == 0:
+                    return total_units // target, target
+                for d in range(max(1, target), 0, -1):
                     if total_units % d == 0:
-                        dv = total_units // d
-                        if dv > 0:
-                            dose_val, dose_dias = dv, d
-                            break
-                if dose_val is None:
-                    dose_val, dose_dias = total_units, 1
+                        return total_units // d, d
+                return total_units, 1
 
-            prescrita = (dose_dias * dose_val) // unid
-
-            self._log(f"  Posology: dose={dose_val}, days={dose_dias}, "
-                      f"unid={unid}, max_days={duracao_max}, "
-                      f"prescrita={prescrita}")
-
-            # Integer dose -> plain digits (never a '.' which the server
-            # treats as a thousands separator, nor a ',' which is fine).
-            form_data["txtQtdeDose"] = str(dose_val)
-            form_data["txtQtdeAplicacoes"] = "1"
-            form_data["txtQtdeDias"] = str(dose_dias)
-            form_data["txtQtdePrescrita"] = str(prescrita)
             form_data["txtQtdePrescricaoUnidMed"] = qtde_unid
 
         # Controlled fields (txtReceitaModeloControlado already set)
@@ -601,16 +583,6 @@ class Dispensing:
         # Notification number only for Notificação types
         if action_type in self.NOTIFICATION_ACTIONS:
             form_data["txtNotificacaoNr"] = getattr(self, "notificacao_nr", "")
-
-        # Add the item (origem=1)
-        resp = self.auth.session.post(
-            f"{self.base}/saudeweb/amfb/fb/dispensacao_direta.asp?origem=1",
-            data=form_data,
-            timeout=60,
-        )
-
-        title = re.search(r"<title>([^<]+)</title>", resp.text)
-        self._log(f"  Result: {title.group(1).strip() if title else 'no title'}")
 
         # Extract visible error messages from the response
         def _dump_debug(fd, html):
@@ -631,7 +603,7 @@ class Dispensing:
             lines = []
             # The server often reports errors via JS alert() calls
             for m in re.finditer(r"alert\(\s*(['\"])(.*?)\1\s*\)", html,
-                                 re.DOTALL):
+                                  re.DOTALL):
                 msg = m.group(2).replace("\\n", " | ").replace("\n", " ").strip()
                 if msg and msg not in lines:
                     lines.append(msg)
@@ -649,52 +621,110 @@ class Dispensing:
                     "aten", "erro", "invalid", "inválid", "finalizado",
                     "obrigat", "saldo", "sufici", "estoque", "lote",
                     "material", "prescrit", "permiss", "negado",
-                    "justific", "quantidade",
+                    "justific", "quantidade", "durac", "dias",
+                    "tratamento", "posolog",
                 ]):
                     if line not in lines:
                         lines.append(line)
             return lines
 
-        text_lower = resp.text.lower()
-        is_failure = (resp.status_code == 500 or
-                      "color:#ff0000" in resp.text.lower() or
-                      "não foi finalizado" in text_lower or
-                      "material informado" in text_lower)
-        if is_failure:
-            _dump_debug(form_data, resp.text)
-            errors = _extract_errors(resp.text)
-            if not errors:
-                errors = ["(no readable error message)"]
-            for line in errors[:8]:
-                self._log(f"  Server: {line}", "ERROR")
+        # Uma tentativa de item = um POST + leitura da resposta.
+        def _attempt(dose_val: int, dose_dias: int) -> tuple[bool, list[str]]:
+            if is_medication:
+                prescrita = (dose_dias * dose_val) // unid
+                self._log(f"  Posology: dose={dose_val}, days={dose_dias}, "
+                          f"unid={unid}, max_days={duracao_max}, "
+                          f"prescrita={prescrita}")
+                # Integer dose -> plain digits (never a '.' which the server
+                # treats as a thousands separator, nor a ',' which is fine).
+                form_data["txtQtdeDose"] = str(dose_val)
+                form_data["txtQtdeAplicacoes"] = "1"
+                form_data["txtQtdeDias"] = str(dose_dias)
+                form_data["txtQtdePrescrita"] = str(prescrita)
+
+            resp = self.auth.session.post(
+                f"{self.base}/saudeweb/amfb/fb/dispensacao_direta.asp?origem=1",
+                data=form_data,
+                timeout=60,
+            )
+
+            title = re.search(r"<title>([^<]+)</title>", resp.text)
+            self._log(f"  Result: {title.group(1).strip() if title else 'no title'}")
+
+            text_lower = resp.text.lower()
+            is_failure = (resp.status_code == 500 or
+                          "color:#ff0000" in resp.text.lower() or
+                          "não foi finalizado" in text_lower or
+                          "material informado" in text_lower)
+            if is_failure:
+                _dump_debug(form_data, resp.text)
+                errors = _extract_errors(resp.text)
+                if not errors:
+                    errors = ["(no readable error message)"]
+                for line in errors[:8]:
+                    self._log(f"  Server: {line}", "ERROR")
+                return False, errors
+
+            # Extract dispensation ID and item chave
+            disp_match = re.search(r"Dispensacao=(\d+)", resp.text)
+            if disp_match:
+                self.dispensacao_id = disp_match.group(1)
+                self._log(f"  Dispensacao ID: {self.dispensacao_id}")
+
+            # The origem=1 response does not render the item rows: the browser
+            # auto-reloads via
+            #   enviarForm(null,'dispensacao_direta.asp?origem=0&Dispensacao=<id>')
+            # which shows the items. Re-open the page and capture the item
+            # chaves (btnCancelar<chave>) so we can roll them back on failure.
+            if self.dispensacao_id:
+                self._refresh_item_chaves()
+
+            if disp_match:
+                return True, []
+
+            # If we already have a dispensacao_id and response looks clean,
+            # the item was likely added to the existing dispensation
+            if self.dispensacao_id and resp.status_code == 200:
+                self._log(f"  Added to dispensation {self.dispensacao_id}")
+                return True, []
+
+            self._log("  No dispensation ID found - item may not have been saved",
+                      "WARN")
+            return False, ["Item pode não ter sido salvo (sem ID de dispensação)"]
+
+        def _may_be_duration_rejection(errs: list[str]) -> bool:
+            joined = " | ".join(errs).lower()
+            if any(k in joined for k in (
+                    "durac", "dias", "tratamento", "posolog",
+                    "permitid", "exced", "superior", "limite",
+                    "maxim", "prescrit")):
+                return True
+            # Sem mensagem legível, tenta o fallback mesmo assim.
+            return errs == ["(no readable error message)"]
+
+        # Primeira tentativa: dias pedidos, sem teto.
+        dose_val, dose_dias = _pick(real_dias) if is_medication else (0, 0)
+        ok, errors = _attempt(dose_val, dose_dias)
+        if not ok and is_medication and duracao_max < real_dias and \
+                _may_be_duration_rejection(errors):
+            self._log(f"  Servidor recusou {real_dias} dias; tentando com "
+                      f"o limite do medicamento ({duracao_max})", "WARN")
+            dose_val, dose_dias = _pick(duracao_max)
+            ok, errors = _attempt(dose_val, dose_dias)
+            if ok:
+                adj = (f"{material_desc}: dias ajustados de {real_dias} "
+                       f"para {dose_dias} (limite do medicamento)")
+                self._dias_adjusted.append(adj)
+                self._log(f"  {adj}", "WARN")
+            elif any("já entregue" in e.lower() for e in errors):
+                # O primeiro POST salvou apesar do erro aparente.
+                self._log("  Item já consta na dispensação — considerando OK",
+                          "WARN")
+                ok, errors = True, []
+        if not ok:
+            self._last_error = " | ".join(errors[:3])
             return False
-
-        # Extract dispensation ID and item chave
-        disp_match = re.search(r"Dispensacao=(\d+)", resp.text)
-        if disp_match:
-            self.dispensacao_id = disp_match.group(1)
-            self._log(f"  Dispensacao ID: {self.dispensacao_id}")
-
-        # The origem=1 response does not render the item rows: the browser
-        # auto-reloads via
-        #   enviarForm(null,'dispensacao_direta.asp?origem=0&Dispensacao=<id>')
-        # which shows the items. Re-open the page and capture the item
-        # chaves (btnCancelar<chave>) so we can roll them back on failure.
-        if self.dispensacao_id:
-            self._refresh_item_chaves()
-
-        if disp_match:
-            return True
-
-        # If we already have a dispensacao_id and response looks clean,
-        # the item was likely added to the existing dispensation
-        if self.dispensacao_id and resp.status_code == 200:
-            self._log(f"  Added to dispensation {self.dispensacao_id}")
-            return True
-
-        self._log("  No dispensation ID found - item may not have been saved",
-                  "WARN")
-        return False
+        return True
 
     def _refresh_item_chaves(self):
         """Re-open the dispensation page to list its items and capture the
@@ -1076,6 +1106,7 @@ class Dispensing:
         succeeded = []
         failed = []
         skipped_no_lot = []
+        self._dias_adjusted = []
 
         # Step 4: Process each group. Any exception (e.g. network failure)
         # rolls the attendance back before the message reaches the UI.
@@ -1160,6 +1191,9 @@ class Dispensing:
         msg = "Registrado com sucesso"
         if skipped_no_lot:
             msg += f". Itens pulados: {', '.join(skipped_no_lot)}"
+        if self._dias_adjusted:
+            msg += ". Dias ajustados pelo limite do medicamento: " + \
+                "; ".join(self._dias_adjusted)
         return True, msg
 
     def _rollback_after_failure(self, succeeded: list, message: str) -> str:

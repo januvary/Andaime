@@ -872,6 +872,7 @@ class QtApp(QMainWindow):
         data_dir = get_root_directory() / "data"
         service = DashboardService.from_directory(
             data_dir,
+            editable_pk_columns={"items_catalog": ["item_id"]},
             search_joins={
                 "retirada_items": [
                     SearchJoin(

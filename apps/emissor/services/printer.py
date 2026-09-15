@@ -7,37 +7,18 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from ctypes import Structure, c_int, c_uint, c_wchar_p
+from ctypes import Structure, c_int, c_uint, c_wchar_p, byref, sizeof
+from contextlib import suppress
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+from PIL import ImageChops, ImageWin
 
 if TYPE_CHECKING:
     from PIL import Image
-
-
-# Estrutura DOCINFO do GDI para StartDocW. Definida em módulo (ctypes é
-# multiplataforma; windll só existe no Windows, mas _DOCINFO em si não toca gdi32).
-class _DOCINFO(Structure):
-    """DOCINFOW — metadados de um trabalho de impressão GDI."""
-
-    _fields_ = [
-        ("cbSize", c_int),
-        ("lpszDocName", c_wchar_p),
-        ("lpszOutput", c_wchar_p),
-        ("lpszDatatype", c_wchar_p),
-        ("fwType", c_uint),
-    ]
-
-
-def _load_gdi() -> Any:
-    """Carrega gdi32 via ctypes (Windows apenas)."""
-    import ctypes
-
-    return ctypes.windll.gdi32  # type: ignore[attr-defined]
 
 
 # ============================================================================
@@ -102,8 +83,9 @@ class PrinterBackend(Protocol):
         ...
 
 
-# --- Windows (primário) -----------------------------------------------------
-
+# ============================================================================
+# Windows (primário)
+# ============================================================================
 
 # Flags de status de win32print que indicam impressora indisponível.
 # Mantidos como int para evitar importar win32print fora do Windows.
@@ -146,11 +128,29 @@ _PHYSICAL_OFFSET_Y = 113
 # Modo de stretch para SetStretchBltMode: melhor qualidade ao redimensionar.
 _HALFTONE_STRETCH = 4
 
+# Estrutura DOCINFO do GDI para StartDocW.
+class _DOCINFO(Structure):
+    """DOCINFOW — metadados de um trabalho de impressão GDI."""
+
+    _fields_ = [
+        ("cbSize", c_int),
+        ("lpszDocName", c_wchar_p),
+        ("lpszOutput", c_wchar_p),
+        ("lpszDatatype", c_wchar_p),
+        ("fwType", c_uint),
+    ]
+
+def _load_gdi() -> Any:
+    """Carrega gdi32 via ctypes (Windows apenas)."""
+    import ctypes
+
+    return ctypes.windll.gdi32  # type: ignore[attr-defined]
 
 def _describe_printer_problem(status_flags: int) -> str:
     """Traduz flags de status da impressora para texto em português."""
     labels = [
-        label for flag, label in _PRINTER_PROBLEM_LABELS.items() if status_flags & flag
+        label for flag, label in _PRINTER_PROBLEM_LABELS.items()
+        if status_flags & flag
     ]
     return ", ".join(labels)
 
@@ -296,11 +296,7 @@ class Win32SpoolerBackend:
         """Detecta se a imagem tem cor cromática (não-cinza)."""
         if img.mode not in ("RGB", "RGBA"):
             return False
-        from PIL import ImageChops
-
         channels = img.split()
-        # difference() realça |R-G| e |G-B|; getbbox() devolve None só se a
-        # imagem for toda uniforme (zero). Qualquer pixel diferindo -> bbox.
         diff_rg = ImageChops.difference(channels[0], channels[1]).getbbox()
         diff_gb = ImageChops.difference(channels[1], channels[2]).getbbox()
         return diff_rg is not None or diff_gb is not None
@@ -318,11 +314,6 @@ class Win32SpoolerBackend:
         hardware), preservando a proporção e centralizando. Isso garante que
         nada caia na margem física não-imprimível da impressora.
         """
-        from ctypes import byref, sizeof
-        from contextlib import suppress
-
-        from PIL import ImageWin
-
         gdi = _load_gdi()
 
         hdc = gdi.CreateDCW(c_wchar_p("WINSPOOL"), c_wchar_p(printer_name), None, None)
@@ -337,7 +328,6 @@ class Win32SpoolerBackend:
             printable_w = gdi.GetDeviceCaps(hdc, _HORZRES)
             printable_h = gdi.GetDeviceCaps(hdc, _VERTRES)
 
-            # Preserva proporção da imagem e centraliza na área imprimível.
             img_w, img_h = pages[0].size
             scale = min(printable_w / img_w, printable_h / img_h)
             draw_w = int(img_w * scale)

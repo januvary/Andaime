@@ -18,6 +18,7 @@ from emissor.services.exceptions import (
 from andaime.dates import parse_date
 from emissor.utils.paths import resolve_archive_dir
 from emissor.utils.security import sanitize_filename
+from emissor.utils.validators import PatientDataValidator
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 
 
@@ -53,8 +54,6 @@ class RetiradaService:
         Lê os campos do formulário diretamente de ``data`` (fonte única,
         completa e não-perdida), evitando encadeamento de parâmetros.
         """
-        from emissor.utils.validators import PatientDataValidator
-
         is_valid, error_msg = PatientDataValidator.validate_for_pdf_generation(
             selected_patient=selected_patient,
             processo_n=(data.get("processos") or [""])[0] or "",

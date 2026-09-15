@@ -140,7 +140,8 @@ class EmissorDatabase(BaseDatabase):
                 quantidade TEXT,
                 dias TEXT,
                 ignorar_suficiencia INTEGER NOT NULL DEFAULT 0,
-                FOREIGN KEY (retirada_id) REFERENCES retiradas(id) ON DELETE CASCADE
+                FOREIGN KEY (retirada_id) REFERENCES retiradas(id) ON DELETE CASCADE,
+                FOREIGN KEY (item_id) REFERENCES items_catalog(item_id) ON UPDATE CASCADE
             )
         """)
 
@@ -319,6 +320,57 @@ class EmissorDatabase(BaseDatabase):
             values,
         )
 
+    def _ensure_catalog_entry(
+        self, cur: Any, item_id: str, descricao: str, unidade: str
+    ) -> bool:
+        """Garante que item_id existe no catálogo (busca ou insere).
+
+        Retorna False se a descrição colide com outro ID (item deve ser
+        ignorado pelo chamador). Necessário para satisfazer a FK
+        retirada_items.item_id → items_catalog.
+        """
+        cur.execute(
+            "SELECT descricao, unidade FROM items_catalog WHERE item_id = ?",
+            (item_id,),
+        )
+        if cur.fetchone():
+            return True
+
+        cur.execute(
+            "SELECT item_id, unidade FROM items_catalog WHERE descricao = ?",
+            (descricao,),
+        )
+        existing_by_desc = cur.fetchone()
+        if existing_by_desc is None and descricao:
+            desc_key = to_upper_normalized(descricao)
+            cur.execute(
+                "SELECT item_id, unidade, descricao FROM items_catalog"
+            )
+            for cat_row in cur.fetchall():
+                if to_upper_normalized(cat_row["descricao"]) == desc_key:
+                    existing_by_desc = cat_row
+                    break
+
+        if existing_by_desc and descricao:
+            ErrorHandler.log(
+                f"Item ID '{item_id}' não encontrado no catálogo. "
+                f"Descrição '{descricao}' existe com ID '{existing_by_desc['item_id']}'. Item ignorado.",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.DATABASE,
+            )
+            return False
+
+        cur.execute(
+            "INSERT INTO items_catalog (item_id, descricao, unidade) VALUES (?, ?, ?)",
+            (item_id, descricao, unidade),
+        )
+        ErrorHandler.log(
+            f"Novo item adicionado ao catálogo: {item_id} - {descricao}",
+            level=ErrorLevel.INFO,
+            context=ErrorContext.DATABASE,
+        )
+        return True
+
     def _sync_patient_items(self, cur: Any, patient_id: int, items: list) -> None:
         cur.execute("DELETE FROM patient_items WHERE patient_id = ?", (patient_id,))
         for item in items:
@@ -330,56 +382,18 @@ class EmissorDatabase(BaseDatabase):
             if not item_id:
                 continue
 
-            cur.execute(
-                "SELECT descricao, unidade FROM items_catalog WHERE item_id = ?",
-                (item_id,),
+            descricao = (
+                item.get("descricao", "").strip()
+                if isinstance(item, dict)
+                else item.descricao.strip()
             )
-            existing_by_id = cur.fetchone()
-
-            if not existing_by_id:
-                descricao = (
-                    item.get("descricao", "").strip()
-                    if isinstance(item, dict)
-                    else item.descricao.strip()
-                )
-                cur.execute(
-                    "SELECT item_id, unidade FROM items_catalog WHERE descricao = ?",
-                    (descricao,),
-                )
-                existing_by_desc = cur.fetchone()
-                if existing_by_desc is None and descricao:
-                    desc_key = to_upper_normalized(descricao)
-                    cur.execute(
-                        "SELECT item_id, unidade, descricao FROM items_catalog"
-                    )
-                    for cat_row in cur.fetchall():
-                        if to_upper_normalized(cat_row["descricao"]) == desc_key:
-                            existing_by_desc = cat_row
-                            break
-
-                if existing_by_desc and descricao:
-                    ErrorHandler.log(
-                        f"Item ID '{item_id}' não encontrado no catálogo. "
-                        f"Descrição '{descricao}' existe com ID '{existing_by_desc['item_id']}'. Item ignorado.",
-                        level=ErrorLevel.WARNING,
-                        context=ErrorContext.DATABASE,
-                    )
-                    continue
-                else:
-                    unidade = (
-                        item.get("unidade", "")
-                        if isinstance(item, dict)
-                        else item.unidade
-                    )
-                    cur.execute(
-                        "INSERT INTO items_catalog (item_id, descricao, unidade) VALUES (?, ?, ?)",
-                        (item_id, descricao, unidade),
-                    )
-                    ErrorHandler.log(
-                        f"Novo item adicionado ao catálogo: {item_id} - {descricao}",
-                        level=ErrorLevel.INFO,
-                        context=ErrorContext.DATABASE,
-                    )
+            unidade = (
+                item.get("unidade", "")
+                if isinstance(item, dict)
+                else item.unidade
+            )
+            if not self._ensure_catalog_entry(cur, item_id, descricao, unidade):
+                continue
 
             quantidade = (
                 item.get("quantidade") if isinstance(item, dict) else item.quantidade
@@ -598,6 +612,16 @@ class EmissorDatabase(BaseDatabase):
                     )
 
                 for item in items:
+                    item_id = (item.get("item_id", "") or "").strip()
+                    if not item_id:
+                        continue
+                    if not self._ensure_catalog_entry(
+                        cur,
+                        item_id,
+                        (item.get("descricao", "") or "").strip(),
+                        item.get("unidade", "") or "",
+                    ):
+                        continue
                     cur.execute(
                         "INSERT INTO retirada_items (retirada_id, item_id, descricao, unidade, quantidade, dias, ignorar_suficiencia) VALUES (?, ?, ?, ?, ?, ?, 0)",
                         (
