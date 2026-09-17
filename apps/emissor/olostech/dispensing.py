@@ -33,6 +33,7 @@ class Dispensing:
         self.estoque = "505"
         self.unit_code = "2867"
         self._item_chaves = []
+        self._all_dispensacao_ids: list[str] = []
         self._patient_sus = None
         self._action_type = None
         self._last_error = ""
@@ -256,7 +257,7 @@ class Dispensing:
 
     # Action types: controlado/notificacao flags
     CONTROLLED_ACTIONS = {4, 6, 7, 9}  # Especial, Notif B, Notif A, Talidomida
-    NOTIFICATION_ACTIONS = {6, 7, 9}   # Notif B, Notif A, Talidomida (need notif nr)
+    NOTIFICATION_ACTIONS = {6, 7}   # Notif B/A exigem numero; Talidomida nao
 
     def open_dispensacao_direta(self, patient_sus, action_type=2,
                                  notificacao_nr="", receita_data=""):
@@ -361,6 +362,18 @@ class Dispensing:
         self._log(f"=== Adding: {material_desc} x{quantity} ===")
         self._patient_sus = patient_sus
         self._action_type = action_type
+
+        # Controlled actions 6/7/9 need a notification number; the server
+        # rejects without one and returns only a generic "ATENÇÃO!".
+        if action_type in self.NOTIFICATION_ACTIONS and not (
+            getattr(self, "notificacao_nr", "") or ""
+        ).strip():
+            msg = (f"Receita controlada (ação {action_type}) exige número de "
+                   f"notificação — informe a notificação para {material_desc} "
+                   f"antes de dispensar.")
+            self._log(f"  {msg}", "ERROR")
+            self._last_error = msg
+            return False
 
         mat = self._lookup_material(material_code)
         if not mat:
@@ -669,6 +682,8 @@ class Dispensing:
             disp_match = re.search(r"Dispensacao=(\d+)", resp.text)
             if disp_match:
                 self.dispensacao_id = disp_match.group(1)
+                if self.dispensacao_id not in self._all_dispensacao_ids:
+                    self._all_dispensacao_ids.append(self.dispensacao_id)
                 self._log(f"  Dispensacao ID: {self.dispensacao_id}")
 
             # The origem=1 response does not render the item rows: the browser
@@ -773,7 +788,8 @@ class Dispensing:
                 r"\s*(\d+)", resp.text
             )
         if chaves:
-            self._item_chaves = sorted(set(chaves))
+            merged = sorted(set(self._item_chaves) | set(chaves))
+            self._item_chaves = merged
             self._log(f"  Item chaves: {self._item_chaves}")
         else:
             self._log("  No item chaves found on re-opened dispensation",
@@ -788,6 +804,21 @@ class Dispensing:
         attendance.
         """
         self._log(f"=== Rolling back dispensation (attendance {self.attendance_id}) ===")
+
+        # Re-collect chaves from every dispensation opened in this retirada:
+        # _item_chaves only holds what was captured so far, and a later
+        # group failure must also cancel earlier groups' items — otherwise
+        # the attendance can't be cancelled ("Existem Informações
+        # Registradas no Atendimento!").
+        current_disp = self.dispensacao_id
+        try:
+            for disp_id in list(self._all_dispensacao_ids):
+                if disp_id == current_disp:
+                    continue
+                self.dispensacao_id = disp_id
+                self._refresh_item_chaves()
+        finally:
+            self.dispensacao_id = current_disp
 
         items = list(getattr(self, "_item_chaves", []))
         if not items and self.dispensacao_id:
@@ -1010,7 +1041,9 @@ class Dispensing:
         )
         return None
 
-    def dispense_retirada(self, patient_sus, professional_code, items):
+    def dispense_retirada(
+        self, patient_sus, professional_code, items, ask_notificacao=None
+    ):
         """Multi-item, multi-type dispensing for a full retirada.
 
         Args:
@@ -1022,6 +1055,10 @@ class Dispensing:
                 - quantity: int
                 - action_type: 2/4/6/7/9
                 - notificacao_nr: str (for controlled, can be "")
+            ask_notificacao: optional ``(desc, suggested_action) ->
+                (action, number) | None`` called (possibly from a worker
+                thread — must block) when detection says an item needs
+                6/7 but no number was provided. None skips the item.
 
         Flow:
             1. Open attendance (once)
@@ -1077,6 +1114,22 @@ class Dispensing:
                 valid_items.remove(item)
                 continue
             action, model_name = detected
+            if (
+                action in self.NOTIFICATION_ACTIONS
+                and not item.get("notificacao_nr")
+                and ask_notificacao is not None
+            ):
+                res = ask_notificacao(item["material_desc"], action)
+                if res is None:
+                    self._log(
+                        f"  SKIPPED: {item['material_desc']} "
+                        f"(sem número de notificação)", "WARN"
+                    )
+                    skipped_action.append(item["material_desc"])
+                    valid_items.remove(item)
+                    continue
+                action, number = res
+                item["notificacao_nr"] = number
             if action != item.get("action_type", 2):
                 adjusted.append((item["material_desc"], item.get("action_type", 2), action, model_name))
                 item["action_type"] = action
@@ -1107,6 +1160,8 @@ class Dispensing:
         failed = []
         skipped_no_lot = []
         self._dias_adjusted = []
+        self._item_chaves = []
+        self._all_dispensacao_ids = []
 
         # Step 4: Process each group. Any exception (e.g. network failure)
         # rolls the attendance back before the message reaches the UI.

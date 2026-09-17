@@ -57,11 +57,14 @@ class AppConfig:
     dark_mode: bool = True
     distribute_retiradas: bool = True
     distribution_window_days: int = 3
+    auto_olostech: bool = False
     scan_dpi: int = 200
     scan_color_mode: str = "grayscale"
+    scan_backend: str = "auto"
     olostech: OlostechConfig = field(default_factory=OlostechConfig)
 
     _VALID_COLOR_MODES: tuple[str, ...] = ("grayscale", "color", "bw")
+    _VALID_BACKENDS: tuple[str, ...] = ("auto", "twain", "wia", "sim")
 
     def __post_init__(self) -> None:
         if isinstance(self.olostech, dict):
@@ -84,6 +87,11 @@ class AppConfig:
         if not isinstance(self.distribute_retiradas, bool):
             raise ValueError(
                 f"distribute_retiradas must be bool, got {type(self.distribute_retiradas).__name__}"
+            )
+
+        if not isinstance(self.auto_olostech, bool):
+            raise ValueError(
+                f"auto_olostech must be bool, got {type(self.auto_olostech).__name__}"
             )
 
         if not isinstance(self.distribution_window_days, int):
@@ -118,6 +126,16 @@ class AppConfig:
                 f"got {self.scan_color_mode}"
             )
 
+        if not isinstance(self.scan_backend, str):
+            raise ValueError(
+                f"scan_backend must be str, got {type(self.scan_backend).__name__}"
+            )
+        if self.scan_backend not in self._VALID_BACKENDS:
+            raise ValueError(
+                f"scan_backend must be one of {self._VALID_BACKENDS}, "
+                f"got {self.scan_backend}"
+            )
+
     def to_dict(self) -> dict:
         return {
             "save_location": str(self.save_location),
@@ -125,8 +143,10 @@ class AppConfig:
             "dark_mode": self.dark_mode,
             "distribute_retiradas": self.distribute_retiradas,
             "distribution_window_days": self.distribution_window_days,
+            "auto_olostech": self.auto_olostech,
             "scan_dpi": self.scan_dpi,
             "scan_color_mode": self.scan_color_mode,
+            "scan_backend": self.scan_backend,
             "olostech": self.olostech.to_dict(),
         }
 
@@ -140,6 +160,7 @@ class AppConfig:
             distribution_window_days=3,
             scan_dpi=200,
             scan_color_mode="grayscale",
+            scan_backend="auto",
             olostech=OlostechConfig(),
         )
 

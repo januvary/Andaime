@@ -54,9 +54,9 @@ def _normalize_pil_page(
 
     img.load()
     if flip_top_bottom:
-        img = img.transpose(Image.FLIP_TOP_BOTTOM)
+        img = img.transpose(Image.FLIP_TOP_BOTTOM)  # type: ignore[attr-defined]
     if flip_left_right:
-        img = img.transpose(Image.FLIP_LEFT_RIGHT)
+        img = img.transpose(Image.FLIP_LEFT_RIGHT)  # type: ignore[attr-defined]
     img = _trim_white(img)
     img.info["dpi"] = (dpi, dpi)
     return img
@@ -134,7 +134,7 @@ class TwainBackend:
     def is_available() -> bool:
         """Verifica se o backend TWAIN está realmente utilizável (silencioso)."""
         try:
-            import twain  # type: ignore
+            import twain
         except Exception:
             return False
         if not hasattr(twain, "SourceManager"):
@@ -211,7 +211,7 @@ class TwainBackend:
         """Estratégia de aquisição com fallback (low-level → acquire)."""
         if hasattr(src, "request_acquire") and hasattr(src, "xfer_image_natively"):
             return TwainBackend._acquire_low_level(src, twain, dpi)
-        return src.acquire(show_ui=False, close_after=True)
+        return src.acquire(show_ui=False, close_after=True)  # type: ignore[no-any-return]
 
     @staticmethod
     def _acquire_low_level(src: Any, twain: Any, dpi: int) -> list[Image.Image]:
@@ -278,8 +278,8 @@ class WiaBackend:
         self._source_name = source_name
 
     @staticmethod
-    def _device_manager():
-        import comtypes.client  # runtime-only no Windows
+    def _device_manager() -> Any:
+        import comtypes.client  # type: ignore[import-not-found]
 
         return comtypes.client.CreateObject("WIA.DeviceManager")
 
@@ -503,19 +503,25 @@ class SimulatedBackend:
         return images
 
 
-def _default_backend() -> ScannerBackend:
-    """Seleciona o backend conforme ambiente (env var ``EMISSOR_SCAN_BACKEND``)."""
+def _resolve_backend(backend_name: str = "auto") -> ScannerBackend:
+    """Resolve o backend de digitalização pelo nome configurado.
+
+    A variável de ambiente ``EMISSOR_SCAN_BACKEND`` tem precedência sobre
+    *backend_name* (útil para debug/CI).
+    """
     import os
     import sys
 
-    env = os.environ.get("EMISSOR_SCAN_BACKEND", "").lower()
-    if env == "sim":
+    name = os.environ.get("EMISSOR_SCAN_BACKEND", "").lower() or backend_name.lower()
+
+    if name == "sim":
         return SimulatedBackend()
-    if env == "wia":
+    if name == "wia":
         return WiaBackend()
-    if env == "twain":
+    if name == "twain":
         return TwainBackend()
 
+    # "auto": detecta conforme plataforma
     if sys.platform.startswith("win"):
         if WiaBackend.is_available():
             return WiaBackend()
@@ -530,7 +536,7 @@ def _default_backend() -> ScannerBackend:
 
 
 # Alias público (nome usado externamente/documentação).
-get_backend = _default_backend
+get_backend = _resolve_backend
 
 
 class ScannerService:
@@ -540,10 +546,18 @@ class ScannerService:
         self,
         save_root: Path,
         backend: ScannerBackend | None = None,
+        backend_name: str = "auto",
     ) -> None:
-        """Inicializa o serviço (backend padrão: auto)."""
+        """Inicializa o serviço (backend padrão: auto).
+
+        Args:
+            backend: Backend específico (bypassa resolução por nome).
+            backend_name: Nome do backend para resolução automática
+                ("auto", "twain", "wia", "sim"). Ignorado se *backend* for
+                fornecido.
+        """
         self._save_root = Path(save_root)
-        self._backend = backend or _default_backend()
+        self._backend = backend or _resolve_backend(backend_name)
 
     def list_sources(self) -> list[str]:
         """Lista scanners disponíveis."""

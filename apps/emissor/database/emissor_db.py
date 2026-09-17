@@ -98,6 +98,7 @@ class EmissorDatabase(BaseDatabase):
                 item_id TEXT PRIMARY KEY,
                 descricao TEXT NOT NULL UNIQUE,
                 unidade TEXT,
+                olostech_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -194,6 +195,12 @@ class EmissorDatabase(BaseDatabase):
         pacientes_cur_cols = {row[1] for row in cursor.fetchall()}
         if "bloquear_balanco" not in pacientes_cur_cols:
             cursor.execute("ALTER TABLE pacientes ADD COLUMN bloquear_balanco TEXT")
+
+        # Garantir coluna olostech_id em bancos existentes
+        cursor.execute("PRAGMA table_info(items_catalog)")
+        catalog_cols = {row[1] for row in cursor.fetchall()}
+        if "olostech_id" not in catalog_cols:
+            cursor.execute("ALTER TABLE items_catalog ADD COLUMN olostech_id TEXT")
 
         self._commit()
 

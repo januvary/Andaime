@@ -108,6 +108,8 @@ class QtApp(QMainWindow):
 
         self._status_label: StatusLine | None = None
         self._pending_auto_print: bool = False
+        self._pending_auto_olostech: bool = False
+        self._auto_worker: Any | None = None
 
         # ===== UI =====
         self._build_ui()
@@ -332,6 +334,9 @@ class QtApp(QMainWindow):
         self.config_manager.set(
             "distribution_window_days", config["distribution_window_days"]
         )
+        self.config_manager.set("scan_dpi", config["scan_dpi"])
+        self.config_manager.set("scan_color_mode", config["scan_color_mode"])
+        self.config_manager.set("scan_backend", config["scan_backend"])
 
         self.state_manager.set_save_root_path(config["save_location"])
         self.state_manager.set_print_copies(config["print_copies"])
@@ -449,6 +454,9 @@ class QtApp(QMainWindow):
         )
         self.dates_section.check_existing_retirada()
         self.dates_section.refresh_ultima_retirada()
+        self._pending_auto_olostech = bool(
+            self.config_manager.get("auto_olostech", False)
+        )
         self.actions_section._check_olostech_state()
         self.items_section.clear_reset_toggles()
 
@@ -744,8 +752,12 @@ class QtApp(QMainWindow):
 
         dpi = int(self.config_manager.get("scan_dpi", 200))
         color_mode = self.config_manager.get("scan_color_mode", "grayscale")
+        backend_name = self.config_manager.get("scan_backend", "auto")
 
-        service = ScannerService(save_root=Path(save_root))
+        service = ScannerService(
+            save_root=Path(save_root),
+            backend_name=backend_name,
+        )
 
         self.search_section.set_status("Digitalizando...", color="status_warning")
         self.actions_section.disable_scan_button()
@@ -960,6 +972,74 @@ class QtApp(QMainWindow):
             self.retirada_service.mark_olostech_ok(retirada.id)
             self.actions_section.set_olostech_registered(True)
         else:
+            self.actions_section.enable_olostech_button()
+
+    def _start_auto_olostech(self, retirada: Any) -> None:
+        """Registro Olostech automatico (sem dialogo, tipo Simples padrao)."""
+        from emissor.ui_qt.dialogs.olostech_dialog import (
+            RegistrationWorker,
+            build_default_olostech_entries,
+            patient_crm,
+            patient_matricula,
+        )
+
+        patient = self.state_manager.get_selected_patient()
+        if patient is None:
+            return
+
+        olostech_cfg = self.config_manager.get("olostech", {})
+        cfg = (
+            olostech_cfg.to_dict()
+            if hasattr(olostech_cfg, "to_dict")
+            else olostech_cfg
+        )
+        if not cfg.get("username") or not cfg.get("password"):
+            self.search_section.set_status(
+                "Olostech automático: configure usuário e senha",
+                color="status_warning",
+            )
+            return
+
+        collected = build_default_olostech_entries(retirada, self._emissor_db)
+        if not collected:
+            self.search_section.set_status(
+                "Olostech automático: nenhum item com mapeamento",
+                color="status_warning",
+            )
+            return
+
+        self.search_section.set_status(
+            "Registrando Olostech automaticamente...",
+            color="status_warning",
+        )
+        self._auto_worker = RegistrationWorker(
+            olostech_cfg=olostech_cfg,
+            patient_sus=patient_matricula(patient),
+            professional_code=patient_crm(patient),
+            items=collected,
+        )
+        self._auto_worker.finished_with_result.connect(
+            lambda ok, msg: self._on_auto_olostech_done(retirada.id, ok, msg)
+        )
+        self._auto_worker.start()
+
+    def _on_auto_olostech_done(
+        self, retirada_id: Any, success: bool, msg: str
+    ) -> None:
+        """Conclui o registro automatico (thread da UI)."""
+        self._auto_worker = None
+        if success:
+            self.retirada_service.mark_olostech_ok(retirada_id)
+            self.actions_section.set_olostech_registered(True)
+            self.search_section.set_status(
+                "Olostech registrado automaticamente",
+                color="status_success",
+            )
+        else:
+            self.search_section.set_status(
+                f"Olostech automático falhou: {msg}",
+                color="status_error",
+            )
             self.actions_section.enable_olostech_button()
 
     # ========== Ciclo de vida ==========

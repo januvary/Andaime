@@ -40,6 +40,9 @@ class SS54Database(BaseDatabase):
         # VACUUM pendente: setado pelas deleções e executado só após o commit
         # da transação mais externa (VACUUM não roda dentro de transação).
         self._vacuum_pending = False
+        # Suspensões ativas do VACUUM automático (operações em lote seguram
+        # o flush até o fim do lote — ver vacuum_hold).
+        self._vacuum_hold = 0
         # Callback de status quando um VACUUM vai começar (thread do worker).
         self.on_vacuum: Callable[[str], None] | None = None
 
@@ -715,6 +718,20 @@ class SS54Database(BaseDatabase):
         """Marca que os bancos precisam ser compactados após o commit."""
         self._vacuum_pending = True
 
+    @contextmanager
+    def vacuum_hold(self) -> Iterator[None]:
+        """Suspende o VACUUM automático até o fim do bloco (operações em lote).
+
+        Aninhável: só o desbloqueio mais externo dispara o flush pendente.
+        """
+        self._vacuum_hold += 1
+        try:
+            yield
+        finally:
+            self._vacuum_hold = max(0, self._vacuum_hold - 1)
+            if self._vacuum_hold == 0:
+                self._flush_pending_vacuum()
+
     def _dead_space_ratio(self, db_name: str = "") -> float:
         """Fração de páginas livres (0.0–1.0). Retorna 1.0 em caso de erro."""
         pragma_db = f"{db_name}." if db_name else ""
@@ -737,7 +754,7 @@ class SS54Database(BaseDatabase):
 
     def _flush_pending_vacuum(self) -> None:
         """Executa VACUUM pendente só se dead space >= _VACUUM_THRESHOLD."""
-        if not self._vacuum_pending or self._in_transaction:
+        if not self._vacuum_pending or self._in_transaction or self._vacuum_hold:
             return
         self._vacuum_pending = False
         try:

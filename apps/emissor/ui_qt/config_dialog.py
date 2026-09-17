@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QSpinBox,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -51,6 +52,8 @@ class QtConfigDialog(_QtConfigDialog):
         self._distribute_check.setChecked(
             config.get("distribute_retiradas", True)
         )
+        self._auto_olostech_check = QCheckBox("")
+        self._auto_olostech_check.setChecked(config.get("auto_olostech", False))
         self._window_spin = QSpinBox()
         self._window_spin.setRange(1, 7)
         self._window_spin.setFixedWidth(50)
@@ -74,7 +77,12 @@ class QtConfigDialog(_QtConfigDialog):
     # ========== Conteúdo intermediário ==========
 
     def _build_middle(self) -> QWidget:
-        """Linha: janela (dias) + toggle | Gerenciar feriados."""
+        """Linhas: janela (dias) + toggle | Gerenciar feriados; auto Olostech."""
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(8)
+
         dist_box = QFrame()
         dist_box.setProperty("class", "box")
         dist_row = QHBoxLayout(dist_box)
@@ -93,8 +101,20 @@ class QtConfigDialog(_QtConfigDialog):
         holidays_btn.setStyleSheet("font-size: 11px;")
         holidays_btn.clicked.connect(self._open_holidays)
         dist_row.addWidget(holidays_btn)
+        container_layout.addWidget(dist_box)
 
-        return dist_box
+        auto_box = QFrame()
+        auto_box.setProperty("class", "box")
+        auto_row = QHBoxLayout(auto_box)
+        auto_row.setContentsMargins(12, 10, 12, 10)
+        auto_row.setSpacing(8)
+
+        auto_row.addWidget(QLabel("Registro Olostech automático"))
+        auto_row.addWidget(self._auto_olostech_check)
+        auto_row.addStretch()
+        container_layout.addWidget(auto_box)
+
+        return container
 
     # ========== Handlers ==========
 
@@ -119,6 +139,7 @@ class QtConfigDialog(_QtConfigDialog):
         """Restaura a distribuição para os valores padrão."""
         self._distribute_check.setChecked(True)
         self._window_spin.setValue(3)
+        self._auto_olostech_check.setChecked(False)
 
     def _on_save(self, location_str: str) -> dict[str, Any] | None:
         """Valida e devolve o resultado (ou mostra erro e mantém aberto)."""
@@ -134,4 +155,8 @@ class QtConfigDialog(_QtConfigDialog):
             "dark_mode": self._config.get("dark_mode", True),
             "distribute_retiradas": self._distribute_check.isChecked(),
             "distribution_window_days": self._window_spin.value(),
+            "auto_olostech": self._auto_olostech_check.isChecked(),
+            "scan_dpi": self._config.get("scan_dpi", 200),
+            "scan_color_mode": self._config.get("scan_color_mode", "grayscale"),
+            "scan_backend": self._config.get("scan_backend", "auto"),
         }

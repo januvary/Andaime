@@ -4,17 +4,17 @@
 
 from __future__ import annotations
 
+import queue
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from dataclasses import dataclass
 from emissor.database.models import Patient, Retirada
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from andaime.qt.dialogs import make_dialog_button_row, scaffold_dialog
 
 ACTION_LABELS = {
     2: "Receita Simples",
@@ -32,7 +33,17 @@ ACTION_LABELS = {
     7: "Notificacao A",
     9: "Notificacao Talidomida",
 }
-NOTIFICATION_ACTIONS = {6, 7, 9}
+NOTIFICATION_ACTIONS = {6, 7}  # Notif B/A exigem numero; Talidomida nao
+
+
+@dataclass
+class _ItemRow:
+    """Uma linha do dialogo: item + combo de tipo + numero + codigo."""
+
+    item: Any
+    combo: QComboBox
+    notif_edit: QLineEdit
+    olostech_code: str
 
 
 class NoScrollComboBox(QComboBox):
@@ -46,6 +57,105 @@ class NoScrollComboBox(QComboBox):
         event.ignore()
 
 
+def ask_notificacao(
+    parent: QWidget, descricao: str, suggested_action: int
+) -> tuple[int, str] | None:
+    """Popup para item controlado detectado sem numero.
+
+    So oferece Notificacao B/A (o servidor ja definiu que e controlada).
+    Returns:
+        (action_type, numero) ou None se cancelado/sem numero.
+    """
+    dlg, layout = scaffold_dialog(
+        parent, "Notificação controlada", min_width=380
+    )
+
+    info = QLabel(
+        "O Olostech exige notificação para:\n"
+        f"{descricao}\nConfirme o tipo e informe o número."
+    )
+    info.setWordWrap(True)
+    layout.addWidget(info)
+
+    combo = QComboBox()
+    for action_id in (6, 7):
+        combo.addItem(ACTION_LABELS[action_id], action_id)
+    combo.setCurrentIndex(combo.findData(suggested_action))
+    layout.addWidget(combo)
+
+    edit = QLineEdit()
+    edit.setPlaceholderText("Nr. Notificacao")
+    edit.setMaxLength(60)
+    layout.addWidget(edit)
+
+    row, (cancel_btn, ok_btn) = make_dialog_button_row(
+        [("Cancelar", "flat"), ("Confirmar", "primary")]
+    )
+    layout.addLayout(row)
+
+    ok_btn.clicked.connect(dlg.accept)
+    cancel_btn.clicked.connect(dlg.reject)
+
+    if dlg.exec() != dlg.DialogCode.Accepted:
+        return None
+    number = edit.text().strip()
+    if not number:
+        return None
+    return (combo.currentData(), number)
+
+
+# Tipo inicial enviado ao servidor; o proprio Olostech detecta e ajusta
+# o tipo de receita por material (_detect_action_type).
+DEFAULT_ACTION_TYPE = 2  # Receita Simples
+
+
+def merge_olostech_entries(
+    entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Mescla entradas com mesmo material+tipo.
+
+    O servidor rejeita material duplicado na dispensacao
+    ("Material já entregue nessa dispensação!"): quantidades somam,
+    vale o maior dias e a primeira notificacao nao vazia.
+    """
+    merged: dict[tuple[str, int], dict[str, Any]] = {}
+    for e in entries:
+        key = (e["material_code"], e["action_type"])
+        if key in merged:
+            merged[key]["quantity"] += e["quantity"]
+            if e["dias"] > merged[key].get("dias", 0):
+                merged[key]["dias"] = e["dias"]
+            if not merged[key].get("notificacao_nr") and e["notificacao_nr"]:
+                merged[key]["notificacao_nr"] = e["notificacao_nr"]
+            continue
+        merged[key] = dict(e)
+    return list(merged.values())
+
+
+def build_default_olostech_entries(
+    retirada: Any, db: Any
+) -> list[dict[str, Any]]:
+    """Entradas com tipo padrao (Simples) para registro automatico.
+
+    Itens sem olostech_id sao ignorados, como no dialogo.
+    """
+    entries: list[dict[str, Any]] = []
+    for item in getattr(retirada, "itens", []) or []:
+        db_id = str(getattr(item, "item_id", "") or "").strip()
+        code = (db.get_olostech_id(db_id) or "") if (db and db_id) else ""
+        if not code:
+            continue
+        entries.append({
+            "material_code": code,
+            "material_desc": getattr(item, "descricao", "") or "",
+            "quantity": _to_int(getattr(item, "quantidade", 0), 0),
+            "action_type": DEFAULT_ACTION_TYPE,
+            "notificacao_nr": "",
+            "dias": _to_int(getattr(item, "dias", 0), 0),
+        })
+    return merge_olostech_entries(entries)
+
+
 class RegistrationWorker(QThread):
     """Worker thread para registro Olostech."""
 
@@ -57,12 +167,16 @@ class RegistrationWorker(QThread):
         patient_sus: str,
         professional_code: str,
         items: list[dict[str, Any]],
+        ask_notificacao: (
+            Callable[[str, int], tuple[int, str] | None] | None
+        ) = None,
     ) -> None:
         super().__init__()
         self.olostech_cfg = olostech_cfg
         self.patient_sus = patient_sus
         self.professional_code = professional_code
         self.items = items
+        self.ask_notificacao = ask_notificacao
 
     def run(self) -> None:
         try:
@@ -100,6 +214,7 @@ class RegistrationWorker(QThread):
                 patient_sus=self.patient_sus,
                 professional_code=self.professional_code,
                 items=self.items,
+                ask_notificacao=self.ask_notificacao,
             )
             if not success and debug_path.exists():
                 _log_cb(f"Debug da falha salvo em: {debug_path}")
@@ -125,12 +240,9 @@ def show_olostech_dialog(
     Returns:
         Tuple (sucesso, mensagem) ao finalizar, ou None se cancelado.
     """
-    dialog = QDialog(parent)
-    dialog.setWindowTitle("Registrar Olostech")
-    dialog.setMinimumWidth(640)
-
-    layout = QVBoxLayout(dialog)
-    layout.setSpacing(12)
+    dialog, layout = scaffold_dialog(
+        parent, "Registrar Olostech", min_width=640
+    )
 
     # Area rolável: info do paciente + itens
     scroll = QScrollArea()
@@ -153,9 +265,7 @@ def show_olostech_dialog(
     form = QFormLayout()
     form.setSpacing(8)
 
-    combos: dict[int, QComboBox] = {}
-    notif_edits: dict[int, QLineEdit] = {}
-    mapped_codes: dict[int, str] = {}
+    rows: list[_ItemRow] = []
 
     items = getattr(retirada, "itens", [])
 
@@ -166,8 +276,9 @@ def show_olostech_dialog(
         descricao = getattr(item, "descricao", "") or ""
         quantidade = getattr(item, "quantidade", "") or ""
         db_id = str(getattr(item, "item_id", "") or "").strip()
-        csv_code = db_obj.get_olostech_id(db_id) if db_obj and db_id else None or ""
-        mapped_codes[idx] = csv_code
+        olostech_code = (
+            (db_obj.get_olostech_id(db_id) or "") if (db_obj and db_id) else ""
+        )
 
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
@@ -183,26 +294,29 @@ def show_olostech_dialog(
         for action_id, action_label in ACTION_LABELS.items():
             combo.addItem(action_label, action_id)
         row_layout.addWidget(combo)
-        combos[idx] = combo
 
         notif_edit = QLineEdit()
         notif_edit.setPlaceholderText("Nr. Notificacao")
         notif_edit.setEnabled(False)
         notif_edit.setMaximumWidth(120)
         row_layout.addWidget(notif_edit)
-        notif_edits[idx] = notif_edit
 
-        def _on_change(_idx: int, c: QComboBox = combo, e: QLineEdit = notif_edit) -> None:
+        def _on_change(
+            _index: int = 0,
+            c: QComboBox = combo,
+            e: QLineEdit = notif_edit,
+        ) -> None:
             e.setEnabled(c.currentData() in NOTIFICATION_ACTIONS)
 
         combo.currentIndexChanged.connect(_on_change)
 
-        if not mapped_codes[idx]:
+        if not olostech_code:
             label.setText(f"{descricao}  x{quantidade}  (SEM MAPEAMENTO)")
             label.setStyleSheet("color: gray;")
             combo.setEnabled(False)
             notif_edit.setEnabled(False)
 
+        rows.append(_ItemRow(item, combo, notif_edit, olostech_code))
         form.addRow(row_widget)
 
     content_layout.addLayout(form)
@@ -223,57 +337,39 @@ def show_olostech_dialog(
     status_label.setVisible(False)
     layout.addWidget(status_label)
 
-    # Botoes
-    buttons = QDialogButtonBox(
-        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+    # Botoes (tematizados, como os demais dialogos)
+    btn_row, (cancel_btn, ok_btn) = make_dialog_button_row(
+        [("Cancelar", "flat"), ("Registrar", "primary")]
     )
-    layout.addWidget(buttons)
+    layout.addLayout(btn_row)
 
     result: tuple[bool, str] | None = None
     worker: RegistrationWorker | None = None
+    pump: QTimer | None = None
 
     def _collect_items() -> list[dict[str, Any]]:
-        # Mescla itens que mapeiam para o mesmo material Olostech (mesmo
-        # tipo de receita): o servidor rejeita material duplicado na
-        # dispensação ("Material já entregue nessa dispensação!").
-        merged: dict[tuple[str, int], dict[str, Any]] = {}
-        order: list[tuple[str, int]] = []
-        for idx, item in enumerate(items):
-            csv_code = mapped_codes[idx]
-            if not csv_code:
+        entries: list[dict[str, Any]] = []
+        for row in rows:
+            if not row.olostech_code:
                 continue
 
-            action_type = combos[idx].currentData()
-            notif_nr = (
-                notif_edits[idx].text().strip()
-                if action_type in NOTIFICATION_ACTIONS
-                else ""
-            )
-            quantity = _to_int(getattr(item, "quantidade", 0), 0)
-            dias = _to_int(getattr(item, "dias", 0), 0)
-
-            key = (csv_code, action_type)
-            if key in merged:
-                merged[key]["quantity"] += quantity
-                if dias > merged[key].get("dias", 0):
-                    merged[key]["dias"] = dias
-                if not merged[key].get("notificacao_nr") and notif_nr:
-                    merged[key]["notificacao_nr"] = notif_nr
-                continue
-
-            merged[key] = {
-                "material_code": csv_code,
-                "material_desc": getattr(item, "descricao", "") or "",
-                "quantity": quantity,
+            action_type = row.combo.currentData()
+            entries.append({
+                "material_code": row.olostech_code,
+                "material_desc": getattr(row.item, "descricao", "") or "",
+                "quantity": _to_int(getattr(row.item, "quantidade", 0), 0),
                 "action_type": action_type,
-                "notificacao_nr": notif_nr,
-                "dias": dias,
-            }
-            order.append(key)
-        return [merged[k] for k in order]
+                "notificacao_nr": (
+                    row.notif_edit.text().strip()
+                    if action_type in NOTIFICATION_ACTIONS
+                    else ""
+                ),
+                "dias": _to_int(getattr(row.item, "dias", 0), 0),
+            })
+        return merge_olostech_entries(entries)
 
     def _on_accepted() -> None:
-        nonlocal result, worker
+        nonlocal result, worker, pump
 
         # Coletar dados
         collected = _collect_items()
@@ -291,16 +387,35 @@ def show_olostech_dialog(
             return
 
         # Desabilitar controles, mostrar progresso
-        for c in combos.values():
-            c.setEnabled(False)
-        for e in notif_edits.values():
-            e.setEnabled(False)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setEnabled(False)
+        for r in rows:
+            r.combo.setEnabled(False)
+            r.notif_edit.setEnabled(False)
+        ok_btn.setEnabled(False)
+        cancel_btn.setEnabled(False)
         progress.setVisible(True)
         status_label.setText("Registrando...")
         status_label.setStyleSheet("")
         status_label.setVisible(True)
+
+        # Pedidos de numero vindos da thread: o pump mostra o popup
+        # na thread da UI e devolve a resposta (worker bloqueia).
+        notif_requests: queue.Queue = queue.Queue()
+
+        def _ask_blocking(desc: str, action: int) -> tuple[int, str] | None:
+            reply: queue.Queue = queue.Queue(maxsize=1)
+            notif_requests.put((desc, action, reply))
+            return reply.get()
+
+        def _pump() -> None:
+            try:
+                desc, action, reply = notif_requests.get_nowait()
+            except queue.Empty:
+                return
+            reply.put(ask_notificacao(dialog, desc, action))
+
+        pump = QTimer(dialog)
+        pump.timeout.connect(_pump)
+        pump.start(250)
 
         # Executar em background
         patient_sus = patient_matricula(patient)
@@ -311,6 +426,7 @@ def show_olostech_dialog(
             patient_sus=patient_sus,
             professional_code=professional_code,
             items=collected,
+            ask_notificacao=_ask_blocking,
         )
         worker.finished_with_result.connect(_on_finished)
         worker.start()
@@ -318,21 +434,25 @@ def show_olostech_dialog(
     def _on_finished(success: bool, message: str) -> None:
         nonlocal result
         result = (success, message)
+        if pump is not None:
+            pump.stop()
         progress.setVisible(False)
         status_label.setText(message)
         status_label.setStyleSheet(
             "color: green;" if success else "color: red;"
         )
         # Substituir botoes: apenas Fechar
-        buttons.setStandardButtons(QDialogButtonBox.StandardButton.Close)
+        ok_btn.setText("Fechar")
+        ok_btn.setEnabled(True)
         try:
-            buttons.accepted.disconnect(_on_accepted)
+            ok_btn.clicked.disconnect(_on_accepted)
         except RuntimeError:
             pass
-        buttons.button(QDialogButtonBox.StandardButton.Close).clicked.connect(dialog.accept)
+        ok_btn.clicked.connect(dialog.accept)
+        cancel_btn.setVisible(False)
 
-    buttons.accepted.connect(_on_accepted)
-    buttons.rejected.connect(dialog.reject)
+    ok_btn.clicked.connect(_on_accepted)
+    cancel_btn.clicked.connect(dialog.reject)
 
     dialog.exec()
     return result

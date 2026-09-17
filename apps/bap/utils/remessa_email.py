@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import html
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -186,10 +187,12 @@ def build_remessa_group(
     grupo: str,
     to_email: str,
     processos: list[Processo],
+    on_process: Callable[[], None] | None = None,
 ) -> RemessaGroup | None:
     """Monta um grupo de envio a partir de uma lista de processos ``completo``.
 
-    Retorna ``None`` se não houver processos no grupo.
+    Retorna ``None`` se não houver processos no grupo. ``on_process`` é
+    chamado após cada processo (para progresso).
     """
     if not processos:
         return None
@@ -230,6 +233,8 @@ def build_remessa_group(
         else:
             if processo.id is not None:
                 skipped_ids.append(processo.id)
+        if on_process is not None:
+            on_process()
 
     # Somente processos com documentos entram no corpo do e-mail.
     body_items = [it for it in items if it.has_docs]
@@ -254,11 +259,13 @@ def build_remessa_groups(
     db: SS54Database,
     config: SS54Config,
     lote: Lote,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> list[RemessaGroup]:
     """Monta os grupos de envio (apenas os que têm processos ``completo``).
 
     Retorna uma lista com 0, 1 ou 2 grupos (renovação e/ou primeira
-    solicitação), na ordem: renovação, primeira.
+    solicitação), na ordem: renovação, primeira. ``on_progress(feitos, total)``
+    é chamado por processo.
     """
     root = resolve_arquivos_root(config.to_dict())
     if lote.id is None:
@@ -268,15 +275,26 @@ def build_remessa_groups(
     renovacoes = [p for p in completos if p.solicitacao == "renovacao"]
     primeiras = [p for p in completos if p.solicitacao == "primeira"]
 
+    total = len(renovacoes) + len(primeiras)
+    done = 0
+
+    def _tick() -> None:
+        nonlocal done
+        done += 1
+        if on_progress is not None:
+            on_progress(done, total)
+
     groups: list[RemessaGroup] = []
     renovacao_group = build_remessa_group(
-        db, root, lote, "renovacao", config.drs_renovacao_email, renovacoes
+        db, root, lote, "renovacao", config.drs_renovacao_email, renovacoes,
+        on_process=_tick,
     )
     if renovacao_group:
         groups.append(renovacao_group)
 
     primeira_group = build_remessa_group(
-        db, root, lote, "primeira", config.drs_solicitacao_email, primeiras
+        db, root, lote, "primeira", config.drs_solicitacao_email, primeiras,
+        on_process=_tick,
     )
     if primeira_group:
         groups.append(primeira_group)

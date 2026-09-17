@@ -47,14 +47,17 @@ class _EnviarRemessaWorker(QThread):
 
     A montagem dos grupos (leitura de BLOBs + merge de PDFs), que travaria a
     GUI se feita na thread principal, roda aqui. Emite ``auth_needed`` (com a
-    URL de autorização) quando é necessário consentimento interativo. Nenhuma
-    escrita no banco é feita aqui — o resultado é devolvido para a GUI, que
-    persiste os ``pending_sends``.
+    URL de autorização) quando é necessário consentimento interativo. Escritas
+    no banco acontecem aqui (ex.: cache do ``pdf_sig`` via ``ensure_processo_pdf``);
+    a serialização com a thread principal é garantida pelo lock da conexão.
+    O resultado é devolvido para a GUI, que persiste os ``pending_sends``.
+    Progresso sai por ``progress(feitos, total)`` e é espelhado na linha de status.
     """
 
     auth_needed = Signal(str)
     done = Signal(object)  # list[(RemessaGroup, DraftResult)]
     failed = Signal(str)
+    progress = Signal(int, int)  # (feitos, total)
 
     def __init__(self, cfg, lote, db, parent=None):
         super().__init__(parent)
@@ -123,7 +126,10 @@ class _EnviarRemessaWorker(QThread):
         try:
             # Monta os grupos (leitura de BLOBs + merge de PDFs) fora da thread
             # da GUI para não congelar a interface durante o envio.
-            groups = build_remessa_groups(self._db, cfg, self._lote)
+            groups = build_remessa_groups(
+                self._db, cfg, self._lote,
+                on_progress=self.progress.emit,
+            )
             if not groups:
                 self.failed.emit(
                     "Nenhum processo 'completo' nesta remessa para enviar."
@@ -338,6 +344,7 @@ class RemessaSender(QObject):
         worker.auth_needed.connect(self._on_enviar_auth_needed)
         worker.done.connect(self._on_enviar_done)
         worker.failed.connect(self._on_enviar_failed)
+        worker.progress.connect(self._on_enviar_progress)
         worker.finished.connect(self._on_enviar_thread_finished)
         self.set_status("Preparando remessa…", "status_warning")
         worker.start()
@@ -345,6 +352,9 @@ class RemessaSender(QObject):
     def _on_enviar_auth_needed(self, url: str) -> None:
         self._close_auth_dialog()
         self._show_auth_dialog(url)
+
+    def _on_enviar_progress(self, done: int, total: int) -> None:
+        self.set_status(f"Preparando remessa ({done}/{total})…", "status_warning")
 
     def _on_enviar_done(self, results) -> None:
         self._close_auth_dialog()
