@@ -13,7 +13,7 @@ theme, so buttons are styled consistently across RAC, Emissor and SS-54.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -215,6 +215,7 @@ def open_input_dialog(
     dlg, layout = scaffold_dialog(parent, title, spacing=16)
     layout.addSpacing(4)
 
+    input_field: QLineEdit | QTextEdit
     if multiline:
         input_field = QTextEdit()
         input_field.setPlaceholderText(placeholder)
@@ -238,15 +239,15 @@ def open_input_dialog(
     layout.addLayout(btn_row)
 
     if not multiline:
-        input_field.returnPressed.connect(dlg.accept)
+        cast(QLineEdit, input_field).returnPressed.connect(dlg.accept)
     confirm.clicked.connect(dlg.accept)
 
     if dlg.exec() != QDialog.DialogCode.Accepted:
         return None
     if multiline:
-        text = input_field.toPlainText().strip()
+        text = cast(QTextEdit, input_field).toPlainText().strip()
     else:
-        text = input_field.text().strip()
+        text = cast(QLineEdit, input_field).text().strip()
     return text or None
 
 

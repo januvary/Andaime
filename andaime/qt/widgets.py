@@ -3,6 +3,7 @@
 from typing import Any, Callable
 
 from PySide6.QtCore import Qt, QTimer, Signal, QStringListModel
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QCompleter,
     QHBoxLayout,
@@ -268,9 +269,9 @@ class CycleButton(QPushButton):
         initial: int,
         width: int = 40,
         font_size: int = 14,
-        format_fn=None,
-        on_change=None,
-    ):
+        format_fn: Callable[[int], Any] | None = None,
+        on_change: Callable[[int], Any] | None = None,
+    ) -> None:
         super().__init__(label)
         self.setProperty("btnrole", role)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -284,7 +285,7 @@ class CycleButton(QPushButton):
         self._format_fn = format_fn
         self._on_change = on_change
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.RightButton:
             self._value = ((self._value - self._base - 1) % self._modulus) + self._base
         else:
@@ -296,7 +297,7 @@ class CycleButton(QPushButton):
             self._on_change(self._value)
         super().mousePressEvent(event)
 
-    def _apply_label(self):
+    def _apply_label(self) -> None:
         self.setText(
             self._format_fn(self._value) if self._format_fn else str(self._value)
         )
@@ -306,6 +307,6 @@ class CycleButton(QPushButton):
         return self._value
 
     @value.setter
-    def value(self, v: int):
+    def value(self, v: int) -> None:
         self._value = v
         self._apply_label()

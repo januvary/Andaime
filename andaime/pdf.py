@@ -17,7 +17,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Union
+from typing import Any, Iterable, Union
 
 from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 
@@ -32,7 +32,7 @@ _PDFIUM_LOCK = threading.Lock()
 # ---------------------------------------------------------------------------
 
 
-def open_pdf(src: Union[bytes, str, Path]):
+def open_pdf(src: Union[bytes, str, Path]) -> Any:
     """Abre um PDF (bytes ou caminho) como ``pypdf.PdfReader``."""
     from pypdf import PdfReader
 
@@ -118,19 +118,19 @@ class _HashingWriter:
 
     __slots__ = ("_f", "_hash")
 
-    def __init__(self, f, hash_algo):
+    def __init__(self, f: Any, hash_algo: Any) -> None:
         self._f = f
         self._hash = hash_algo
 
     def write(self, data: bytes) -> int:
         self._hash.update(data)
-        return self._f.write(data)
+        return self._f.write(data)  # type: ignore[no-any-return]
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._f, name)
 
 
-def _write_hashing(writer, f, hash_algo):
+def _write_hashing(writer: Any, f: Any, hash_algo: Any) -> Any:
     writer.write(_HashingWriter(f, hash_algo))
 
 
@@ -139,7 +139,7 @@ def _write_hashing(writer, f, hash_algo):
 # ---------------------------------------------------------------------------
 
 
-def _clamped_layout_fun(imgwidthpx, imgheightpx, ndpi):
+def _clamped_layout_fun(imgwidthpx: float, imgheightpx: float, ndpi: int) -> Any:
     """Layout padrão do img2pdf com as dimensões limitadas a 3–14400 pt.
 
     O img2pdf aborta (via pikepdf) quando o DPI declarado — ou o tamanho em
@@ -171,13 +171,13 @@ def image_to_pdf(source: Union[bytes, str, Path]) -> bytes:
     (3–14400 unidades): imagens com DPI corrompido ou dimensões extremas
     são escaladas em vez de abortar a conversão.
     """
-    import img2pdf  # type: ignore[import-untyped]
+    import img2pdf
 
     if isinstance(source, (str, Path)):
         raw = Path(source).read_bytes()
     else:
         raw = source
-    return img2pdf.convert(raw, layout_fun=_clamped_layout_fun)
+    return img2pdf.convert(raw, layout_fun=_clamped_layout_fun)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -187,9 +187,9 @@ def image_to_pdf(source: Union[bytes, str, Path]) -> bytes:
 
 def render_page_pil(
     src: Union[bytes, str, Path], page: int, scale: float = 2.0
-):
+) -> Any:
     """Rasteriza uma página como ``PIL.Image`` (modo RGB)."""
-    import pypdfium2 as pdfium  # type: ignore[import-untyped]
+    import pypdfium2 as pdfium
     from PIL import Image  # noqa: F401  (garante dependência disponível)
 
     t0 = time.monotonic()
@@ -226,9 +226,9 @@ def render_page_pil(
 
 def render_pages_pil(
     src: Union[bytes, str, Path], scale: float = 2.0
-):
+) -> Any:
     """Rasteriza todas as páginas como ``list[PIL.Image]`` (uma abertura)."""
-    import pypdfium2 as pdfium  # type: ignore[import-untyped]
+    import pypdfium2 as pdfium
     from PIL import Image  # noqa: F401
 
     t0 = time.monotonic()
@@ -280,7 +280,7 @@ A4_HEIGHT: float = 841.8897637795275  # reportlab.lib.pagesizes.A4[1]
 CM: float = 28.346456692913385        # 1 cm em pontos PDF
 
 
-def _make_svg_flowable(drawing, offset_y: float = 0):
+def _make_svg_flowable(drawing: Any, offset_y: float = 0) -> Any:
     """Cria um Flowable a partir de um ``reportlab.graphics.Drawing``.
 
     ``GraphicsFlowable`` foi removido no ReportLab 4.4.7; este wrapper
@@ -289,7 +289,7 @@ def _make_svg_flowable(drawing, offset_y: float = 0):
     from reportlab.platypus import Flowable
 
     class _DrawingFlowable(Flowable):
-        def __init__(self, drawing, offset_y: float = 0) -> None:
+        def __init__(self, drawing: Any, offset_y: float = 0) -> None:
             super().__init__()
             self.drawing = drawing
             self.offset_y = offset_y
@@ -312,7 +312,7 @@ def load_svg_drawing(
     svg_path: Union[str, Path],
     target_size: float,
     offset_y: float = 0,
-):
+) -> Any:
     """Carrega um SVG e retorna um Flowable ReportLab escalado.
 
     Args:
@@ -473,11 +473,11 @@ class PDFStyleManager:
             leading=11,
         ))
 
-    def get_style(self, name: str):
+    def get_style(self, name: str) -> Any:
         """Retorna estilo pelo nome."""
         return self._styles[name]
 
-    def create_centered_style(self, font_size: int, bold: bool = False, leading: int | None = None):
+    def create_centered_style(self, font_size: int, bold: bool = False, leading: int | None = None) -> Any:
         """Cria estilo centralizado customizado."""
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
@@ -496,7 +496,7 @@ class PDFStyleManager:
             leading=leading,
         )
 
-    def create_header_style(self, font_size: int, leading: int | None = None):
+    def create_header_style(self, font_size: int, leading: int | None = None) -> Any:
         """Cria estilo de cabeçalho centralizado e negrito."""
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
@@ -513,6 +513,6 @@ class PDFStyleManager:
             leading=leading,
         )
 
-    def create_normal_style(self):
+    def create_normal_style(self) -> Any:
         """Retorna estilo normal."""
         return self._styles["Normal"]

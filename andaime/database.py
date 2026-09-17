@@ -347,11 +347,16 @@ class BaseDatabase(ABC):
 
     @contextmanager
     def _cursor(self) -> Iterator[sqlite3.Cursor]:
-        cursor = self._get_cursor()
-        try:
-            yield cursor
-        finally:
-            cursor.close()
+        # Serializa todo acesso à conexão compartilhada (check_same_thread=False):
+        # leituras/escritas fora de transaction() usavam o cursor sem lock e
+        # corriam em paralelo com outras threads ("database is locked").
+        # RLock: aninhamento com transaction() na mesma thread é seguro.
+        with self._lock:
+            cursor = self._get_cursor()
+            try:
+                yield cursor
+            finally:
+                cursor.close()
 
     def _fetch_one(self, sql: str, params: tuple = ()) -> dict | None:
         with self._cursor() as cur:
