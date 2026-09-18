@@ -109,7 +109,8 @@ class QtApp(QMainWindow):
         self._status_label: StatusLine | None = None
         self._pending_auto_print: bool = False
         self._pending_auto_olostech: bool = False
-        self._auto_worker: Any | None = None
+        self._olostech_worker: Any | None = None
+        self._olostech_pump: Any | None = None
 
         # ===== UI =====
         self._build_ui()
@@ -961,43 +962,19 @@ class QtApp(QMainWindow):
             )
             return
 
-        olostech_cfg = self.config_manager.get("olostech", {})
-        result = show_olostech_dialog(self, retirada, patient, olostech_cfg)
+        entries = show_olostech_dialog(self, retirada, patient)
+        if not entries:
+            return  # cancelado ou sem itens
+        self._run_olostech_registration(retirada, entries, patient)
 
-        if result is None:
-            return  # cancelado
-
-        success, msg = result
-        if success:
-            self.retirada_service.mark_olostech_ok(retirada.id)
-            self.actions_section.set_olostech_registered(True)
-        else:
-            self.actions_section.enable_olostech_button()
-
-    def _start_auto_olostech(self, retirada: Any) -> None:
+    def _start_olostech(self, retirada: Any) -> None:
         """Registro Olostech automatico (sem dialogo, tipo Simples padrao)."""
         from emissor.ui_qt.dialogs.olostech_dialog import (
-            RegistrationWorker,
             build_default_olostech_entries,
-            patient_crm,
-            patient_matricula,
         )
 
         patient = self.state_manager.get_selected_patient()
         if patient is None:
-            return
-
-        olostech_cfg = self.config_manager.get("olostech", {})
-        cfg = (
-            olostech_cfg.to_dict()
-            if hasattr(olostech_cfg, "to_dict")
-            else olostech_cfg
-        )
-        if not cfg.get("username") or not cfg.get("password"):
-            self.search_section.set_status(
-                "Olostech automático: configure usuário e senha",
-                color="status_warning",
-            )
             return
 
         collected = build_default_olostech_entries(retirada, self._emissor_db)
@@ -1008,39 +985,141 @@ class QtApp(QMainWindow):
             )
             return
 
+        self._run_olostech_registration(retirada, collected, patient)
+
+    def _run_olostech_registration(
+        self, retirada: Any, entries: list[dict[str, Any]], patient: Any
+    ) -> None:
+        """Worker + pump + status (manual e automático)."""
+        import queue
+
+        from PySide6.QtCore import QTimer
+
+        from emissor.ui_qt.dialogs.olostech_dialog import (
+            RegistrationWorker,
+            ask_notificacao,
+            patient_crm,
+            patient_matricula,
+        )
+
+        olostech_cfg = self.config_manager.get("olostech", {})
+        cfg = (
+            olostech_cfg.to_dict()
+            if hasattr(olostech_cfg, "to_dict")
+            else olostech_cfg
+        )
+        if not cfg.get("username") or not cfg.get("password"):
+            self.search_section.set_status(
+                "Configure usuário e senha do Olostech",
+                color="status_warning",
+            )
+            return
+
         self.search_section.set_status(
-            "Registrando Olostech automaticamente...",
+            "Registrando no Olostech...",
             color="status_warning",
         )
-        self._auto_worker = RegistrationWorker(
+        # Pedidos de numero vindos da thread: o pump mostra o popup
+        # na thread da UI e devolve a resposta (worker bloqueia).
+        notif_requests: queue.Queue = queue.Queue()
+
+        def _ask_blocking(desc: str, action: int) -> tuple[int, str] | None:
+            reply: queue.Queue = queue.Queue(maxsize=1)
+            notif_requests.put((desc, action, reply))
+            return reply.get()
+
+        def _pump() -> None:
+            try:
+                desc, action, reply = notif_requests.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                reply.put(ask_notificacao(self, desc, action))
+            except Exception as e:
+                reply.put(None)
+                ErrorHandler.log(
+                    f"Falha ao mostrar notificação Olostech: {e}",
+                    level=ErrorLevel.ERROR,
+                    context=ErrorContext.APP,
+                )
+
+        # Nunca troca worker em voo: destruir QThread em execucao aborta o processo.
+        running = self._olostech_worker
+        if running is not None and running.isRunning():
+            ErrorHandler.log(
+                "Registro Olostech já em andamento — ignorando novo início",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.APP,
+            )
+            return
+        self.actions_section.disable_olostech_button()
+        self._stop_olostech_pump()
+        self._olostech_pump = QTimer(self)
+        self._olostech_pump.timeout.connect(_pump)
+        self._olostech_pump.start(250)
+        self._olostech_worker = RegistrationWorker(
             olostech_cfg=olostech_cfg,
             patient_sus=patient_matricula(patient),
             professional_code=patient_crm(patient),
-            items=collected,
+            items=entries,
+            ask_notificacao=_ask_blocking,
         )
-        self._auto_worker.finished_with_result.connect(
-            lambda ok, msg: self._on_auto_olostech_done(retirada.id, ok, msg)
+        self._olostech_worker.finished_with_result.connect(
+            lambda ok, msg: self._on_olostech_done(retirada.id, ok, msg)
         )
-        self._auto_worker.start()
+        # Libera o worker só quando a thread terminou de fato (finished),
+        # nunca no slot de resultado — destruir antes disso aborta o app.
+        worker = self._olostech_worker
+        worker.finished.connect(
+            lambda w=worker: self._on_olostech_worker_finished(w)
+        )
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
 
-    def _on_auto_olostech_done(
+    def _stop_olostech_pump(self) -> None:
+        """Para o pump de notificacao, se houver."""
+        pump = self._olostech_pump
+        if pump is not None:
+            try:
+                pump.stop()
+            except RuntimeError:
+                pass
+            self._olostech_pump = None
+
+    def _on_olostech_worker_finished(self, worker: Any) -> None:
+        """Solta a referência do worker após a thread encerrar."""
+        self._stop_olostech_pump()
+        if self._olostech_worker is worker:
+            self._olostech_worker = None
+
+    def _on_olostech_done(
         self, retirada_id: Any, success: bool, msg: str
     ) -> None:
-        """Conclui o registro automatico (thread da UI)."""
-        self._auto_worker = None
-        if success:
-            self.retirada_service.mark_olostech_ok(retirada_id)
-            self.actions_section.set_olostech_registered(True)
-            self.search_section.set_status(
-                "Olostech registrado automaticamente",
-                color="status_success",
+        """Conclui o registro (thread da UI)."""
+        try:
+            if self._status_label is not None:
+                self._status_label.setToolTip("")
+            if success:
+                self.retirada_service.mark_olostech_ok(retirada_id)
+                self.actions_section.set_olostech_registered(True)
+                self.search_section.set_status(
+                    "Registro no Olostech concluído com sucesso",
+                    color="status_success",
+                )
+            else:
+                self.search_section.set_status(
+                    "Erro ao registrar no Olostech",
+                    color="status_error",
+                )
+                self.actions_section.enable_olostech_button()
+            if self._status_label is not None and msg.strip():
+                self._status_label.setToolTip(msg.strip())
+        except Exception as e:
+            ErrorHandler.log(
+                f"Erro ao concluir Olostech automático: {e}",
+                level=ErrorLevel.ERROR,
+                context=ErrorContext.APP,
             )
-        else:
-            self.search_section.set_status(
-                f"Olostech automático falhou: {msg}",
-                color="status_error",
-            )
-            self.actions_section.enable_olostech_button()
 
     # ========== Ciclo de vida ==========
 

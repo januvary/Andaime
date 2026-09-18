@@ -253,9 +253,12 @@ class ActionsSection(QtSection):
             self.set_olostech_registered(True)
         else:
             self.set_olostech_registered(False)
-            self.enable_olostech_button()
-        # Registro automatico apos salvamento (consome o flag uma vez).
+            # Não reabilita no meio de um registro em voo.
+            worker = getattr(self.app, "_olostech_worker", None)
+            if worker is None or not worker.isRunning():
+                self.enable_olostech_button()
+        # Auto-registro após salvar; consome o flag uma vez.
         if getattr(self.app, "_pending_auto_olostech", False):
             self.app._pending_auto_olostech = False
             if not getattr(retirada, "olostech_ok", 0):
-                self.app._start_auto_olostech(retirada)
+                self.app._start_olostech(retirada)

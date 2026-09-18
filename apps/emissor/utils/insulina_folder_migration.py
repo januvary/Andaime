@@ -30,6 +30,7 @@ from emissor.utils.paths import (
     INSULINA_PARENT_FOLDER,
     INSULINA_SUFFIX,
     RECIBOS_PARENT_FOLDER,
+    find_matching_dir,
 )
 
 
@@ -47,12 +48,7 @@ def _log(level: ErrorLevel, msg: str) -> None:
 
 def _drop_empty_duplicate(parent: Path, original_name: str) -> None:
     """Remove duplicata vazia ou avisa se não vazia (match case/acento-insensível)."""
-    key = to_upper_normalized(original_name)
-    duplicate: Path | None = None
-    for entry in sorted(parent.iterdir()):
-        if entry.is_dir() and to_upper_normalized(entry.name) == key:
-            duplicate = entry
-            break
+    duplicate = find_matching_dir(parent, original_name)
     if duplicate is None:
         return
     if _is_empty(duplicate):
@@ -77,14 +73,7 @@ def _move_to_insulina(
 
     _drop_empty_duplicate(parent, original_name)
 
-    dest_key = to_upper_normalized(dest.name)
-    if dest.exists() or (
-        insulina_dir.is_dir()
-        and any(
-            entry.is_dir() and to_upper_normalized(entry.name) == dest_key
-            for entry in insulina_dir.iterdir()
-        )
-    ):
+    if dest.exists() or find_matching_dir(insulina_dir, dest.name) is not None:
         _log(ErrorLevel.WARNING, f"destino já existe, pulando: {dest}")
         return
 

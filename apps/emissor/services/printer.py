@@ -171,6 +171,12 @@ class Win32SpoolerBackend:
         """Spoola o PDF para a impressora padrão do Windows."""
         import win32print
 
+        def _result(status: PrintStatus, message: str, printer: str | None = None) -> PrintResult:
+            return PrintResult(
+                status=status, message=message, pdf_path=pdf_path,
+                printer=printer, copies=copies, backend=self.name,
+            )
+
         try:
             printer_name = win32print.GetDefaultPrinter()
         except Exception as e:
@@ -179,46 +185,18 @@ class Win32SpoolerBackend:
                 level=ErrorLevel.WARNING,
                 context=ErrorContext.APP,
             )
-            return PrintResult(
-                status=PrintStatus.NO_PRINTER,
-                message=_STATUS_MESSAGES[PrintStatus.NO_PRINTER],
-                pdf_path=pdf_path,
-                printer=None,
-                copies=copies,
-                backend=self.name,
-            )
+            return _result(PrintStatus.NO_PRINTER, _STATUS_MESSAGES[PrintStatus.NO_PRINTER])
 
         if not printer_name:
-            return PrintResult(
-                status=PrintStatus.NO_PRINTER,
-                message=_STATUS_MESSAGES[PrintStatus.NO_PRINTER],
-                pdf_path=pdf_path,
-                printer=None,
-                copies=copies,
-                backend=self.name,
-            )
+            return _result(PrintStatus.NO_PRINTER, _STATUS_MESSAGES[PrintStatus.NO_PRINTER])
 
         problema = self._check_printer_ready(win32print, printer_name)
         if problema is not None:
-            return PrintResult(
-                status=PrintStatus.PRINTER_NOT_READY,
-                message=f"Impressora indisponível: {problema}.",
-                pdf_path=pdf_path,
-                printer=printer_name,
-                copies=copies,
-                backend=self.name,
-            )
+            return _result(PrintStatus.PRINTER_NOT_READY, f"Impressora indisponível: {problema}.", printer_name)
 
         pages = self._render_pages(pdf_path)
         if pages is None:
-            return PrintResult(
-                status=PrintStatus.RENDER_FAILED,
-                message=_STATUS_MESSAGES[PrintStatus.RENDER_FAILED],
-                pdf_path=pdf_path,
-                printer=printer_name,
-                copies=copies,
-                backend=self.name,
-            )
+            return _result(PrintStatus.RENDER_FAILED, _STATUS_MESSAGES[PrintStatus.RENDER_FAILED])
 
         try:
             self._spool_pages(printer_name, pages, copies, job_title)
@@ -228,26 +206,12 @@ class Win32SpoolerBackend:
                 level=ErrorLevel.ERROR,
                 context=ErrorContext.APP,
             )
-            return PrintResult(
-                status=PrintStatus.SPOOL_FAILED,
-                message=_STATUS_MESSAGES[PrintStatus.SPOOL_FAILED],
-                pdf_path=pdf_path,
-                printer=printer_name,
-                copies=copies,
-                backend=self.name,
-            )
+            return _result(PrintStatus.SPOOL_FAILED, _STATUS_MESSAGES[PrintStatus.SPOOL_FAILED], printer_name)
         finally:
             for page in pages:
                 page.close()
 
-        return PrintResult(
-            status=PrintStatus.SPOOLED,
-            message=_STATUS_MESSAGES[PrintStatus.SPOOLED],
-            pdf_path=pdf_path,
-            printer=printer_name,
-            copies=copies,
-            backend=self.name,
-        )
+        return _result(PrintStatus.SPOOLED, _STATUS_MESSAGES[PrintStatus.SPOOLED], printer_name)
 
     def _check_printer_ready(self, win32print: object, printer_name: str) -> str | None:
         """Verifica se a impressora está pronta (best-effort, nunca levanta)."""
@@ -281,7 +245,12 @@ class Win32SpoolerBackend:
                 self._optimize_for_print(pil)
                 for pil in render_pages_pil(pdf_path, scale=scale)
             ]
-        except Exception:
+        except Exception as e:
+            ErrorHandler.log(
+                f"Falha ao renderizar PDF '{pdf_path}': {e}",
+                level=ErrorLevel.ERROR,
+                context=ErrorContext.PDF_GENERATION,
+            )
             return None
 
     @staticmethod
@@ -461,20 +430,15 @@ def print_pdf(
         )
 
     backends = _select_backends()
+    terminal = {PrintStatus.NO_PRINTER, PrintStatus.PRINTER_NOT_READY}
     last_result: PrintResult | None = None
     for backend in backends:
         result = backend.spool(path_str, safe_copies, job_title)
-        if result.ok:
+        if result.ok or result.status in terminal:
             return result
         last_result = result
-        # Falhas terminais que não fazem sentido tentar outro backend.
-        if result.status in (PrintStatus.NO_PRINTER, PrintStatus.PRINTER_NOT_READY):
-            return result
 
-    if last_result is not None:
-        return last_result
-
-    return PrintResult(
+    return last_result or PrintResult(
         status=PrintStatus.UNSUPPORTED_OS,
         message=_STATUS_MESSAGES[PrintStatus.UNSUPPORTED_OS],
         pdf_path=path_str,

@@ -43,6 +43,17 @@ INSULINA_PARENT_FOLDER = "05 - INSULINA"
 INSULINA_SUFFIX = " - INSULINA"
 
 
+def find_matching_dir(parent: Path, name: str) -> Path | None:
+    """Pasta em ``parent`` cujo nome casa sem case/acento, ou None."""
+    key = to_upper_normalized(name)
+    if not key or not parent.is_dir():
+        return None
+    for entry in sorted(parent.iterdir()):
+        if entry.is_dir() and to_upper_normalized(entry.name) == key:
+            return entry
+    return None
+
+
 def resolve_archive_dir(
     save_root: Path,
     patient_tipo: str,
@@ -64,11 +75,9 @@ def resolve_archive_dir(
     if archive_dir.is_dir():
         return archive_dir
 
-    target_key = to_upper_normalized(target_name)
-    if target_key and parent.is_dir():
-        for entry in sorted(parent.iterdir()):
-            if entry.is_dir() and to_upper_normalized(entry.name) == target_key:
-                return entry
+    existing = find_matching_dir(parent, target_name)
+    if existing is not None:
+        return existing
 
     if create:
         network_mkdir(archive_dir)

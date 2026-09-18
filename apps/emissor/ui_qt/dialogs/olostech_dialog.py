@@ -4,13 +4,12 @@
 
 from __future__ import annotations
 
-import queue
 import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QThread, Signal
 from dataclasses import dataclass
 from emissor.database.models import Patient, Retirada
 from PySide6.QtWidgets import (
@@ -19,7 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QProgressBar,
+    QMessageBox,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -47,11 +46,7 @@ class _ItemRow:
 
 
 class NoScrollComboBox(QComboBox):
-    """ComboBox que nao altera a selecao com o scroll do mouse.
-
-    Dentro do dialogo rolavel, o scroll deve navegar a lista de itens,
-    nao mudar o tipo de receita por engano.
-    """
+    """Combo que ignora o scroll: rola o dialogo em vez de trocar a selecao."""
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         event.ignore()
@@ -60,11 +55,9 @@ class NoScrollComboBox(QComboBox):
 def ask_notificacao(
     parent: QWidget, descricao: str, suggested_action: int
 ) -> tuple[int, str] | None:
-    """Popup para item controlado detectado sem numero.
+    """Popup p/ item de notificacao sem numero (so B/A).
 
-    So oferece Notificacao B/A (o servidor ja definiu que e controlada).
-    Returns:
-        (action_type, numero) ou None se cancelado/sem numero.
+    Returns (action_type, numero) ou None se cancelado/sem numero.
     """
     dlg, layout = scaffold_dialog(
         parent, "Notificação controlada", min_width=380
@@ -112,11 +105,9 @@ DEFAULT_ACTION_TYPE = 2  # Receita Simples
 def merge_olostech_entries(
     entries: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Mescla entradas com mesmo material+tipo.
+    """Mescla entradas de mesmo material+tipo (soma qtde, maior dias).
 
-    O servidor rejeita material duplicado na dispensacao
-    ("Material já entregue nessa dispensação!"): quantidades somam,
-    vale o maior dias e a primeira notificacao nao vazia.
+    O servidor rejeita material duplicado ("Material já entregue...").
     """
     merged: dict[tuple[str, int], dict[str, Any]] = {}
     for e in entries:
@@ -227,19 +218,8 @@ def show_olostech_dialog(
     parent: QWidget,
     retirada: Retirada,
     patient: Patient,
-    olostech_cfg: dict[str, Any],
-) -> tuple[bool, str] | None:
-    """Abre dialogo para coletar tipo de receita por item e registrar.
-
-    Args:
-        parent: Janela pai.
-        retirada: Retirada atual (com itens).
-        patient: Paciente selecionado.
-        olostech_cfg: Configuracao Olostech.
-
-    Returns:
-        Tuple (sucesso, mensagem) ao finalizar, ou None se cancelado.
-    """
+) -> list[dict[str, Any]] | None:
+    """Coleta dados do registro manual; o runner executa em background."""
     dialog, layout = scaffold_dialog(
         parent, "Registrar Olostech", min_width=640
     )
@@ -324,28 +304,13 @@ def show_olostech_dialog(
     scroll.setWidget(content)
     layout.addWidget(scroll)
 
-    # Progress bar (hidden initially)
-    progress = QProgressBar()
-    progress.setRange(0, 0)
-    progress.setVisible(False)
-    layout.addWidget(progress)
-
-    # Status label
-    status_label = QLabel("")
-    status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    status_label.setWordWrap(True)
-    status_label.setVisible(False)
-    layout.addWidget(status_label)
-
     # Botoes (tematizados, como os demais dialogos)
     btn_row, (cancel_btn, ok_btn) = make_dialog_button_row(
         [("Cancelar", "flat"), ("Registrar", "primary")]
     )
     layout.addLayout(btn_row)
 
-    result: tuple[bool, str] | None = None
-    worker: RegistrationWorker | None = None
-    pump: QTimer | None = None
+    result: list[dict[str, Any]] | None = None
 
     def _collect_items() -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
@@ -369,87 +334,19 @@ def show_olostech_dialog(
         return merge_olostech_entries(entries)
 
     def _on_accepted() -> None:
-        nonlocal result, worker, pump
+        nonlocal result
 
-        # Coletar dados
+        # Coletar dados e fechar — o registro roda no chamador.
         collected = _collect_items()
         if not collected:
-            status_label.setText("Nenhum item com mapeamento Olostech")
-            status_label.setStyleSheet("color: orange;")
-            status_label.setVisible(True)
+            QMessageBox.warning(
+                dialog,
+                "Sem mapeamento",
+                "Nenhum item com mapeamento Olostech.",
+            )
             return
-
-        # Validar configuracao
-        if not _cfg_value(olostech_cfg, "username") or not _cfg_value(olostech_cfg, "password"):
-            status_label.setText("Configure usuario e senha do Olostech")
-            status_label.setStyleSheet("color: red;")
-            status_label.setVisible(True)
-            return
-
-        # Desabilitar controles, mostrar progresso
-        for r in rows:
-            r.combo.setEnabled(False)
-            r.notif_edit.setEnabled(False)
-        ok_btn.setEnabled(False)
-        cancel_btn.setEnabled(False)
-        progress.setVisible(True)
-        status_label.setText("Registrando...")
-        status_label.setStyleSheet("")
-        status_label.setVisible(True)
-
-        # Pedidos de numero vindos da thread: o pump mostra o popup
-        # na thread da UI e devolve a resposta (worker bloqueia).
-        notif_requests: queue.Queue = queue.Queue()
-
-        def _ask_blocking(desc: str, action: int) -> tuple[int, str] | None:
-            reply: queue.Queue = queue.Queue(maxsize=1)
-            notif_requests.put((desc, action, reply))
-            return reply.get()
-
-        def _pump() -> None:
-            try:
-                desc, action, reply = notif_requests.get_nowait()
-            except queue.Empty:
-                return
-            reply.put(ask_notificacao(dialog, desc, action))
-
-        pump = QTimer(dialog)
-        pump.timeout.connect(_pump)
-        pump.start(250)
-
-        # Executar em background
-        patient_sus = patient_matricula(patient)
-        professional_code = patient_crm(patient)
-
-        worker = RegistrationWorker(
-            olostech_cfg=olostech_cfg,
-            patient_sus=patient_sus,
-            professional_code=professional_code,
-            items=collected,
-            ask_notificacao=_ask_blocking,
-        )
-        worker.finished_with_result.connect(_on_finished)
-        worker.start()
-
-    def _on_finished(success: bool, message: str) -> None:
-        nonlocal result
-        result = (success, message)
-        if pump is not None:
-            pump.stop()
-        progress.setVisible(False)
-        status_label.setText(message)
-        status_label.setStyleSheet(
-            "color: green;" if success else "color: red;"
-        )
-        # Substituir botoes: apenas Fechar
-        ok_btn.setText("Fechar")
-        ok_btn.setEnabled(True)
-        try:
-            ok_btn.clicked.disconnect(_on_accepted)
-        except RuntimeError:
-            pass
-        ok_btn.clicked.connect(dialog.accept)
-        cancel_btn.setVisible(False)
+        result = collected
+        dialog.accept()
 
     ok_btn.clicked.connect(_on_accepted)
     cancel_btn.clicked.connect(dialog.reject)
@@ -458,19 +355,8 @@ def show_olostech_dialog(
     return result
 
 
-def _cfg_value(cfg: dict[str, Any] | Any, key: str) -> str:
-    """Obtém valor da configuração (aceita dict ou OlostechConfig dataclass)."""
-    if isinstance(cfg, dict):
-        return str(cfg.get(key, "") or "")
-    return str(getattr(cfg, key, "") or "")
-
-
 def patient_matricula(patient: Any) -> str:
-    """Obtem a matricula/SUS do paciente (primeira parte se houver '/').
-
-    Algumas matriculas vem como '123456/12345' — o Olostech aceita apenas
-    a primeira.
-    """
+    """Retorna a matrícula/SUS do paciente, truncando após '/'."""
     for attr in ("matricula", "sus", "id"):
         val = getattr(patient, attr, None)
         if val is not None:
@@ -482,7 +368,7 @@ def patient_matricula(patient: Any) -> str:
 
 
 def patient_crm(patient: Any) -> str:
-    """Obtem o CRM do profissional do paciente (ou '12345' como fallback)."""
+    """Retorna o CRM do paciente ou um valor de fallback."""
     crm = str(getattr(patient, "profissional_crm", "") or "").strip()
     if crm:
         return crm
@@ -491,7 +377,7 @@ def patient_crm(patient: Any) -> str:
 
 
 def _to_int(value: Any, default: int = 0) -> int:
-    """Converte valor para int de forma segura."""
+    """Converte valores para int sem falhar."""
     try:
         return int(value)
     except (TypeError, ValueError):

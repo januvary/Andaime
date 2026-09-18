@@ -314,10 +314,7 @@ class EmissorDatabase(BaseDatabase):
             elif key == "bloquear_balanco":
                 values.append("1" if v else "0")
             elif isinstance(v, str) and not _is_enum_field(key):
-                if key == "nome":
-                    values.append(to_upper_normalized(v.strip()))
-                else:
-                    values.append(v.strip().upper())
+                values.append(v.strip().upper())
             else:
                 values.append(v)
             set_clauses.append(f"{key} = ?")
@@ -343,12 +340,8 @@ class EmissorDatabase(BaseDatabase):
         if cur.fetchone():
             return True
 
-        cur.execute(
-            "SELECT item_id, unidade FROM items_catalog WHERE descricao = ?",
-            (descricao,),
-        )
-        existing_by_desc = cur.fetchone()
-        if existing_by_desc is None and descricao:
+        existing_by_desc = None
+        if descricao:
             desc_key = to_upper_normalized(descricao)
             cur.execute(
                 "SELECT item_id, unidade, descricao FROM items_catalog"

@@ -573,11 +573,9 @@ class Dispensing:
             total_units = quantity * unid
             real_dias = dias if dias and dias > 0 else quantity
 
-            # Os dias pedidos vao como estao: duracao_tratamento_max NAO e
-            # um teto confiavel (o servidor costuma aceitar dias acima
-            # dele). Ele so e usado como fallback se o servidor recusar.
-            # dose*dias == quantity*unid e mantido com inteiros para a
-            # prescrita calculada pelo servidor bater com a quantidade.
+            # Dias pedidos vao como estao; duracao_tratamento_max nao e
+            # teto confiavel e so vale como fallback se o servidor recusar.
+            # dose*dias == quantity*unid (inteiros).
             def _pick(target: int) -> tuple[int, int]:
                 if target >= 1 and total_units % target == 0:
                     return total_units // target, target

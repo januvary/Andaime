@@ -43,12 +43,9 @@ BLACKLISTED_MACS = {"000000000000", "020054554e01", "000100012f9b"}
 def get_physical_mac_addresses(log_callback: Any | None = None) -> list[str]:
     """Coleta endereços MAC físicos (estilo Java MacAddress).
 
-    Exclui MACs da blacklist e endereços localmente administrados (virtuais).
-    Retorna lista de strings hex minúsculas sem separadores.
-
-    Tenta até 3 vezes (com espera) — na inicialização do sistema a rede
-    pode não estar pronta, causando WinError 50. Se ipconfig falhar,
-    usa uuid.getnode() como fallback.
+    Exclui blacklist e MACs localmente administrados (virtuais).
+    Retorna hex minúsculo sem separadores. Tenta 3x (rede pode não
+    estar pronta no boot — WinError 50); fallback uuid.getnode().
     """
     def log(msg: str) -> None:
         if log_callback:
