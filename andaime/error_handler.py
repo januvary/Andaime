@@ -5,12 +5,31 @@ Centralized error handling with logging and UI dialogs.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import sys
 import traceback
 from contextlib import suppress
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
+
+
+def friendly_message(error: Exception) -> str:
+    """Curta descrição legível de uma exceção para superfícies de UI.
+
+    Status lines compõem ``f"Erro ao X: {friendly_message(exc)}"`` —
+    a causa raiz continua no log via ``handle_error``.
+    """
+    if isinstance(error, PermissionError):
+        return "sem permissão"
+    if isinstance(error, FileNotFoundError):
+        return "arquivo ou pasta não encontrado"
+    if isinstance(error, (TimeoutError, ConnectionError)):
+        return "falha de conexão"
+    if isinstance(error, sqlite3.Error):
+        return "falha no banco de dados"
+    text = str(error).strip()
+    return text if text else type(error).__name__
 
 
 class ErrorLevel(Enum):
@@ -171,12 +190,14 @@ class ErrorHandler:
         }
 
         hint = recovery_hints.get(operation, "Verifique se o caminho está correto.")
+        if file_path:
+            hint += f"\n\nCaminho: {file_path}"
 
         return ErrorHandler.handle_error(
             error,
             context=ErrorContext.FILE_IO,
             level=ErrorLevel.ERROR,
-            recovery_hint=hint + f"\n\nCaminho: {file_path}",
+            recovery_hint=hint,
             show_dialog=show_dialog,
         )
 
