@@ -46,6 +46,47 @@ def page_count(src: Union[bytes, str, Path]) -> int:
     return len(open_pdf(src).pages)
 
 
+def _pikepdf_available() -> bool:
+    """Whether ``pikepdf`` can be imported (optional signature-preserving path)."""
+    try:
+        import pikepdf  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def has_digital_signature(src: Union[bytes, str, Path]) -> bool:
+    """True se o PDF contiver ao menos um campo de assinatura (``/Sig``).
+
+    Só detecção (sem re-serializar): checa AcroForm e ``/Annots`` das páginas.
+    """
+    reader = open_pdf(src)
+    try:
+        fields = reader.get_fields()
+    except Exception:
+        return False
+    if fields and any(
+        getattr(f, "field_type", None) == "/Sig" for f in fields.values()
+    ):
+        return True
+    try:
+        for page in reader.pages:
+            annots = page.get("/Annots")
+            if not annots:
+                continue
+            for annot_ref in annots:
+                try:
+                    annot = annot_ref.get_object()
+                except Exception:
+                    continue
+                if annot.get("/Subtype") == "/Sig":
+                    return True
+    except Exception:
+        return False
+    return False
+
+
 def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:
     """Divide um PDF em N PDFs de página única."""
     from pypdf import PdfWriter
@@ -70,7 +111,38 @@ def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:
 
 
 def extract_page(src: Union[bytes, str, Path], page: int) -> bytes:
-    """Extrai uma única página como PDF de página única (bytes)."""
+    """Extrai uma única página como PDF de página única (bytes).
+
+    PDFs assinados usam ``pikepdf`` (preserva ``/Sig``); os demais seguem
+    o caminho pypdf original.
+    """
+    if _pikepdf_available():
+        try:
+            if has_digital_signature(src):
+                from pikepdf import Pdf as _PikePdf
+
+                if isinstance(src, (str, Path)):
+                    pdf = _PikePdf.open(src)
+                else:
+                    pdf = _PikePdf.open(io.BytesIO(src))
+                try:
+                    if not pdf.pages:
+                        raise ValueError("PDF vazio")
+                    new_pdf = _PikePdf.new()
+                    new_pdf.pages.append(pdf.pages[page])
+                    buf = io.BytesIO()
+                    new_pdf.save(buf)
+                    return buf.getvalue()
+                finally:
+                    pdf.close()
+        except ValueError:
+            raise
+        except Exception as e:
+            ErrorHandler.log(
+                f"extract_page: pikepdf falhou ({e}); usando pypdf",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.PDF_GENERATION,
+            )
     from pypdf import PdfWriter
 
     reader = open_pdf(src)
@@ -89,20 +161,58 @@ def merge_pdfs(
     *,
     hash_algo: "hashlib._Hash | None" = None,
 ) -> str:
-    """Concatena vários PDFs em um arquivo."""
+    """Concatena vários PDFs em um arquivo.
+
+    Se alguma entrada for assinada, mescla via ``pikepdf`` (preserva
+    ``/Sig``); senão, segue o caminho pypdf original.
+    """
     from pypdf import PdfWriter
 
     t0 = time.monotonic()
-    writer = PdfWriter()
-    for blob in conteudos:
-        if not blob:
-            continue
-        writer.append(open_pdf(blob))
-    with open(output_path, "wb") as f:
-        if hash_algo is not None:
-            _write_hashing(writer, f, hash_algo)
-        else:
-            writer.write(f)
+    # Materializa primeiro: ``conteudos`` pode ser um gerador e a detecção
+    # de assinaturas abaixo consome a primeira iteração.
+    blobs = list(conteudos)
+    use_pike = _pikepdf_available() and any(
+        b and has_digital_signature(b) for b in blobs
+    )
+    if use_pike:
+        from pikepdf import Pdf as _PikePdf
+
+        result = _PikePdf.new()
+        try:
+            for blob in blobs:
+                if not blob:
+                    continue
+                if isinstance(blob, (str, Path)):
+                    src_pdf = _PikePdf.open(blob)
+                else:
+                    src_pdf = _PikePdf.open(io.BytesIO(blob))
+                try:
+                    result.pages.extend(src_pdf.pages)
+                finally:
+                    src_pdf.close()
+            if hash_algo is not None:
+                buf = io.BytesIO()
+                result.save(buf)
+                data = buf.getvalue()
+                hash_algo.update(data)
+                with open(output_path, "wb") as f:
+                    f.write(data)
+            else:
+                result.save(output_path)
+        finally:
+            result.close()
+    else:
+        writer = PdfWriter()
+        for blob in blobs:
+            if not blob:
+                continue
+            writer.append(open_pdf(blob))
+        with open(output_path, "wb") as f:
+            if hash_algo is not None:
+                _write_hashing(writer, f, hash_algo)
+            else:
+                writer.write(f)
     elapsed = time.monotonic() - t0
     if elapsed >= 2.0:
         ErrorHandler.log(
