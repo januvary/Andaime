@@ -13,6 +13,7 @@ from typing import Any, Protocol, TYPE_CHECKING, runtime_checkable
 if TYPE_CHECKING:
     from PIL import Image
 
+from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from emissor.services.exceptions import EmissorError
 from emissor.utils.net_io import atomic_write_path, network_mkdir
 from emissor.utils.paths import resolve_archive_dir
@@ -232,8 +233,12 @@ class TwainBackend:
 
                     img = Image.open(BytesIO(bmp_bytes))
                     images.append(_normalize_pil_page(img, dpi))
-                except Exception:
-                    pass
+                except Exception as e:
+                    ErrorHandler.log(
+                        f"Página ignorada (falha na conversão): {e}",
+                        level=ErrorLevel.WARNING,
+                        context=ErrorContext.UNKNOWN,
+                    )
             if not remaining:
                 break
         if not images:
@@ -509,7 +514,6 @@ def _resolve_backend(backend_name: str = "auto") -> ScannerBackend:
     A variável de ambiente ``EMISSOR_SCAN_BACKEND`` tem precedência sobre
     *backend_name* (útil para debug/CI).
     """
-    import os
     import sys
 
     name = os.environ.get("EMISSOR_SCAN_BACKEND", "").lower() or backend_name.lower()

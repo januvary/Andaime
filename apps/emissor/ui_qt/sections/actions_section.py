@@ -172,6 +172,16 @@ class ActionsSection(QtSection):
         if self._save_pdf_btn is not None:
             self._save_pdf_btn.setEnabled(not busy)
 
+    def disable_save_data_button(self) -> None:
+        """Desabilita Salvar Dados durante fases bloqueantes (PDF/print/Olostech)."""
+        if self._save_data_btn is not None:
+            self._save_data_btn.setEnabled(False)
+
+    def enable_save_data_button(self) -> None:
+        """Reabilita Salvar Dados ao final de uma fase bloqueante."""
+        if self._save_data_btn is not None:
+            self._save_data_btn.setEnabled(True)
+
     def update_save_button(self, unsaved_count: int) -> None:
         """Atualiza texto do botão Salvar Dados com o contador; 0 esconde."""
         if unsaved_count > 0:
@@ -244,21 +254,31 @@ class ActionsSection(QtSection):
 
     def _apply_olostech_state(self, retirada: Any) -> None:
         """Atualiza estado do botão Olostech conforme retirada."""
+        # Evita início automático do Olostech enquanto imprime;
+        # o deferimento acontece em _on_print_done.
+        if self.app._pending_auto_print:
+            return
+        # Consome antes dos early returns para nunca travar a UI.
+        auto = self.app._pending_auto_olostech
+        self.app._pending_auto_olostech = False
         self._current_retirada = retirada
         if retirada is None:
             self._olostech_btn.setText("Olostech")
             self.disable_olostech_button()
+            if auto:
+                self.app._unlock_ui()
             return
         if getattr(retirada, "olostech_ok", 0):
             self.set_olostech_registered(True)
         else:
             self.set_olostech_registered(False)
             # Não reabilita no meio de um registro em voo.
-            worker = getattr(self.app, "_olostech_worker", None)
+            worker = self.app._olostech_worker
             if worker is None or not worker.isRunning():
                 self.enable_olostech_button()
-        # Auto-registro após salvar; consome o flag uma vez.
-        if getattr(self.app, "_pending_auto_olostech", False):
-            self.app._pending_auto_olostech = False
+        # Auto-registro após salvar.
+        if auto:
             if not getattr(retirada, "olostech_ok", 0):
                 self.app._start_olostech(retirada)
+            else:
+                self.app._unlock_ui()

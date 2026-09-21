@@ -124,7 +124,6 @@ class EmissorDatabase(BaseDatabase):
                 data_proxima_retirada TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                substituida INTEGER NOT NULL DEFAULT 0,
                 olostech_ok INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(patient_id, data_retirada),
                 FOREIGN KEY (patient_id) REFERENCES pacientes(id) ON DELETE RESTRICT
@@ -168,13 +167,13 @@ class EmissorDatabase(BaseDatabase):
             "CREATE INDEX IF NOT EXISTS idx_retirada_items_retirada ON retirada_items(retirada_id)"
         )
 
-        # Garantir coluna substituida em bancos existentes
+        # A coluna substituida foi removida do schema: o status de substituição
+        # é derivado sob demanda (ver agenda_service). Remover de bancos existentes
+        # é seguro — nada mais lê ou escreve a coluna.
         cursor.execute("PRAGMA table_info(retiradas)")
         retirada_cols = {row[1] for row in cursor.fetchall()}
-        if "substituida" not in retirada_cols:
-            cursor.execute(
-                "ALTER TABLE retiradas ADD COLUMN substituida INTEGER NOT NULL DEFAULT 0"
-            )
+        if "substituida" in retirada_cols:
+            cursor.execute("ALTER TABLE retiradas DROP COLUMN substituida")
 
         # Garantir coluna olostech_ok em bancos existentes
         if "olostech_ok" not in retirada_cols:
@@ -222,6 +221,24 @@ class EmissorDatabase(BaseDatabase):
             (retirada_id,),
         )
         return [RetiradaItem.from_row(r) for r in cursor.fetchall()]
+
+    @db_op("read")
+    def get_retirada_item_sets(
+        self, retirada_ids: List[int]
+    ) -> Dict[int, set[str]]:
+        """Mapeia retirada_id -> conjunto de item_id (uma query)."""
+        if not retirada_ids:
+            return {}
+        placeholders = ", ".join("?" for _ in retirada_ids)
+        rows = self._fetch_all(
+            f"SELECT retirada_id, item_id FROM retirada_items "
+            f"WHERE retirada_id IN ({placeholders})",
+            tuple(retirada_ids),
+        )
+        mapping: Dict[int, set[str]] = {rid: set() for rid in retirada_ids}
+        for row in rows:
+            mapping[row["retirada_id"]].add(row["item_id"])
+        return mapping
 
     # ========================================================================
     # PACIENTES
@@ -503,47 +520,6 @@ class EmissorDatabase(BaseDatabase):
     # RETIRADAS
     # ========================================================================
 
-    def _mark_superseded_retiradas(
-        self,
-        cur: Any,
-        patient_id: int,
-        new_retirada_id: int,
-        data_retirada: str,
-        items: List[Dict],
-    ) -> None:
-        """Marca retiradas anteriores do paciente (mesmo item) como substituídas."""
-        new_item_ids = {
-            item.get("item_id", "") for item in items if item.get("item_id")
-        }
-        if not new_item_ids:
-            return
-
-        cur.execute(
-            "SELECT id FROM retiradas "
-            "WHERE patient_id = ? AND id != ? AND substituida = 0 "
-            "AND data_retirada <= ? AND data_proxima_retirada >= ?",
-            (patient_id, new_retirada_id, data_retirada, data_retirada),
-        )
-        candidate_ids = [row["id"] for row in cur.fetchall()]
-
-        for cid in candidate_ids:
-            cur.execute(
-                "SELECT item_id FROM retirada_items WHERE retirada_id = ?",
-                (cid,),
-            )
-            prev_item_ids = {row["item_id"] for row in cur.fetchall()}
-            if new_item_ids & prev_item_ids:
-                cur.execute(
-                    "UPDATE retiradas SET substituida = 1 WHERE id = ?",
-                    (cid,),
-                )
-                ErrorHandler.log(
-                    f"Retirada ID {cid} marcada como substituída por "
-                    f"ID {new_retirada_id}",
-                    level=ErrorLevel.INFO,
-                    context=ErrorContext.DATABASE,
-                )
-
     @db_op("write")
     def save_retirada(
         self,
@@ -632,12 +608,6 @@ class EmissorDatabase(BaseDatabase):
                             item.get("quantidade", ""),
                             item.get("dias", ""),
                         ),
-                    )
-
-                # Só marca como substituída em retiradas novas (edição não substitui).
-                if not existing:
-                    self._mark_superseded_retiradas(
-                        cur, patient_id, retirada_id, data_retirada, items
                     )
 
                 self._commit()
@@ -734,7 +704,7 @@ class EmissorDatabase(BaseDatabase):
         """Retorna todas as retiradas de um paciente (sem itens)."""
         with self._cursor() as cur:
             cur.execute(
-                "SELECT id, patient_id, patient_name, data_retirada, data_proxima_retirada, substituida, created_at, updated_at "
+                "SELECT id, patient_id, patient_name, data_retirada, data_proxima_retirada, created_at, updated_at "
                 "FROM retiradas WHERE patient_id = ? ORDER BY data_retirada DESC",
                 (patient_id,),
             )
@@ -742,12 +712,18 @@ class EmissorDatabase(BaseDatabase):
 
     @db_op("read")
     def get_ultima_retirada_ativa(self, patient_id: int) -> Retirada | None:
-        """Retorna a última retirada ativa (não substituída) do paciente."""
+        """Retorna a retirada mais recente do paciente (linha de base ativa).
+
+        A substituição deixa de ser uma coluna e passa a ser derivada sob
+        demanda: a retirada mais recente (maior data_retirada) nunca é
+        "retirada", portanto é sempre a última ativa.
+        """
         with self._cursor() as cur:
             cur.execute(
-                "SELECT id, patient_id, patient_name, data_retirada, data_proxima_retirada, substituida, created_at, updated_at "
+                "SELECT id, patient_id, patient_name, data_retirada, data_proxima_retirada, "
+                "created_at, updated_at "
                 "FROM retiradas "
-                "WHERE patient_id = ? AND substituida = 0 "
+                "WHERE patient_id = ? "
                 "ORDER BY data_retirada DESC LIMIT 1",
                 (patient_id,),
             )
@@ -762,7 +738,6 @@ class EmissorDatabase(BaseDatabase):
                 "SELECT r.id, r.patient_id, COALESCE(p.nome, r.patient_name) AS patient_name, r.data_retirada, "
                 "r.data_proxima_retirada, r.created_at, r.updated_at, p.tipo "
                 "FROM retiradas r LEFT JOIN pacientes p ON r.patient_id = p.id "
-                "WHERE r.substituida = 0 "
                 "ORDER BY r.data_retirada DESC"
             )
             return [Retirada.from_row(r) for r in cur.fetchall()]

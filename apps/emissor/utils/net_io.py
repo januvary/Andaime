@@ -33,13 +33,20 @@ _TRANSIENT_ERRNOS = frozenset(
 # Windows network error codes (WinError) that are transient.
 _TRANSIENT_WIN_ERRORS = frozenset({53, 67, 121, 64, 1232, 1233, 1234, 1236})
 
+# WinError 32/33 chega como PermissionError mas limpa sozinho.
+_SHARING_WIN_ERRORS = frozenset({32, 33})
+
 
 def is_transient_error(exc: BaseException) -> bool:
     """Classifica a exceção como transitória (vale a pena retry)."""
     if not isinstance(exc, OSError):
         return False
 
-    # PermissionError is never transient.
+    winerror = getattr(exc, "winerror", None)
+    if winerror is not None and winerror in _SHARING_WIN_ERRORS:
+        return True
+
+    # PermissionError is otherwise never transient.
     if isinstance(exc, PermissionError):
         return False
 
@@ -48,7 +55,6 @@ def is_transient_error(exc: BaseException) -> bool:
         return True
 
     # Check Windows-specific error codes via winerror attribute.
-    winerror = getattr(exc, "winerror", None)
     if winerror is not None and winerror in _TRANSIENT_WIN_ERRORS:
         return True
 
@@ -117,6 +123,12 @@ def network_mkdir(path: Path) -> Path:
     return path
 
 
+@retry_on_network_error(max_retries=2, base_delay=0.5)
+def _replace_atomic(tmp: Path, target: Path) -> None:
+    """Troca atômica com retry (sharing violation limpa sozinho)."""
+    os.replace(tmp, target)
+
+
 @contextmanager
 def atomic_write_path(target: Path) -> Iterator[Path]:
     """Context manager para escrita atômica em shares de rede.
@@ -126,7 +138,7 @@ def atomic_write_path(target: Path) -> Iterator[Path]:
     tmp = target.with_name(f".{target.name}.tmp")
     try:
         yield tmp
-        os.replace(tmp, target)
+        _replace_atomic(tmp, target)
     except BaseException:
         with suppress(OSError):
             tmp.unlink(missing_ok=True)

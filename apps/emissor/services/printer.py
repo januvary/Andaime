@@ -169,13 +169,16 @@ class Win32SpoolerBackend:
 
     def spool(self, pdf_path: str, copies: int, job_title: str) -> PrintResult:
         """Spoola o PDF para a impressora padrão do Windows."""
-        import win32print
-
         def _result(status: PrintStatus, message: str, printer: str | None = None) -> PrintResult:
             return PrintResult(
                 status=status, message=message, pdf_path=pdf_path,
                 printer=printer, copies=copies, backend=self.name,
             )
+
+        try:
+            import win32print
+        except ImportError:
+            return _result(PrintStatus.UNSUPPORTED_OS, _STATUS_MESSAGES[PrintStatus.UNSUPPORTED_OS])
 
         try:
             printer_name = win32print.GetDefaultPrinter()
@@ -305,11 +308,11 @@ class Win32SpoolerBackend:
             draw_y = offset_y + (printable_h - draw_h) // 2
             box = (draw_x, draw_y, draw_x + draw_w, draw_y + draw_h)
 
+            dibs = [ImageWin.Dib(page) for page in pages]
             docinfo = _DOCINFO(sizeof(_DOCINFO), job_title, None, None, 0)
             if gdi.StartDocW(hdc, byref(docinfo)) <= 0:
                 raise RuntimeError("StartDocW falhou")
 
-            dibs = [ImageWin.Dib(page) for page in pages]
             try:
                 for _ in range(copies):
                     for dib in dibs:
@@ -340,13 +343,16 @@ class LprBackend:
 
     def spool(self, pdf_path: str, copies: int, job_title: str) -> PrintResult:
         """Spoola o PDF via lpr (espera término, checa returncode)."""
+        def _result(status: PrintStatus, message: str) -> PrintResult:
+            return PrintResult(
+                status=status, message=message, pdf_path=pdf_path,
+                printer=None, copies=copies, backend=self.name,
+            )
+
         try:
             cmd = ["lpr", "-J", job_title]
             for _ in range(max(1, copies)):
                 cmd.append(pdf_path)
-            # DEVNULL (não PIPE): se lpr escrever muito em stdout/stderr,
-            # PIPE pode encher o buffer e deadlockar o wait(). lpr é silencioso,
-            # mas DEVNULL remove qualquer risco sem perder diagnóstico de returncode.
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
@@ -354,40 +360,12 @@ class LprBackend:
                 proc.wait(timeout=self.TIMEOUT)
             except subprocess.TimeoutExpired:
                 proc.kill()
-                return PrintResult(
-                    status=PrintStatus.SPOOL_FAILED,
-                    message=_STATUS_MESSAGES[PrintStatus.SPOOL_FAILED],
-                    pdf_path=pdf_path,
-                    printer=None,
-                    copies=copies,
-                    backend=self.name,
-                )
+                return _result(PrintStatus.SPOOL_FAILED, _STATUS_MESSAGES[PrintStatus.SPOOL_FAILED])
             if proc.returncode != 0:
-                return PrintResult(
-                    status=PrintStatus.SPOOL_FAILED,
-                    message=_STATUS_MESSAGES[PrintStatus.SPOOL_FAILED],
-                    pdf_path=pdf_path,
-                    printer=None,
-                    copies=copies,
-                    backend=self.name,
-                )
-            return PrintResult(
-                status=PrintStatus.SPOOLED,
-                message=_STATUS_MESSAGES[PrintStatus.SPOOLED],
-                pdf_path=pdf_path,
-                printer=None,
-                copies=copies,
-                backend=self.name,
-            )
+                return _result(PrintStatus.SPOOL_FAILED, _STATUS_MESSAGES[PrintStatus.SPOOL_FAILED])
+            return _result(PrintStatus.SPOOLED, _STATUS_MESSAGES[PrintStatus.SPOOLED])
         except FileNotFoundError:
-            return PrintResult(
-                status=PrintStatus.UNSUPPORTED_OS,
-                message=_STATUS_MESSAGES[PrintStatus.UNSUPPORTED_OS],
-                pdf_path=pdf_path,
-                printer=None,
-                copies=copies,
-                backend=self.name,
-            )
+            return _result(PrintStatus.UNSUPPORTED_OS, _STATUS_MESSAGES[PrintStatus.UNSUPPORTED_OS])
 
 
 # ============================================================================
@@ -395,14 +373,9 @@ class LprBackend:
 # ============================================================================
 
 
-def _is_windows() -> bool:
-    """True se rodando no Windows."""
-    return sys.platform == "win32"
-
-
 def _select_backends() -> list[PrinterBackend]:
     """Seleciona backends ativos conforme a plataforma."""
-    if _is_windows():
+    if sys.platform == "win32":
         return [Win32SpoolerBackend()]
     return [LprBackend()]
 

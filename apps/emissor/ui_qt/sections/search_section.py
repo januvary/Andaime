@@ -114,8 +114,8 @@ class SearchSection(QtSection):
         lay1.addWidget(self._search_combo, stretch=1)
 
         # Botões (criados aqui, distribuídos nas colunas 2 e 3)
-        new_patient_btn = make_button("Novo Paciente", "flat-fill", self)
-        new_patient_btn.clicked.connect(self.on_new_patient_clicked)
+        self._new_patient_btn = make_button("Novo Paciente", "flat-fill", self)
+        self._new_patient_btn.clicked.connect(self.on_new_patient_clicked)
 
         agenda_btn = make_button("Abrir Agenda", "flat-fill", self)
         agenda_btn.clicked.connect(self.on_agenda_clicked)
@@ -134,7 +134,7 @@ class SearchSection(QtSection):
         lay2 = QHBoxLayout(col2)
         lay2.setContentsMargins(0, 0, 0, 0)
         lay2.setSpacing(8)
-        lay2.addWidget(new_patient_btn)
+        lay2.addWidget(self._new_patient_btn)
         lay2.addStretch()
         lay2.addWidget(agenda_btn)
         lay2.addWidget(config_btn)
@@ -305,6 +305,13 @@ class SearchSection(QtSection):
         """
         if not text and self._search_combo is not None:
             self._search_combo.clear()
+
+    def set_search_enabled(self, enabled: bool) -> None:
+        """Habilita/desabilita a busca e o botão Novo Paciente."""
+        if self._search_combo is not None:
+            self._search_combo.setEnabled(enabled)
+        if self._new_patient_btn is not None:
+            self._new_patient_btn.setEnabled(enabled)
 
     def set_status(
         self,

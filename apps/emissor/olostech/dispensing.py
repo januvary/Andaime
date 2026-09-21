@@ -148,6 +148,7 @@ class Dispensing:
         pa.load_atendimento_page()
         patient = pa.lookup_patient(patient_sus)
         if not patient:
+            self._last_error = "Paciente não encontrado no Olostech"
             return False
 
         self.estoque = pa.page_values.get("txtEstoqueDispensario", "505")
@@ -182,14 +183,18 @@ class Dispensing:
                 timeout=60,
             )
             ids = re.findall(r'iniciarAtendimento\((\d+)\)', resp2.text)
+            if not ids:
+                ids = re.findall(r'Atendimento=(\d+)', resp2.text)
             if ids:
                 self.attendance_id = ids[-1]
                 self._log(f"  Existing attendance: {self.attendance_id}")
             else:
                 self._log("  Could not extract attendance ID", "ERROR")
+                self._last_error = "Não foi possível extrair o ID do atendimento"
                 return False
         else:
             self._log(f"  Unexpected response: {result}", "ERROR")
+            self._last_error = "Erro ao verificar atendimento existente"
             return False
 
         # Open attendance (origem=1)
@@ -1073,8 +1078,10 @@ class Dispensing:
             return False, "Nenhum item para dispensar"
 
         # Step 1: Open attendance
+        if not patient_sus:
+            return False, "Paciente sem matrícula Olostech informada"
         if not self.open_attendance(patient_sus):
-            return False, "Falha ao abrir atendimento"
+            return False, self._last_error or "Falha ao abrir atendimento"
 
         # Step 2: Look up professional
         if not self.lookup_professional(professional_code):

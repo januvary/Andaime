@@ -10,7 +10,12 @@ import os
 
 from andaime.qt import ShortcutManager
 from andaime.db_worker import DatabaseWorker
-from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+from andaime.error_handler import (
+    ErrorContext,
+    ErrorHandler,
+    ErrorLevel,
+    friendly_message,
+)
 from emissor.database.emissor_db import EmissorDatabase
 from emissor.services.patient_service import PatientService
 from emissor.services.retirada_service import RetiradaService
@@ -111,6 +116,7 @@ class QtApp(QMainWindow):
         self._pending_auto_olostech: bool = False
         self._olostech_worker: Any | None = None
         self._olostech_pump: Any | None = None
+        self._ui_lock_count: int = 0
 
         # ===== UI =====
         self._build_ui()
@@ -342,6 +348,32 @@ class QtApp(QMainWindow):
         self.state_manager.set_save_root_path(config["save_location"])
         self.state_manager.set_print_copies(config["print_copies"])
 
+    # ========== Bloqueio de UI ==========
+
+    def _lock_ui(self) -> None:
+        """Desabilita controles de usuário durante fases assíncronas
+        (geração de PDF, impressão e registro Olostech) para evitar
+        troca de paciente ou duplo-gatilho enquanto o worker roda."""
+        self._ui_lock_count += 1
+        if self._ui_lock_count == 1:
+            self.actions_section.set_pdf_actions_busy(True)
+            self.actions_section.disable_save_data_button()
+            self.actions_section.disable_olostech_button()
+            self.search_section.set_search_enabled(False)
+
+    def _unlock_ui(self) -> None:
+        """Libera um nível de bloqueio aninhado; restaura a UI quando o
+        contador volta a zero. Seguro de chamar várias vezes."""
+        if self._ui_lock_count > 0:
+            self._ui_lock_count -= 1
+        if self._ui_lock_count == 0:
+            self.actions_section.set_pdf_actions_busy(False)
+            self.actions_section.enable_save_data_button()
+            self.search_section.set_search_enabled(True)
+            # Olostech button state is left to _on_olostech_done /
+            # _apply_olostech_state so it reflects "Registrado" correctly.
+            self.actions_section.enable_olostech_button()
+
     # ========== Workflow de salvamento / PDF ==========
 
     def _finalize_active_edits(self) -> None:
@@ -419,7 +451,7 @@ class QtApp(QMainWindow):
 
         self.search_section.set_status("Gerando PDF...", color="status_warning")
         self._pending_auto_print = auto_print
-        self.actions_section.set_pdf_actions_busy(True)
+        self._lock_ui()
 
         # Submeter prepare + commit ao worker thread.
         pdf_gen = self.pdf_generator
@@ -438,7 +470,6 @@ class QtApp(QMainWindow):
 
     def _on_pdf_done(self, prepared: PreparedRetirada) -> None:
         """Callback de sucesso do workflow de PDF (thread da UI)."""
-        self.actions_section.set_pdf_actions_busy(False)
         self.state_manager.set_last_generated_pdf(
             str(prepared.pdf_path), patient_id=prepared.patient_id
         )
@@ -458,15 +489,22 @@ class QtApp(QMainWindow):
         self._pending_auto_olostech = bool(
             self.config_manager.get("auto_olostech", False)
         )
-        self.actions_section._check_olostech_state()
         self.items_section.clear_reset_toggles()
 
-        if getattr(self, "_pending_auto_print", False):
+        # Impressão antecipa registro Olostech: só inicia Olostech depois
+        # que a impressão terminar (via _on_print_done).
+        if self._pending_auto_print:
             self._print_pdf(str(prepared.pdf_path))
+        else:
+            self.actions_section._check_olostech_state()
+            if not self._pending_auto_olostech:
+                self._unlock_ui()
 
     def _on_pdf_error(self, exc: BaseException) -> None:
         """Callback de erro do workflow de PDF (thread da UI)."""
-        self.actions_section.set_pdf_actions_busy(False)
+        self._pending_auto_print = False
+        self._pending_auto_olostech = False
+        self._unlock_ui()
         if isinstance(exc, ValidationError):
             self.search_section.set_status(str(exc), color="status_error")
         elif isinstance(exc, FileNotFoundError):
@@ -474,11 +512,14 @@ class QtApp(QMainWindow):
             self.search_section.set_status(str(exc), color="status_error")
         elif isinstance(exc, PDFGenerationError):
             ErrorHandler.handle_error(exc, context=ErrorContext.PDF_GENERATION)
-            self.search_section.set_status("Falha ao gerar PDF", color="status_error")
-        elif isinstance(exc, OSError):
-            ErrorHandler.handle_file_error(exc, file_path="", operation="save")
             self.search_section.set_status(
-                f"Erro de rede ao salvar: {exc}", color="status_error"
+                f"Falha ao gerar PDF: {exc}", color="status_error"
+            )
+        elif isinstance(exc, OSError):
+            ErrorHandler.handle_file_error(exc, file_path="", operation="write")
+            self.search_section.set_status(
+                f"Erro ao salvar: {friendly_message(exc)}",
+                color="status_error",
             )
         elif isinstance(exc, (RetiradaSaveError,)):
             ErrorHandler.log(
@@ -526,22 +567,27 @@ class QtApp(QMainWindow):
                 text=f"Enviado para impressão ({copies_text}) - {patient_name}",
                 color="status_success",
             )
-            return
+        else:
+            ErrorHandler.log(
+                f"Impressão falhou [{result.status.value}] via {result.backend}: "
+                f"{result.message}",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.UI,
+            )
+            self.search_section.set_status(
+                text=f"{result.message} Abrindo PDF para impressão manual...",
+                color="status_warning",
+            )
+            try:
+                open_file(pdf_path)
+            except OSError as e:
+                ErrorHandler.handle_file_error(e, file_path=str(pdf_path), operation="open")
 
-        ErrorHandler.log(
-            f"Impressão falhou [{result.status.value}] via {result.backend}: "
-            f"{result.message}",
-            level=ErrorLevel.WARNING,
-            context=ErrorContext.UI,
-        )
-        self.search_section.set_status(
-            text=f"{result.message} Abrindo PDF para impressão manual...",
-            color="status_warning",
-        )
-        try:
-            open_file(pdf_path)
-        except OSError as e:
-            ErrorHandler.handle_file_error(e, file_path=str(pdf_path), operation="open")
+        # Flag consumido por _apply_olostech_state (consulta assincrona).
+        self._pending_auto_print = False
+        self.actions_section._check_olostech_state()
+        if not self._pending_auto_olostech:
+            self._unlock_ui()
 
     def save_patient_data(self) -> None:
         """Salva os dados editados do paciente no banco de dados."""
@@ -761,6 +807,7 @@ class QtApp(QMainWindow):
         )
 
         self.search_section.set_status("Digitalizando...", color="status_warning")
+        self._lock_ui()
         self.actions_section.disable_scan_button()
 
         # Guardar contexto para a fase de network copy.
@@ -825,6 +872,7 @@ class QtApp(QMainWindow):
 
     def _handle_scan_error(self, exc: BaseException, status_msg: str) -> None:
         """Reabilita o botão e reporta erro de digitalização na UI."""
+        self._unlock_ui()
         if self.state_manager.has_selected_patient():
             self.actions_section.enable_scan_button()
         if isinstance(exc, ScannerError):
@@ -840,6 +888,7 @@ class QtApp(QMainWindow):
 
     def _on_scan_done(self, pdf_path: Path) -> None:
         """Callback de sucesso da network copy — roda na thread da UI."""
+        self._unlock_ui()
         if self.state_manager.has_selected_patient():
             self.actions_section.enable_scan_button()
         from andaime.qt import relative_path
@@ -854,10 +903,12 @@ class QtApp(QMainWindow):
     def _on_scan_error(self, exc: BaseException) -> None:
         """Callback de erro da network copy — roda na thread da UI."""
         if isinstance(exc, OSError):
+            self._unlock_ui()
             self.search_section.set_status(
-                f"Erro de rede ao digitalizar: {exc}", color="status_error"
+                f"Erro ao digitalizar: {friendly_message(exc)}",
+                color="status_error",
             )
-            ErrorHandler.handle_file_error(exc, file_path="", operation="save")
+            ErrorHandler.handle_file_error(exc, file_path="", operation="write")
             if self.state_manager.has_selected_patient():
                 self.actions_section.enable_scan_button()
         else:
@@ -1052,7 +1103,9 @@ class QtApp(QMainWindow):
                 context=ErrorContext.APP,
             )
             return
-        self.actions_section.disable_olostech_button()
+        # Só trava a UI se nenhum outro fase (PDF/print) já estiver travando.
+        if self._ui_lock_count == 0:
+            self._lock_ui()
         self._stop_olostech_pump()
         self._olostech_pump = QTimer(self)
         self._olostech_pump.timeout.connect(_pump)
@@ -1088,6 +1141,7 @@ class QtApp(QMainWindow):
 
     def _on_olostech_worker_finished(self, worker: Any) -> None:
         """Solta a referência do worker após a thread encerrar."""
+        self._unlock_ui()
         self._stop_olostech_pump()
         if self._olostech_worker is worker:
             self._olostech_worker = None
@@ -1111,7 +1165,6 @@ class QtApp(QMainWindow):
                     "Erro ao registrar no Olostech",
                     color="status_error",
                 )
-                self.actions_section.enable_olostech_button()
             if self._status_label is not None and msg.strip():
                 self._status_label.setToolTip(msg.strip())
         except Exception as e:
@@ -1120,6 +1173,8 @@ class QtApp(QMainWindow):
                 level=ErrorLevel.ERROR,
                 context=ErrorContext.APP,
             )
+        finally:
+            self._unlock_ui()
 
     # ========== Ciclo de vida ==========
 

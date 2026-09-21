@@ -283,7 +283,6 @@ class Retirada:
     patient_name: str = ""
     data_retirada: str = ""
     data_proxima_retirada: str = ""
-    substituida: int = 0
     matricula: str = ""
     profissional: str = ""
     crm: str = ""
@@ -305,7 +304,6 @@ class Retirada:
             patient_name=d.get("patient_name", ""),
             data_retirada=d.get("data_retirada", ""),
             data_proxima_retirada=d.get("data_proxima_retirada", ""),
-            substituida=_safe_int(d.get("substituida", 0)),
             matricula=d.get("matricula", "") or "",
             profissional=d.get("profissional", "") or "",
             crm=d.get("crm", "") or "",
