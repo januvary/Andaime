@@ -14,6 +14,8 @@ from andaime.qt import ShortcutManager
 
 from bap.database.ss54_database import SS54Database
 from andaime.config import ConfigManager
+from andaime.db_worker import drain_worker
+from andaime.error_handler import friendly_message
 from bap.utils.text_utils import normalize_phone
 from bap.ui_qt.styles import set_theme, get_stylesheet, get_palette, qpalette
 from bap.ui_qt.widgets.document_page import DocumentPage
@@ -27,6 +29,7 @@ from bap.constants import (
     status_display_label,
 )
 from bap.utils.date_utils import format_date_display
+from andaime.net_io import network_mkdir
 from bap.utils.arquivo_storage import resolve_arquivos_root
 from andaime.pdf import merge_pdfs, page_count
 
@@ -58,6 +61,7 @@ class MainWindow(QMainWindow):
         self._selected_patient_id: int | None = None
         self._grid_showing_process: bool = False
         self._loading: bool = False
+        self._saving: bool = False
         self._active_lote: "object | None" = None
 
         self._stack = QStackedWidget()
@@ -247,7 +251,10 @@ class MainWindow(QMainWindow):
 
         def _error(e):
             self.set_status("")
-            QMessageBox.warning(self, "BAP", f"Falha ao exportar planilha:\n{e}")
+            QMessageBox.warning(
+                self, "BAP",
+                f"Falha ao exportar planilha:\n{friendly_message(e)}",
+            )
 
         self._run_async(_work, on_done=_done, on_error=_error)
 
@@ -291,9 +298,9 @@ class MainWindow(QMainWindow):
         )
 
     def init_backend(self):
-        from andaime.db_worker import DatabaseWorker
+        from andaime.db_worker import DatabaseWorker, RetryingDatabaseWorker
         from andaime.qt.db_runner import DbAsyncRunner
-        self._db_worker = DatabaseWorker(self.db)
+        self._db_worker = RetryingDatabaseWorker(self.db)
         self._db_runner = DbAsyncRunner(self._db_worker)
 
         def _load():
@@ -321,7 +328,10 @@ class MainWindow(QMainWindow):
             level=ErrorLevel.ERROR,
             context=ErrorContext.DATABASE,
         )
-        self.set_status(f"Erro ao carregar dados: {e}", "status_error")
+        self.set_status(
+            f"Erro ao carregar dados: {friendly_message(e)}",
+            "status_error",
+        )
         self._warn(f"Falha ao carregar os dados do aplicativo:\n\n{e}")
 
     def _on_backend_loaded(self, result) -> None:
@@ -573,6 +583,8 @@ class MainWindow(QMainWindow):
 
         # Trava a grade durante o Save: impede que drops/edições alterem a
         # ordem dos itens vivos e desalinhem o snapshot ao aplicar o resultado.
+        # _saving bloqueia também a navegação entre páginas (ver navigate_to).
+        self._saving = True
         self._grid.set_locked(True)
         self.set_status("Salvando…", "status_warning")
         self._run_async(
@@ -585,8 +597,11 @@ class MainWindow(QMainWindow):
         )
 
     def _on_salvar_error(self, e: BaseException) -> None:
+        self._saving = False
         self._grid.set_locked(False)
-        self.set_status(f"Falha ao salvar: {e}", "status_error")
+        self.set_status(
+            f"Falha ao salvar: {friendly_message(e)}", "status_error"
+        )
 
     def _salvar_work(
         self,
@@ -718,7 +733,7 @@ class MainWindow(QMainWindow):
 
         root = resolve_arquivos_root(self.config.get_all())
         pdf_path = processo_pdf_path(root, fresh)
-        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        network_mkdir(pdf_path.parent)
         t0 = time.monotonic()
         conteudos = []
         for item in items:
@@ -799,6 +814,7 @@ class MainWindow(QMainWindow):
 
     def _on_salvar_done(self, res: dict | None, is_update: bool) -> None:
         # Destrava a grade travada no início do Save (ver ``_on_salvar``).
+        self._saving = False
         self._grid.set_locked(False)
         if res is None:
             return
@@ -826,6 +842,11 @@ class MainWindow(QMainWindow):
         )
 
     def navigate_to(self, page_name: str):
+        if self._saving:
+            self.set_status(
+                "Aguarde a conclusão do salvamento…", "status_warning"
+            )
+            return
         if page_name == "remessas":
             self._stack.setCurrentWidget(self._remessa_page)
         elif page_name == "document":
@@ -883,19 +904,10 @@ class MainWindow(QMainWindow):
         self.set_status("Carregando processo…", "status_warning")
         self._run_async(_work, on_done=_done)
 
-    def shutdown_backend(self):
+    def closeEvent(self, event):
         active = self._remessa_label.active()
         if active is not None:
             self.config.set("last_lote_id", active.id)
-        # wait=False: o worker pode estar em I/O de rede (scan DRS / Gmail);
-        # aguardar congelaria a janela. O close do banco roda no atexit.
-        worker = self._db_worker
-        if worker is not None:
-            try:
-                worker.shutdown(wait=False)
-            except Exception:  # pragma: no cover - defensivo
-                pass
-
-    def closeEvent(self, event):
-        self.shutdown_backend()
+        # Drena como no Emissor (5s); close do banco no atexit.
+        drain_worker(self._db_worker)
         super().closeEvent(event)

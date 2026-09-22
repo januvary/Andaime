@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+from andaime.net_io import network_mkdir
 from bap.constants import TIPO_LABELS, SOLICITACAO_LABELS, Status
 from bap.database.ss54_database import SS54Database
 from bap.models import Lote, Processo
@@ -120,7 +121,7 @@ def ensure_processo_pdf(
         return str(dest), True
 
     t0 = time.monotonic()
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    network_mkdir(dest.parent)
     # Uma única query para todos os BLOBs (em vez de um round-trip por
     # arquivo) — decisivo quando o banco está em share de rede.
     arquivo_ids = [a.id for a in arqs if a.id is not None]

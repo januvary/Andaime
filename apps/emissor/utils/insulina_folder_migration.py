@@ -1,22 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Migração de pastas de pacientes insulina (esquema anterior -> novo).
-
-Esquema anterior: ``MANDADOS JUDICIAIS/<nome> - INSULINA`` (sufixo direto no
-nível superior).
-
-Esquema novo: ``MANDADOS JUDICIAIS/05 - INSULINA/<nome> - INSULINA``.
-
-A migração é idempotente e segura para rodar a cada lançamento.
-
-Regras:
-1. Pastas com sufixo `` - INSULINA`` no nível superior são movidas para
-   ``05 - INSULINA`` mantendo o nome.
-2. Se houver duplicata de nome (pasta sem sufixo) no nível superior e ela
-   estiver VAZIA, é removida; se não estiver vazia, é mantida e ambas coexistem.
-3. Esquemas mais antigos (0-INSULINAS, prefixo ``INSULINA - ``) ficam de fora
-   desta migração.
-"""
+"""Migração de pastas insulina (anterior -> novo). Idempotente; sufixo -> 05, duplicatas removidas."""
 
 from __future__ import annotations
 
@@ -82,10 +66,7 @@ def _move_to_insulina(
 
 
 def migrate_insulina_folders(save_root: Path | None) -> None:
-    """Migra as pastas de insulina do esquema anterior para o novo.
-
-    Idempotente: pastas já dentro de ``05 - INSULINA`` são ignoradas.
-    """
+    """Migra pastas insulina. Idempotente (ignora já em 05 - INSULINA)."""
     if save_root is None:
         return
 

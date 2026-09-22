@@ -1,17 +1,7 @@
 """Tema Qt neutro compartilhado (andaime.qt).
 
-Paleta light/dark em tons de cinza (sem azul/verde/vermelho) + QPalette
-nativa + QSS global, além de ``ThemeToggleButton`` e ``make_button``.
-
-As chaves da paleta seguem o esquema do Emissor (``window_bg``,
-``panel_bg``, ``panel_header_bg``, ``panel_border``, ``box_bg``, ``text``,
-``text_dim``, ``input_bg``, ``input_border``, ``btn_*``, ``action_*``,
-``status_*``, ``date_*``). Chaves extras usadas pelo SS-54 (``bg_hover``,
-``bg_pressed``, ``border_light``, ``text_secondary``, ``selection_*``,
-``separador``, ``gridline``, ``scrollbar*``, ``toast_*``) foram agregadas
-com nomes consistentes. O foreground dos toasts positive/warning/negative
-é deduplicado em ``status_success``/``status_warning``/``status_error``
-(apenas ``toast_info_fg`` permanece próprio); ver ``_build_qss``.
+Paleta light/dark em tons de cinza + QPalette nativa + QSS global,
+além de ``ThemeToggleButton`` e ``make_button``.
 """
 
 from __future__ import annotations
@@ -40,11 +30,7 @@ FONT_FAMILY = _platform_font()
 
 
 def set_font_family(family: str) -> None:
-    """Define a família usada pelo QSS global gerado por ``get_stylesheet``.
-
-    Pode ser chamada antes de ``get_stylesheet()`` para que cada app use uma
-    fonte distinta sem precisar editar o QSS manualmente.
-    """
+    """Define a família usada pelo QSS global gerado por ``get_stylesheet``."""
     global FONT_FAMILY
     FONT_FAMILY = family
 
@@ -786,12 +772,7 @@ def make_button(
 
 
 class ThemeToggleButton(QPushButton):
-    """Botão de alternância de tema (claro/escuro).
-
-    Mostra ☾ no modo escuro e ☀ no modo claro (reflete o estado atual).
-    Emite ``theme_toggled(bool dark_mode)`` — a aplicação conecta esse sinal
-    para persistir a preferência e reaplicar palette/QSS.
-    """
+    """Botão de alternância de tema (claro/escuro)."""
 
     theme_toggled = Signal(bool)
 

@@ -4,13 +4,6 @@
 
 Reusable across apps — no business logic, no hardcoded table names.
 Auto-detects ``.db`` files in a data directory or accepts explicit paths.
-
-Usage::
-
-    from andaime.qt.dashboard import DashboardService, open_dashboard
-
-    service = DashboardService.from_directory(Path("data"))
-    open_dashboard(parent, service, dark_mode=True)
 """
 
 from __future__ import annotations
@@ -120,11 +113,7 @@ class DashboardService:
         search_joins: dict[str, list[SearchJoin]] | None = None,
         editable_pk_columns: dict[str, list[str]] | None = None,
     ) -> DashboardService:
-        """Auto-detect ``*.db`` files in *data_dir* and build a service.
-
-        The database name is the filename stem (e.g. ``emissor.db`` →
-        ``"emissor"``).
-        """
+        """Auto-detect ``*.db`` files in *data_dir* and build a service."""
         paths: dict[str, Path] = {}
         if data_dir.is_dir():
             for db_file in sorted(data_dir.glob("*.db")):
@@ -904,11 +893,7 @@ class DashboardWindow(QMainWindow):
         return str(key) if key is not None else None
 
     def _on_item_changed(self, item: QTableWidgetItem) -> None:
-        """Track inline edits as unsaved changes.
-
-        Convention: ``None`` = empty (db), ``"-"`` = display-empty (table).
-        Typing ``"-"`` or ``""`` into an empty cell = no change.
-        """
+        """Track inline edits as unsaved changes."""
         if self._current_table is None:
             return
 
@@ -1022,11 +1007,7 @@ class DashboardWindow(QMainWindow):
             )
 
     def _confirm_pk_renames(self) -> bool:
-        """Pede confirmação para renomeações de PK com referências.
-
-        Retorna False se o usuário cancelar. Renomeações sem linhas
-        filhas não pedem confirmação.
-        """
+        """Pede confirmação para renomeações de PK com referências."""
         assert self._current_table is not None
         for row_key, changes in self._unsaved_changes.items():
             for col_name, new_value in changes.items():
@@ -1179,14 +1160,7 @@ def open_dashboard(
     dark_mode: bool = True,
     mask_fn: Callable[[str, str], str] | None = None,
 ) -> DashboardWindow:
-    """Create and show a :class:`DashboardWindow`.
-
-    Args:
-        parent: Parent widget.
-        service: Configured :class:`DashboardService` instance.
-        dark_mode: Use dark theme.
-        mask_fn: Optional ``(column_name, raw_value) -> display_value``.
-    """
+    """Create and show a :class:`DashboardWindow`."""
     window = DashboardWindow(parent, service, dark_mode, mask_fn)
     window.show()
     return window

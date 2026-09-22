@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-SearchSection — barra superior de busca de pacientes (Qt).
-
-Busca com autocomplete local usando andaime.qt.widgets.SearchableComboBox
-(match accent-insensitive). O catálogo de pacientes é carregado uma vez
-em memória e atualizado quando pacientes são criados/selecionados.
-"""
+"""SearchSection — busca de pacientes (Qt) com autocomplete + seleção."""
 
 from __future__ import annotations
 
@@ -30,13 +24,7 @@ class SearchSection(QtSection):
     """Barra superior com busca de pacientes e ações primárias."""
 
     def __init__(self, parent: QWidget, app: QtApp) -> None:
-        """
-        Inicializa a seção de busca.
-
-        Args:
-            parent: Widget pai
-            app: Referência à aplicação principal (QtApp)
-        """
+        """Inicializa busca; args: parent, app."""
         super().__init__(parent, app)
 
         self._search_combo: SearchableComboBox | None = None
@@ -44,40 +32,58 @@ class SearchSection(QtSection):
         self._brasao_label: QLabel | None = None
         self._current_patient: dict[str, Any] | None = None
         self._patient_options: dict[str, str] = {}
+        self._pending_sync_pid: str | None = None
 
         self._load_patients()
         self._build_ui()
 
-    # ========== Pacientes ==========
+    # Pacientes
 
     def _load_patients(self) -> None:
-        """Carrega todos os pacientes para autocomplete local."""
-        try:
-            rows = self.db.get_all_patient_names()
-        except Exception as e:
-            ErrorHandler.log(
-                f"Erro ao carregar pacientes: {e}",
-                level=ErrorLevel.WARNING,
-                context=ErrorContext.DATABASE,
-            )
-            rows = []
+        """Carrega pacientes para autocomplete (assíncrono)."""
+        self.run_db(
+            self.db.get_all_patient_names,
+            on_done=self._apply_patient_options,
+            on_error=self._on_patients_load_error,
+        )
 
+    def _apply_patient_options(self, rows: Any) -> None:
+        """Preenche o índice de pacientes e atualiza o combo (thread principal)."""
         self._patient_options = {}
-        for p in rows:
+        for p in rows or []:
             pid = str(p.get("id", ""))
             nome = p.get("nome", "")
             if not pid or not nome:
                 continue
             label = f"{nome} (INSULINA)" if p.get("tipo") == "insulina" else nome
             self._patient_options[pid] = label
+        if self._search_combo is not None:
+            self._search_combo.set_search_fn(
+                static_search_fn(self._patient_options)
+            )
+        # Sincronização adiada se o índice ainda não tinha o pid.
+        pending = self._pending_sync_pid
+        self._pending_sync_pid = None
+        if (
+            pending
+            and pending in self._patient_options
+            and self._search_combo is not None
+        ):
+            self._search_combo.set_current_by_data(pending)
+
+    def _on_patients_load_error(self, exc: BaseException) -> None:
+        """Falha ao carregar pacientes — mantém o combo vazio, sem travar a UI."""
+        ErrorHandler.log(
+            f"Erro ao carregar pacientes: {exc}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.DATABASE,
+        )
 
     def _refresh_patient_options(self) -> None:
-        """Recarrega pacientes e atualiza as opções do combo."""
+        """Recarrega pacientes e atualiza as opções do combo (assíncrono)."""
         self._load_patients()
-        if self._search_combo is not None:
-            self._search_combo.set_search_fn(static_search_fn(self._patient_options))
 
-    # ========== UI ==========
+    # UI
 
     def _build_ui(self) -> None:
         """Constrói a barra: linha de controles."""
@@ -161,15 +167,10 @@ class SearchSection(QtSection):
 
         content.addLayout(row)
 
-    # ========== Busca / Autocomplete ==========
+    # Busca / Autocomplete
 
     def _on_selection_changed(self, key: object) -> None:
-        """
-        Trata seleção de paciente no autocomplete.
-
-        Args:
-            key: ID do paciente (str) emitido pelo SearchableComboBox
-        """
+        """Handle de seleção no combo."""
         if not isinstance(key, str):
             return
         try:
@@ -178,7 +179,7 @@ class SearchSection(QtSection):
             return
         self.select_patient({"id": pid})
 
-    # ========== Event Handlers ==========
+    # Event Handlers
 
     def on_new_patient_clicked(self) -> None:
         """Handler do botão Novo Paciente."""
@@ -195,16 +196,7 @@ class SearchSection(QtSection):
         self.set_status("Modo: Novo Paciente")
 
     def select_patient(self, patient: dict[str, Any]) -> None:
-        """
-        Seleciona um paciente e dispara a carga dos dados completos (assíncrono).
-
-        A busca do paciente completo roda no DB worker; a propagação para o
-        StateManager e a barra de status acontece em _apply_selected_patient,
-        na thread principal. Não bloqueia a UI.
-
-        Args:
-            patient: Dicionário com dados do paciente (precisa ter "id")
-        """
+        """Busca e aplica paciente selecionado."""
         self._current_patient = patient
         self.set_status("Carregando paciente...")
         self.run_db(
@@ -216,13 +208,7 @@ class SearchSection(QtSection):
     def _apply_selected_patient(
         self, patient: dict[str, Any], full_patient: Any
     ) -> None:
-        """
-        Propaga o paciente selecionado ao StateManager (thread principal).
-
-        Args:
-            patient: Dicionário mínimo repassado como fallback.
-            full_patient: Paciente completo retornado por db.get_patient_by_id.
-        """
+        """Aplica dados do paciente nos campos."""
         patient_to_set = full_patient or patient
         self.state.set_selected_patient(patient_to_set)
         self.app.set_dirty_baseline()
@@ -230,7 +216,7 @@ class SearchSection(QtSection):
         nome = patient_to_set.get("nome") or patient.get("nome", "")
         self.set_status(f"Paciente selecionado: {nome}")
 
-    # ========== StateObserver ==========
+    # StateObserver
 
     @on(StateEventType.PATIENT_SELECTED)
     def _on_patient_selected(self, data: dict) -> None:
@@ -247,34 +233,25 @@ class SearchSection(QtSection):
         self.clear_search()
 
     def _sync_combo_to_patient(self, patient: dict[str, Any]) -> None:
-        """Sincroniza o combo de busca com o paciente selecionado.
-
-        Recarrega o índice de pacientes apenas quando o paciente selecionado
-        não está presente (ex.: recém-criado), evitando uma leitura completa
-        da tabela a cada seleção.
-
-        Args:
-            patient: Dicionário com dados do paciente selecionado.
-        """
+        """Sincroniza combo com paciente atual."""
         if not patient or self._search_combo is None:
             return
         pid = str(patient.get("id", ""))
         if pid and pid not in self._patient_options:
+            # Índice ainda carregando — adia a sincronização para quando
+            # _apply_patient_options terminar.
+            self._pending_sync_pid = pid
             self._refresh_patient_options()
+            return
         nome = patient.get("nome", "")
         current = self._search_combo.current_text()
         if current != nome:
             self._search_combo.set_current_by_data(pid)
 
-    # ========== Helpers ==========
+    # Helpers
 
     def _update_brasao(self, dark_mode: bool) -> None:
-        """
-        Atualiza o pixmap do brasão conforme o tema (claro/escuro).
-
-        Args:
-            dark_mode: True para modo escuro (tinta clara)
-        """
+        """Atualiza brasão conforme seleção."""
         if self._brasao_label is None:
             return
         pixmap = get_brasao_pixmap(height=41, dark_mode=dark_mode)
@@ -294,15 +271,7 @@ class SearchSection(QtSection):
             self._search_combo.focus_search()
 
     def set_search_text(self, text: str) -> None:
-        """
-        Limpa o campo de busca quando text é vazio.
-
-        O SearchableComboBox gerencia seu próprio texto via seleção; não há
-        setter público para texto arbitrário.
-
-        Args:
-            text: Texto (apenas "" tem efeito — limpa o campo)
-        """
+        """Define texto de busca no combo."""
         if not text and self._search_combo is not None:
             self._search_combo.clear()
 
@@ -319,17 +288,10 @@ class SearchSection(QtSection):
         color: str | None = None,
         path: str | None = None,
     ) -> None:
-        """
-        Define texto do status (delegado ao label global da janela).
-
-        Args:
-            text: Texto do status
-            color: Cor opcional para o texto (hex)
-            path: Caminho opcional que torna o status clicável
-        """
+        """Atualiza status visual do campo."""
         self.app.set_status(text, color, path=path)
 
-    # ========== Callbacks dos Botões ==========
+    # Callbacks dos Botões
 
     def on_restart_clicked(self) -> None:
         """Callback do botão Reiniciar."""

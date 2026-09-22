@@ -1,12 +1,4 @@
-"""
-Generic configuration manager.
-
-The app provides a dataclass with:
-  - to_dict() -> dict
-  - get_defaults() -> <dataclass>
-  - __post_init__ validation
-  - Optional: migrate_data(data: dict) -> dict for JSON migrations
-"""
+"""Generic configuration manager with dataclass-based settings."""
 
 from __future__ import annotations
 

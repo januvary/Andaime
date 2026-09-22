@@ -21,17 +21,7 @@ _W, _H = 480, 280
 
 
 class SplashScreen:
-    """Branded splash screen shown while the app initializes.
-
-    Usage::
-
-        qapp = QApplication(sys.argv)
-        splash = SplashScreen("RAC", icon_path)
-        splash.show()
-        # ... heavy initialization ...
-        window.show()
-        splash.finish(window)
-    """
+    """Branded splash screen shown while the app initializes."""
 
     def __init__(
         self,

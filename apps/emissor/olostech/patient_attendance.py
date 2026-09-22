@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Gerenciamento de atendimento de paciente no dispensário Olostech.
-
-Fluxo:
-  1. Carrega atendimento.asp (página do dispensário)
-  2. Busca paciente por SUS via usuario.ajax.asp
-  3. Verifica/inicia atendimento via atendimento.ajax.asp
-"""
+"""Gerenciamento de atendimento Olostech: carrega atendimento.asp, busca SUS via usuario.ajax.asp, verifica/inicia via atendimento.ajax.asp."""
 
 from __future__ import annotations
 

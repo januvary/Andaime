@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Brasão da Prefeitura (Qt). Os PNGs claro/escuro são pré-renderizados por
-``tools/generate_brasao.py`` já com fundo da barra e tinta recolorida, evitando
-QtSvg em runtime e garantindo visual idêntico entre fonte e build empacotado.
-O resultado é cacheado por (altura, modo_escuro)."""
+"""Brasão Qt — PNGs pré-renderizados (claro/escuro); cacheado por (altura, modo_escuro)."""
 
 from __future__ import annotations
 

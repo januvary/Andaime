@@ -1,13 +1,4 @@
-"""Modelo de tema baseado em rampa + níveis (andaime).
-
-Este módulo é a fonte lógica do tema independente da UI: deriva paletas a
-partir da rampa (_RAMP), dos níveis (_LEVELS) e do mapeamento papel→nível
-(_ROLE_LEVEL), e serializa/grava o bloco de tema em ``andaime.qt.theme``.
-
-Não depende de widgets — só de ``andaime.qt.theme`` (dados) e de helpers de cor.
-
-Ver também ``tools/theme_studio.py`` (editor) e ``tools/generate_brasao.py``.
-"""
+"""Modelo de tema baseado em rampa + níveis (andaime)."""
 
 from __future__ import annotations
 

@@ -1,15 +1,4 @@
-"""Gerenciamento unificado de fontes para apps Qt.
-
-Cada app define uma ``FontSpec`` que vive em ``andaime.App``. No momento de
-inicializar a UI o main.py chama ``apply_font(qapp, app.font)``, que:
-
-1. Carrega fontes empacotadas em ``<root>/fonts/`` (se ``bundled=True``).
-2. Aplica a fonte padrão no ``QApplication``.
-3. Configura a família usada pelo QSS global de ``andaime.qt.theme``.
-
-Também expõe helpers de desenvolvedor para baixar fontes do Fontsource
-(Google Fonts) e colocá-las no projeto.
-"""
+"""Gerenciamento unificado de fontes para apps Qt."""
 
 from __future__ import annotations
 

@@ -20,15 +20,7 @@ SearchFn = Callable[[str], dict[str, str]]
 
 
 def static_search_fn(options: dict[str, str]) -> SearchFn:
-    """
-    Retorna uma função de busca local accent/case insensitive.
-
-    Args:
-        options: Dicionário de opções (key -> label).
-
-    Returns:
-        Função que recebe uma query e retorna as opções filtradas.
-    """
+    """Return a local search function (accent/case insensitive)."""
 
     def _search(query: str) -> dict[str, str]:
         if not query:
@@ -40,12 +32,7 @@ def static_search_fn(options: dict[str, str]) -> SearchFn:
 
 
 class SearchableComboBox(QWidget):
-    """
-    Campo de busca com autocomplete.
-
-    Recebe uma função `search_fn(query) -> dict[key, label]`. A busca é
-    síncrona: o chamador decide se filtra um dict local ou consulta o banco.
-    """
+    """Search-enabled combo box with autocomplete."""
 
     selection_changed = Signal(object)
     text_edited = Signal(str)
@@ -115,16 +102,7 @@ class SearchableComboBox(QWidget):
             self._line_edit.setText(label)
 
     def set_text(self, text: str) -> None:
-        """Define o texto do campo sem disparar busca.
-
-        Atualiza o estado interno (``_selected_label``/``_selected_key``) ANTES
-        de escrever no ``QLineEdit``: ``setText`` dispara ``textChanged``
-        sincronamente e ``_on_text_changed`` compara o texto com
-        ``_selected_label``. Se o rótulo fosse atualizado depois, um valor
-        legado faria ``_on_text_changed`` emitir ``selection_changed(None)``
-        espúrio durante uma seleção programática (ex.: trocar de paciente
-        diretamente, sem passar por "vazio").
-        """
+        """Define o texto do campo sem disparar busca."""
         text = str(text) if text is not None else ""
         self._selected_key = None
         self._selected_label = text
@@ -189,13 +167,7 @@ def _add_months(d: date, n: int) -> date:
 
 
 class DateLineEdit(QLineEdit):
-    """Date entry that combines free typing with QDateEdit-style arrow stepping.
-
-    Typed input is auto-formatted to ``DD/MM/YYYY`` (slashes inserted as digits
-    are entered, with a ``DD/MM/YYYY`` placeholder when empty). Pressing
-    Up/Down steps the day/month/year under the cursor -- like QDateEdit's
-    section editing -- without giving up the text-field typing experience.
-    """
+    """Date entry with free typing and QDateEdit-style arrow stepping."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

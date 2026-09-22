@@ -1,12 +1,4 @@
-"""Helpers de renderização do brasão (andaime).
-
-Renderiza a silhueta do SVG do brasão e a recolorida conforme a tinta do tema,
-preservando o alpha. Compartilhado entre ``tools/generate_brasao.py`` (gera os
-PNG estáticos) e o editor de tema (pré-visualização ao vivo).
-
-Usage:
-    from andaime.qt.brasao import render_brasao_silhouette, recolor_brasao
-"""
+"""Helpers de renderização do brasão (andaime)."""
 
 from __future__ import annotations
 

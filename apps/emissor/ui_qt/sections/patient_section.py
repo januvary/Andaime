@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-PatientSection — dados do paciente (Qt).
-
-Form layout com: Nome (readonly, editável em modo novo paciente),
-Matrícula, Telefone (máscara), Processo Nº (múltiplas instâncias com
-+/-), Profissional (autocomplete via SearchableComboBox, que também
-preenche o CRM) e CRM (máscara).
-
-StateObserver: PATIENT_SELECTED carrega os campos, PATIENT_CLEARED limpa
-e habilita edição do Nome, PATIENT_UPDATED atualiza campos específicos.
-"""
+"""PatientSection — dados do paciente (Qt): nome, matrícula, telefone, processo, profissional.
+StateObserver: PATIENT_SELECTED/CLEARED/UPDATED."""
 
 from __future__ import annotations
 
@@ -46,13 +37,7 @@ class PatientSection(QtSection):
     """Painel de dados do paciente."""
 
     def __init__(self, parent: QWidget, app: QtApp) -> None:
-        """
-        Inicializa a seção de paciente.
-
-        Args:
-            parent: Widget pai
-            app: Referência à aplicação principal (QtApp)
-        """
+        """Inicializa seção de paciente; args: parent, app."""
         super().__init__(parent, app)
 
         self._nome_edit: QLineEdit | None = None
@@ -78,16 +63,15 @@ class PatientSection(QtSection):
 
         self._build_ui()
 
-    # ========== UI ==========
+    # UI
 
     def _build_ui(self) -> None:
         """Constrói o formulário de paciente."""
         content = self.content_layout()
         content.setContentsMargins(0, 0, 0, 0)
 
-        # Área rolável: quando o conteúdo (ex.: vários processos) excede a
-        # altura da seção, aparece scrollbar vertical em vez de expandir.
-        # Fundo transparente por objectName para preservar o input_bg dos campos.
+        # Área rolável: conteúdo excedente gera scrollbar vertical (não expande).
+        # Fundo transparente por objectName para preservar input_bg.
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -167,25 +151,21 @@ class PatientSection(QtSection):
 
         self._load_profissionais()
 
-    # ========== Profissionais (autocomplete local) ==========
+    # Profissionais autocomplete
 
     def _load_profissionais(self) -> None:
-        """Carrega todos os profissionais para autocomplete local (cache)."""
-        try:
-            rows = self.db.get_all_profissionais()
-        except Exception as e:
-            from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+        """Carrega profissionais para autocomplete (assíncrono)."""
+        self.run_db(
+            self.db.get_all_profissionais,
+            on_done=self._apply_profissionais,
+            on_error=self._on_profissionais_load_error,
+        )
 
-            ErrorHandler.log(
-                f"Erro ao carregar profissionais: {e}",
-                level=ErrorLevel.WARNING,
-                context=ErrorContext.DATABASE,
-            )
-            rows = []
-
+    def _apply_profissionais(self, rows: Any) -> None:
+        """Preenche o cache e atualiza os combos (thread principal)."""
         self._prof_options = {}
         self._crm_options = {}
-        for r in rows:
+        for r in rows or []:
             pid = str(r.get("id", ""))
             nome = r.get("nome", "")
             crm = r.get("crm", "") or ""
@@ -199,19 +179,24 @@ class PatientSection(QtSection):
         if self._crm_combo is not None:
             self._crm_combo.set_search_fn(static_search_fn(self._crm_options))
 
+    def _on_profissionais_load_error(self, exc: BaseException) -> None:
+        """Falha ao carregar profissionais — mantém combos vazios, sem travar."""
+        from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+
+        ErrorHandler.log(
+            f"Erro ao carregar profissionais: {exc}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.DATABASE,
+        )
+
     def _refresh_profissional_options(self) -> None:
         """Recarrega profissionais e atualiza as opções dos combos."""
         self._load_profissionais()
 
-    # ========== Processo dinâmico ==========
+    # Processo dinâmico
 
     def _add_processo_row(self) -> QLineEdit:
-        """
-        Adiciona uma linha de processo (com botão remover, exceto a primeira).
-
-        Returns:
-            O QLineEdit da nova linha
-        """
+        """Adiciona linha de processo."""
         row_widget = QWidget()
         row_lay = QHBoxLayout(row_widget)
         row_lay.setContentsMargins(0, 0, 0, 0)
@@ -272,13 +257,7 @@ class PatientSection(QtSection):
         self.field_changed.emit()
 
     def _format_field(self, edit: QLineEdit | None, formatter: Any) -> None:
-        """
-        Aplica auto-formatação ao edit (setText com cursor no fim).
-
-        Args:
-            edit: QLineEdit a formatar
-            formatter: Função str -> str
-        """
+        """Formata campo de texto (trim, maiúscula, etc.)."""
         if edit is None:
             return
         raw = edit.text()
@@ -337,19 +316,13 @@ class PatientSection(QtSection):
         )
 
     def _set_processo_visible(self, visible: bool) -> None:
-        """Mostra/esconde o campo Processo Nº (oculto para tipo insulina).
-
-        Ao ocultar, os valores são preservados em memória e restaurados
-        caso o tipo insulina seja desmarcado.
-        """
+        """Mostra/oculta seção de processo."""
         if self._processo_container is not None:
             self._processo_container.setVisible(visible)
         if self._processo_label is not None:
             self._processo_label.setVisible(visible)
         if visible:
-            # Restaura valores previamente ocultados (se houver) — só quando
-            # não há valores carregados (ex.: toggle de tipo, não carregamento
-            # de paciente que já preenche as linhas via _load_processos).
+            # Restaura valores ocultos só quando toggle de tipo (não carregamento de paciente).
             if not any(edit.text() for edit in self._processo_edits):
                 values = self._stashed_processos
                 self._stashed_processos = []
@@ -367,12 +340,10 @@ class PatientSection(QtSection):
             self._stashed_processos = [edit.text() for edit in self._processo_edits]
             self._clear_processo_rows()
 
-    # ========== Profissional autocomplete ==========
+    # Profissional autocomplete
 
     def _on_profissional_key(self, key: object) -> None:
-        """Trata seleção nos combos de profissional/CRM (ambos apontam para a
-        mesma linha mestre): carrega a linha e sincroniza os campos. ``None``
-        indica texto digitado divergente da seleção — invalida o id."""
+        """Handle de tecla para profissional."""
         if key is None:
             self._selected_profissional_id = None
             self.field_changed.emit()
@@ -383,9 +354,30 @@ class PatientSection(QtSection):
             prof_id = int(key)
         except (ValueError, TypeError):
             return
-        row = self.db.get_profissional(prof_id)
+        # O id é conhecido de imediato; nome/CRM chegam de forma assíncrona
+        # para não travar a UI se o banco (rede) estiver indisponível.
+        self._selected_profissional_id = prof_id
+        self.run_db(
+            self.db.get_profissional,
+            prof_id,
+            on_done=self._on_profissional_loaded,
+            on_error=self._on_profissional_load_error,
+        )
+
+    def _on_profissional_loaded(self, row: Any) -> None:
+        """Aplica a linha do profissional selecionado (thread principal)."""
         if row is not None:
             self._select_profissional(row)
+
+    def _on_profissional_load_error(self, exc: BaseException) -> None:
+        """Falha ao carregar profissional — mantém o id, sem travar a UI."""
+        from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+
+        ErrorHandler.log(
+            f"Erro ao carregar profissional: {exc}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.DATABASE,
+        )
 
     def _select_profissional(self, row: dict) -> None:
         """Seleciona um profissional a partir de uma linha mestre, preenchendo
@@ -406,28 +398,18 @@ class PatientSection(QtSection):
             self._syncing_combos = False
         self.field_changed.emit()
 
-    # ========== Setters públicos ==========
+    # Setters públicos
 
     def set_name_id_editable(self, editable: bool) -> None:
-        """
-        Habilita/desabilita a edição do campo Nome.
-
-        Args:
-            editable: True para modo novo paciente (Nome editável)
-        """
+        """Define se nome/matrícula são editáveis."""
         self._name_id_editable = editable
         if self._nome_edit is not None:
             self._nome_edit.setReadOnly(not editable)
 
-    # ========== Carregamento / limpeza ==========
+    # Carregamento / limpeza
 
     def populate_patient_fields(self, patient_data: Any) -> None:
-        """
-        Preenche todos os campos a partir dos dados do paciente.
-
-        Args:
-            patient_data: Patient (dataclass/Mapping) com dados do banco
-        """
+        """Preenche campos com dados do paciente."""
         self.clear_patient_fields()
         self.set_name_id_editable(False)
 
@@ -479,16 +461,10 @@ class PatientSection(QtSection):
                 self.set_edit_text(edit, val)
         self._notify_processo_count()
 
-    # ========== Getters ==========
+    # Getters
 
     def get_patient_data(self) -> dict[str, str | int | None]:
-        """
-        Extrai os valores atuais como dicionário.
-
-        Returns:
-            Dicionário com campos não-vazios (processos como
-            processo_n, processo_2_n, ...)
-        """
+        """Extrai dados preenchidos do paciente."""
         data: dict[str, str | int | None] = {}
 
         for key, edit in (
@@ -527,17 +503,12 @@ class PatientSection(QtSection):
         return data
 
     def get_all_processos(self) -> list[str]:
-        """
-        Retorna todos os processos preenchidos.
-
-        Returns:
-            Lista de strings com números de processo
-        """
+        """Retorna lista de processos do paciente."""
         if self._processo_container is not None and self._processo_container.isHidden():
             return []
         return [self._clean(edit) for edit in self._processo_edits if self._clean(edit)]
 
-    # ========== StateObserver ==========
+    # StateObserver
 
     @on(StateEventType.PATIENT_SELECTED)
     def _on_patient_selected(self, data: dict) -> None:
@@ -559,7 +530,7 @@ class PatientSection(QtSection):
         for field, value in data.get("updates", {}).items():
             self._apply_update(field, str(value))
 
-    # ========== Helpers ==========
+    # Helpers
 
     def _apply_update(self, field: str, value: str) -> None:
         """Aplica atualização de um campo específico (PATIENT_UPDATED)."""

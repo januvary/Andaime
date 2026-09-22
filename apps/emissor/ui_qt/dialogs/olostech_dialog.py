@@ -55,10 +55,7 @@ class NoScrollComboBox(QComboBox):
 def ask_notificacao(
     parent: QWidget, descricao: str, suggested_action: int
 ) -> tuple[int, str] | None:
-    """Popup p/ item de notificacao sem numero (so B/A).
-
-    Returns (action_type, numero) ou None se cancelado/sem numero.
-    """
+    """Popup de notificação (B/A); retorna (action, número) ou None."""
     dlg, layout = scaffold_dialog(
         parent, "Notificação controlada", min_width=380
     )
@@ -97,18 +94,14 @@ def ask_notificacao(
     return (combo.currentData(), number)
 
 
-# Tipo inicial enviado ao servidor; o proprio Olostech detecta e ajusta
-# o tipo de receita por material (_detect_action_type).
-DEFAULT_ACTION_TYPE = 2  # Receita Simples
+# Tipo inicial ao servidor; Olostech detecta por material.
+DEFAULT_ACTION_TYPE = 2
 
 
 def merge_olostech_entries(
     entries: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Mescla entradas de mesmo material+tipo (soma qtde, maior dias).
-
-    O servidor rejeita material duplicado ("Material já entregue...").
-    """
+    """Mescla entradas de mesmo material+tipo (soma qtde, maior dias); evita duplicado."""
     merged: dict[tuple[str, int], dict[str, Any]] = {}
     for e in entries:
         key = (e["material_code"], e["action_type"])
@@ -126,10 +119,7 @@ def merge_olostech_entries(
 def build_default_olostech_entries(
     retirada: Any, db: Any
 ) -> list[dict[str, Any]]:
-    """Entradas com tipo padrao (Simples) para registro automatico.
-
-    Itens sem olostech_id sao ignorados, como no dialogo.
-    """
+    """Entradas padrão (Simples); ignora itens sem olostech_id."""
     entries: list[dict[str, Any]] = []
     for item in getattr(retirada, "itens", []) or []:
         db_id = str(getattr(item, "item_id", "") or "").strip()

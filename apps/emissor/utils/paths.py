@@ -8,7 +8,7 @@ from pathlib import Path
 from andaime import paths as _andaime_paths
 from andaime.text import to_upper_normalized
 
-from emissor.utils.net_io import network_mkdir
+from andaime.net_io import network_mkdir
 
 
 def ensure_data_dir_exists() -> Path:

@@ -21,16 +21,11 @@ if TYPE_CHECKING:
     from PIL import Image
 
 
-# ============================================================================
 # Resultado
-# ============================================================================
 
 
 class PrintStatus(Enum):
-    """Estado terminal de uma tentativa de impressão.
-
-    SPOOLED indica que o spooler aceitou o trabalho, não que o papel saiu.
-    """
+    """Estado terminal de impressão. SPOOLED = spooler aceitou trabalho (não garante papel saído)."""
 
     SPOOLED = "spooled"
     NO_PRINTER = "no_printer"
@@ -68,9 +63,7 @@ class PrintResult:
         return self.status is PrintStatus.SPOOLED
 
 
-# ============================================================================
 # Backends
-# ============================================================================
 
 
 class PrinterBackend(Protocol):
@@ -83,9 +76,7 @@ class PrinterBackend(Protocol):
         ...
 
 
-# ============================================================================
 # Windows (primário)
-# ============================================================================
 
 # Flags de status de win32print que indicam impressora indisponível.
 # Mantidos como int para evitar importar win32print fora do Windows.
@@ -114,10 +105,7 @@ _PRINTER_PROBLEM_LABELS: dict[int, str] = {
     _PRINTER_STATUS_NOT_AVAILABLE: "indisponível",
 }
 
-# Índices GetDeviceCaps (wingdi.h) para o cálculo da geometria da página.
-# A área física (PHYSICALWIDTH/HEIGHT) é a folha inteira; a área útil
-# (HORZRES/VERTRES) exclui as margens de hardware e começa em
-# (PHYSICAL_OFFSET_X/Y).
+# GetDeviceCaps (wingdi.h): PHYSICALWIDTH/HEIGHT = folha inteira; HORZRES/VERTRES = área útil (exclui margens hardware, offset PHYSICAL_OFFSET_X/Y).
 _HORZRES = 8
 _VERTRES = 10
 _PHYSICAL_WIDTH = 110
@@ -156,10 +144,7 @@ def _describe_printer_problem(status_flags: int) -> str:
 
 
 class Win32SpoolerBackend:
-    """Backend primário no Windows: PDFium + GDI via win32print.
-
-    Emite todas as cópias em um único StartDoc/EndDoc (trabalho collated).
-    """
+    """Backend primário Windows: PDFium + GDI via win32print; todas as cópias em um StartDoc/EndDoc (collated)."""
 
     name = "win32_spooler"
 
@@ -280,12 +265,7 @@ class Win32SpoolerBackend:
         copies: int,
         job_title: str,
     ) -> None:
-        """Spoola páginas via GDI bruto (ctypes + gdi32), trabalho collated.
-
-        Desenha cada página na *área imprimível* (HORZRES×VERTRES no offset de
-        hardware), preservando a proporção e centralizando. Isso garante que
-        nada caia na margem física não-imprimível da impressora.
-        """
+        """Spool via GDI bruto (ctypes+gdi32), collated. Desenha na área imprimível (HORZRES×VERTRES + offset hardware), preserva proporção/centraliza para evitar margem física."""
         gdi = _load_gdi()
 
         hdc = gdi.CreateDCW(c_wchar_p("WINSPOOL"), c_wchar_p(printer_name), None, None)
@@ -368,9 +348,7 @@ class LprBackend:
             return _result(PrintStatus.UNSUPPORTED_OS, _STATUS_MESSAGES[PrintStatus.UNSUPPORTED_OS])
 
 
-# ============================================================================
 # Entry point
-# ============================================================================
 
 
 def _select_backends() -> list[PrinterBackend]:
@@ -385,10 +363,7 @@ def print_pdf(
     copies: int = 1,
     job_title: str = "Emissor",
 ) -> PrintResult:
-    """Imprime um PDF silenciosamente com verificação e fallback honesto.
-
-    Nunca levanta exceção — todo erro vira PrintResult para a UI tratar.
-    """
+    """Imprime PDF silenciosamente com verificação + fallback honesto; nunca levanta exceção (erro → PrintResult para UI)."""
     path_str = str(pdf_path)
     safe_copies = max(1, copies)
 

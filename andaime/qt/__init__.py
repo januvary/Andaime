@@ -1,8 +1,4 @@
-"""andaime.qt — framework de UI Qt neutro e reutilizável.
-
-Componentes compartilhados entre apps (Emissor, SS-54, ...):
-tema/paleta, botões, e a barra superior genérica (``TopBar``).
-"""
+"""andaime.qt — framework de UI Qt neutro e reutilizável."""
 
 from __future__ import annotations
 

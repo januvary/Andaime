@@ -1,8 +1,4 @@
-"""Gerenciador de atalhos de teclado — andaime.qt.
-
-Registra QShortcuts com variantes Ctrl+Shift e revela dicas nos widgets
-ao segurar Ctrl+Shift (peek). Reutilizável entre apps (Emissor, RAC, BAP).
-"""
+"""Gerenciador de atalhos de teclado — andaime.qt."""
 
 from __future__ import annotations
 
@@ -16,23 +12,10 @@ from PySide6.QtWidgets import QLineEdit, QPushButton, QWidget
 
 
 class ShortcutManager(QObject):
-    """
-    Registro de atalhos com dicas visuais (peek via Ctrl+Shift).
-
-    Cada atalho registrado com ``bind`` cria automaticamente uma variante
-    Ctrl+Shift+<tecla>. Segurar Ctrl+Shift revela a dica ``(Ctrl+<tecla>)``
-    ao lado do texto do widget associado.
-
-    Attributes:
-        _window: Janela que recebe os atalhos e o event filter
-        _hints: Lista de (widget, sufixo) para exibir/ocultar dicas
-        _peek_active: Estado atual do peek
-        _peek_callbacks: Callbacks notificados quando o peek muda de estado
-    """
+    """Registro de atalhos com dicas visuais (peek via Ctrl+Shift)."""
 
     def __init__(self, window: QWidget) -> None:
-        """
-        Inicializa o gerenciador.
+        """Inicializa o gerenciador.
 
         Args:
             window: Widget raiz que receberá os atalhos e o event filter
@@ -50,15 +33,7 @@ class ShortcutManager(QObject):
         handler: Callable[[], None],
         hint_widget: QWidget | None = None,
     ) -> None:
-        """
-        Registra um atalho com variante Ctrl+Shift.
-
-        Args:
-            key: Sequência de teclas (ex.: "Ctrl+S") ou chave Qt
-            handler: Função chamada ao acionar o atalho
-            hint_widget: Widget onde a dica é exibida durante o peek
-                (QPushButton ou QLineEdit). Opcional.
-        """
+        """Registra um atalho com variante Ctrl+Shift."""
         QShortcut(QKeySequence(key), self._window, handler)
         if isinstance(key, str) and key.startswith("Ctrl+"):
             shifted = QKeySequence(key.replace("Ctrl+", "Ctrl+Shift+", 1))
@@ -67,29 +42,11 @@ class ShortcutManager(QObject):
             self._hints.append((hint_widget, f" ({key})"))
 
     def register_hint(self, widget: QWidget, key: str) -> None:
-        """
-        Registra um widget de dica para uma tecla já vinculada.
-
-        Útil quando a mesma tecla aciona ações distintas em páginas
-        diferentes (ex.: Ctrl+F navega entre páginas) e ambos os botões
-        devem exibir a dica.
-
-        Args:
-            widget: Widget onde a dica é exibida (QPushButton/QLineEdit)
-            key: Sequência de teclas já registrada (ex.: "Ctrl+F")
-        """
+        """Registra um widget de dica para uma tecla já vinculada."""
         self._hints.append((widget, f" ({key})"))
 
     def on_peek(self, callback: Callable[[bool], None]) -> None:
-        """
-        Registra callback notificado quando o peek muda de estado.
-
-        Útil para apps multi-página que delegam a exibição das dicas
-        à página atual (em vez de registrar widgets individuais).
-
-        Args:
-            callback: Função chamada com True (exibir) ou False (ocultar)
-        """
+        """Registra callback notificado quando o peek muda de estado."""
         self._peek_callbacks.append(callback)
 
     def reset_peek(self) -> None:
@@ -97,9 +54,7 @@ class ShortcutManager(QObject):
         self._set_peek(False)
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        """
-        Detecta Ctrl+Shift segurados para ativar/desativar o peek.
-        """
+        """Detecta Ctrl+Shift segurados para ativar/desativar o peek."""
         try:
             key_event = cast(QKeyEvent, event)
             etype = key_event.type()
@@ -126,12 +81,7 @@ class ShortcutManager(QObject):
         return super().eventFilter(obj, event)
 
     def _set_peek(self, show: bool) -> None:
-        """
-        Exibe ou oculta as dicas de atalho nos widgets registrados.
-
-        Args:
-            show: True para exibir as dicas, False para ocultar
-        """
+        """Exibe ou oculta as dicas de atalho nos widgets registrados."""
         if show == self._peek_active:
             return
         self._peek_active = show

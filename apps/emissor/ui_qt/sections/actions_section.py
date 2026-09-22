@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ActionsSection — botões de ação (Qt): Salvar Dados, Imprimir,
-Salvar Recibo, Registrar Olostech, Abrir PDF e Digitalizar. Observa
-DIRTY_STATE_CHANGED, PDF_GENERATED e PATIENT_SELECTED."""
+"""ActionsSection — botões de ação (Qt): salvar, imprimir, recibo, Olostech, PDF, digitalizar."""
 
 from __future__ import annotations
 
@@ -39,7 +37,7 @@ class ActionsSection(QtSection):
 
         self._build_ui()
 
-    # ========== UI ==========
+    # UI
 
     def _build_ui(self) -> None:
         """Constrói os botões de ação."""
@@ -113,7 +111,7 @@ class ActionsSection(QtSection):
 
         content.addLayout(grid, stretch=1)
 
-    # ========== API pública ==========
+    # API pública
 
     def enable_open_pdf_button(self) -> None:
         """Habilita o botão Abrir PDF."""
@@ -136,11 +134,7 @@ class ActionsSection(QtSection):
             self._scan_btn.setEnabled(False)
 
     def set_olostech_registered(self, registered: bool) -> None:
-        """Atualiza estado do botão Olostech.
-
-        Se True, mostra "Registrador" e desabilita.
-        Se False, mostra "Olostech" e habilita (se retirada existir).
-        """
+        """Botão Olostech: registrado (desabilitado) ou habilitado se retirada existe."""
         if self._olostech_btn is None:
             return
         if registered:
@@ -189,7 +183,7 @@ class ActionsSection(QtSection):
         else:
             self._save_data_btn.setText("Salvar Dados")
 
-    # ========== StateObserver ==========
+    # StateObserver
 
     @on(StateEventType.PDF_GENERATED)
     def _on_pdf_generated(self, data: dict) -> None:

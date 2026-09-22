@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Shared dialog primitives for andaime-based apps.
-
-Provides a consistent dialog scaffold, button rows, and common dialog patterns
-(confirm, prompt) built on the shared ``make_button`` and theme. App-specific
-dialogs (those touching models/services) stay in the app and import these.
-
-Roles used: ``flat`` (secondary/cancel), ``primary`` (confirm), ``negative``
-(destructive). These map to ``QPushButton[class="..."]`` rules in the shared
-theme, so buttons are styled consistently across RAC, Emissor and SS-54.
-"""
+"""Shared dialog primitives for andaime-based apps."""
 
 from __future__ import annotations
 

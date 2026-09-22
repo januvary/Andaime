@@ -35,8 +35,7 @@ class StateEvent:
 
 
 class StateObserver:
-    """Interface para observadores de mudança de estado (registrados no
-    StateManager para receber notificações)."""
+    """Interface de observadores de mudança de estado."""
 
     def on_state_changed(self, event: StateEvent) -> None:
         """Chamado quando o estado observado muda."""

@@ -29,6 +29,7 @@ from pathlib import Path
 from bap.utils.config import bap_data_dir
 
 from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
+from andaime.net_io import atomic_write_path, network_mkdir
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.compose",
@@ -122,8 +123,9 @@ def get_service(credentials_path: str = "", token_path: str = ""):
         if not creds:
             tok_path.unlink(missing_ok=True)
             raise GmailError("Autenticação do Gmail necessária.")
-        tok_path.parent.mkdir(parents=True, exist_ok=True)
-        tok_path.write_text(creds.to_json())
+        network_mkdir(tok_path.parent)
+        with atomic_write_path(tok_path) as tmp:
+            tmp.write_text(creds.to_json())
 
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
@@ -462,8 +464,9 @@ class AuthFlowHandle:
                 pass
 
         creds = self.flow.credentials
-        self._token_path.parent.mkdir(parents=True, exist_ok=True)
-        self._token_path.write_text(creds.to_json())
+        network_mkdir(self._token_path.parent)
+        with atomic_write_path(self._token_path) as tmp:
+            tmp.write_text(creds.to_json())
         return creds
 
     def cancel(self) -> None:

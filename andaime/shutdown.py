@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Application Shutdown Manager — registra e executa handlers de limpeza no exit.
-
-Registra callbacks (ex.: ``db.close``) via :func:`register_cleanup` e os
-conecta a ``atexit`` + SIGINT/SIGTERM via :func:`setup_shutdown_handlers`.
-Os handlers rodam após o loop de eventos, fora da thread de UI.
-"""
+"""Application Shutdown Manager — registra e executa handlers de limpeza no exit."""
 
 import atexit
 import signal

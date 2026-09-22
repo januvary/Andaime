@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Shared holidays dialog — manage pontos facultativos across years.
-
-Used by both RAC and Emissor.  Replaces the duplicated
-``_show_holidays_dialog`` / ``show_holidays_dialog`` that existed in
-each app.
-"""
+"""Shared holidays dialog — manage pontos facultativos across years."""
 
 from __future__ import annotations
 

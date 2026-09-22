@@ -53,9 +53,7 @@ class ItemSufficiencyService:
         current_date: date,
         current_dias: int,
     ) -> date:
-        """Data de término acumulando retiradas anteriores E a dispensação em
-        digitação. O saldo remanescente das retiradas passadas é considerado
-        antes de contar os dias da dispensação atual."""
+        """Data de término acumulando retiradas anteriores + dispensação atual; saldo remanescente passado considerado antes dos dias atuais."""
         coverage_end = ItemSufficiencyService.compute_default_end(history)
         if coverage_end is None or coverage_end < current_date:
             coverage_end = current_date

@@ -94,9 +94,7 @@ def main() -> None:
     )
     setup_shutdown_handlers()
 
-    # Migração de pastas de insulina (idempotente): roda a cada lançamento,
-    # movendo pastas com sufixo ' - INSULINA' do nível superior para
-    # MANDADOS JUDICIAIS/05 - INSULINA.
+    # Migrate ' - INSULINA' folders to MANDADOS JUDICIAIS/05 - INSULINA (idempotent).
     from emissor.utils.insulina_folder_migration import migrate_insulina_folders
 
     _migration_root = andaime_instance.config.get_all().save_location

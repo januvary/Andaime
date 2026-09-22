@@ -1,24 +1,4 @@
-"""Inspetor de widgets para desenvolvimento (andaime.qt).
-
-Permite apontar um widget e descobrir onde sua classe (de código da
-aplicação) está definida — útil para "clicar no componente e ir ao código".
-
-Gatilhos (apenas quando a var. de ambiente ``DEV`` está setada):
-
-- ``F12`` (atalho de teclado), ou
-- ``Ctrl+Shift+Click`` sobre um widget (fallback quando o window manager
-  intercepta teclas de função).
-
-O resultado aparece em um diálogo persistente, rolável e copiável com
-``arquivo:linha`` da classe correspondente. **Não abre editor
-automaticamente** — apenas mostra o caminho, evitando asociar/rodar o
-arquivo por engano.
-
-Uso::
-
-    from andaime.qt.dev_inspector import enable_if_env
-    enable_if_env(app)  # ativa com a var. de ambiente DEV=1
-"""
+"""Inspetor de widgets para desenvolvimento (andaime.qt)."""
 
 from __future__ import annotations
 
@@ -174,11 +154,7 @@ def _show_chain_dialog(
 
 
 class _DevInspector(QObject):
-    """Observa todos os eventos da QApplication para disparar a inspeção.
-
-    Instala o filtro de eventos na própria QApplication: assim o gatilho
-    funciona independentemente de qual widget (ou nenhum) tem o foco.
-    """
+    """Observa todos os eventos da QApplication para disparar a inspeção."""
 
     def __init__(self, app: QApplication, atalho: str = _DEFAULT_SHORTCUT) -> None:
         super().__init__()
@@ -233,15 +209,7 @@ class _DevInspector(QObject):
 def install_dev_inspector(
     app: Optional[QApplication] = None, atalho: str = _DEFAULT_SHORTCUT
 ) -> _DevInspector:
-    """Instala o inspetor na QApplication e o mantém vivo enquanto o app viver.
-
-    Args:
-        app: QApplication (usa a instância ativa se None).
-        atalho: Combinação de teclas para o gatilho de teclado.
-
-    Returns:
-        A instância do inspetor (também guardada em ``app._dev_inspector``).
-    """
+    """Instala o inspetor na QApplication e o mantém vivo."""
     app = app or cast("QApplication | None", QApplication.instance())
     if app is None:
         raise RuntimeError("QApplication precisa existir antes de install_dev_inspector")
@@ -257,11 +225,7 @@ def enable_if_env(
     var: str = _ENV_VAR,
     atalho: str = _DEFAULT_SHORTCUT,
 ) -> Optional[_DevInspector]:
-    """Instala o inspetor apenas se a variável de ambiente ``var`` estiver setada.
-
-    Mostra um diálogo de confirmação na ativação. Retorna a instância ou
-    ``None`` se a variável não estiver definida.
-    """
+    """Instala o inspetor apenas se a variável de ambiente ``var`` estiver setada."""
     if not os.environ.get(var):
         return None
     resolved = app or cast("QApplication | None", QApplication.instance())

@@ -1,34 +1,8 @@
-/*
- * launcher.c — Windows launcher for SISTEMAS apps.
+/* launcher.c — Windows launcher for SISTEMAS apps.
  *
- * Two modes, selected at compile time:
- *
- *   1. Standalone (APP_REPO defined):
- *      First launch downloads payload.zip from GitHub Releases
- *      to %LOCALAPPDATA%\SISTEMAS\<module>\.
- *      Subsequent launches skip download if local install exists.
- *
- *   2. SISTEMAS multi-app (APP_REPO NOT defined):
- *      Extracts dist.zip from one directory above the launcher
- *      (the share root: <root>\<APP>\<app>.exe → <root>\dist.zip)
- *      to %LOCALAPPDATA%\SISTEMAS\ (shared across apps).
- *
- * Both modes:
- *   - Set SISTEMAS_DATA_ROOT env var to the launcher's own directory (exeDir).
- *     The app writes data to exeDir\data\, so it works from any directory.
- *   - Launch pythonw.exe -m <appName> from the local install.
- *   - Derive module name from the .exe filename (bap.exe → "bap").
- *
- * Compile (standalone):
- *   x86_64-w64-mingw32-gcc -O2 -s -o rac.exe launcher.c \
- *       -DAPP_REPO=\"januvary/RAC\" -DAPP_MODULE=\"rac\" \
- *       -DAPP_DISPLAY=\"RAC\" \
- *       -mwindows -static -lshlwapi -lcomctl32 -lwininet
- *
- * Compile (SISTEMAS):
- *   x86_64-w64-mingw32-gcc -O2 -s -o rac.exe launcher.c \
- *       -mwindows -static -lshlwapi -lcomctl32
- */
+ * Two modes: standalone (APP_REPO defined, downloads from GitHub)
+ * or SISTEMAS multi-app (extracts dist.zip from parent dir).
+ * Both set SISTEMAS_DATA_ROOT and launch pythonw.exe -m <appName>. */
 
 #include <windows.h>
 #include <commctrl.h>
@@ -42,10 +16,8 @@
 #include <wininet.h>
 #endif
 
-/* PORTABLE_MODE: shared install at %LOCALAPPDATA%\SISTEMAS,
- * tries local dist.zip first, falls back to GitHub download.
- * Standalone: per-app install at %LOCALAPPDATA%\SISTEMAS\<module>,
- * always downloads from GitHub. */
+/* PORTABLE_MODE: shared install at %LOCALAPPDATA%\SISTEMAS.
+ * Standalone: per-app install at %LOCALAPPDATA%\SISTEMAS\<module>. */
 
 /* --- Helpers --- */
 
@@ -169,22 +141,15 @@ mkdir_recursive(const char *path)
 }
 
 /* Recursively delete a directory tree (like `rd /s /q`), natively.
- *
- * We must NOT shell out to cmd.exe for this: cmd is a console app, so a
- * GUI launcher spawning it flashes a terminal window, and when the exe
- * runs from a network share cmd.exe also prints the "UNC paths are not
- * supported" warning (it cannot inherit a UNC current directory).
- *
- * Failures are logged to launcher.log (not silently ignored) but do not
- * abort the sweep — remaining entries are still attempted. */
+ * Avoids spawning cmd.exe (console app → flashes terminal, fails on UNC).
+ * Failures are logged but don't abort the sweep. */
 static void
 delete_tree_log(const char *path, int depth, int *failures)
 {
     if (!path || !*path) return;
 
     /* Missing target = nothing to delete = success. Check first so we
-     * don't log scary "failed (2)" lines for dirs that simply aren't
-     * there yet (e.g. _update_staging on a fresh install). */
+     * don't log "failed (2)" for dirs that simply aren't there yet. */
     DWORD attr = GetFileAttributesA(path);
     if (attr == INVALID_FILE_ATTRIBUTES) return;
 
@@ -383,9 +348,8 @@ run_and_pump(HWND hdlg, const char *cmd)
 
 #include "miniz.h"
 
-/* Extract a .zip file using the embedded miniz library. Creates directories
- * as needed and skips entries with path-traversal components. Returns 0 on
- * success, non-zero on failure. Errors are logged to launcher.log. */
+/* Extract a .zip file using the embedded miniz library. Creates dirs
+ * as needed and skips path-traversal entries. Returns 0 on success. */
 static int
 extract_miniz(const char *zipPath, const char *destPath, HWND hdlg)
 {
@@ -468,21 +432,13 @@ extract_miniz(const char *zipPath, const char *destPath, HWND hdlg)
 #ifdef APP_REPO
 /* --- GitHub download (standalone mode) --- */
 
-/*
- * Download a URL to a file using WinINet.
- * Updates the progress bar on hdlg if provided.
- *
- * This version uses HttpOpenRequestA so we can set the User-Agent
- * and Accept headers required by the GitHub API.
- */
+/* Download a URL to a file using WinINet. Updates the progress bar on hdlg if provided. */
 static int
 http_download(const char *url, const char *destPath, HWND hdlg)
 {
     log_message("http_download: url=%s dest=%s", url, destPath);
 
-    /* Use an empty agent in InternetOpenA because we set the real User-Agent
-     * header explicitly below. Some servers reject duplicate User-Agent
-     * headers or ignore the agent from InternetOpenA. */
+    /* Use an empty agent in InternetOpenA because we set the real User-Agent header below. */
     HINTERNET hInternet = InternetOpenA(
         "",
         INTERNET_OPEN_TYPE_PRECONFIG,
@@ -539,9 +495,7 @@ http_download(const char *url, const char *destPath, HWND hdlg)
     char fullPath[sizeof(path) + sizeof(extra)];
     snprintf(fullPath, sizeof(fullPath), "%s%s", path, extra);
 
-    /* Request flags: reload, no cache, secure (for HTTPS), follow redirects.
-     * We do NOT set INTERNET_FLAG_NO_AUTO_REDIRECT so WinINet follows 302
-     * redirects (needed for GitHub asset downloads). */
+    /* Request flags: reload, no cache, secure (HTTPS), follow redirects. */
     DWORD flags = INTERNET_FLAG_RELOAD
                 | INTERNET_FLAG_NO_CACHE_WRITE
                 | INTERNET_FLAG_NO_COOKIES;
@@ -575,9 +529,7 @@ http_download(const char *url, const char *destPath, HWND hdlg)
 
     DWORD idx = 0;
 
-    /* Check HTTP status. Query as a string to avoid WinINet quirks
-     * with HTTP_QUERY_FLAG_NUMBER. The string may contain a reason
-     * phrase (e.g. "200 OK"), so we parse only the leading digits. */
+    /* Check HTTP status. Query as a string to avoid WinINet quirks. */
     char statusStr[64] = "";
     DWORD statusLen = sizeof(statusStr);
     idx = 0;
@@ -669,9 +621,7 @@ http_download(const char *url, const char *destPath, HWND hdlg)
     return ok ? 0 : -1;
 }
 
-/*
- * Read a file into a malloc'd buffer (caller frees).
- */
+/* Read a file into a malloc'd buffer (caller frees). */
 static char *
 read_file_to_buffer(const char *path, DWORD *outSize)
 {
@@ -705,10 +655,7 @@ read_file_to_buffer(const char *path, DWORD *outSize)
     return buf;
 }
 
-/*
- * Extract a JSON string value for a given key.
- * Simple search — not a real parser, but adequate for GitHub API output.
- */
+/* Extract a JSON string value for a given key. Simple search — not a real parser. */
 static int
 json_find_string(const char *json, const char *key, char *out, size_t outSize)
 {
@@ -735,10 +682,7 @@ json_find_string(const char *json, const char *key, char *out, size_t outSize)
     return 0;
 }
 
-/*
- * Find the browser_download_url for an asset whose name contains *substr*.
- * Searches the assets array in the JSON.
- */
+/* Find the browser_download_url for an asset containing *substr*. */
 static int
 json_find_asset_url(const char *json, const char *substr,
                     char *out, size_t outSize)
@@ -749,9 +693,7 @@ json_find_asset_url(const char *json, const char *substr,
         p = strstr(p, "\"browser_download_url\"");
         if (!p) return -1;
 
-        /* Backtrack to find the asset name.
-         * GitHub's JSON has a large uploader object between "name" and
-         * "browser_download_url", so we need a generous backtrack window. */
+        /* Backtrack to find the asset name. GitHub's JSON has a large uploader object between "name" and "browser_download_url". */
         const char *nameStart = p - 2048;
         if (nameStart < json) nameStart = json;
 
@@ -908,9 +850,7 @@ launcher_update_check(const char *localRoot, const char *appName,
     read_version_key(remoteVersionPath, "andaime", remoteAndaime, sizeof(remoteAndaime));
 
     /* Compare. Missing remote key = update needed (unifies with Python's
-     * origin — a release that omits a hash must still push an update rather
-     * than silently skipping). A release-side guard prevents bad VERSIONs
-     * from ever being published. */
+     * origin). A release-side guard prevents bad VERSIONs from being published. */
     int needPayload = (!remoteRuntime[0] ||
                        (remoteRuntime[0] && strcmp(remoteRuntime, localRuntime) != 0));
     int needAppUpdate = needPayload ||
@@ -926,11 +866,7 @@ launcher_update_check(const char *localRoot, const char *appName,
         return;
     }
 
-    /* A shared mutex across ALL apps protects _update_staging/ from being
-     * written by two instances at once (each launch has its own per-app
-     * mutex, so they'd otherwise race on the same staging folder). Try-lock:
-     * if another app is already staging, skip and launch normally — it will
-     * apply the update this or next launch. */
+    /* A shared mutex across ALL apps protects _update_staging/ from concurrent writes. */
     HANDLE hUpdateMutex = CreateMutexA(NULL, TRUE,
                                        "SISTEMAS_Update_Staging");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -1063,21 +999,14 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     log_init(lad);
     log_message("Launcher started: %s", appName);
 
-    /*
-     * User-facing layout (standalone zip / portable share):
-     *   <DIR>/<app>.exe   +   <DIR>/data/
-     * The exe stays wherever the user put it. Data lives next to it.
-     * Works from any directory (Downloads, Desktop, USB, network share).
-     */
+    /* User-facing layout: <DIR>/<app>.exe + <DIR>/data/ (data next to exe). */
 
     /* --- Local install path (shared across all apps) --- */
     char localRoot[MAX_PATH * 2];
     snprintf(localRoot, sizeof(localRoot), "%s\\SISTEMAS", lad);
 
-    /* --- Check if local install is valid ---
-     * Both python.exe AND VERSION must exist. If either is missing,
-     * the previous extraction was interrupted or corrupted — wipe and
-     * re-download from scratch. */
+    /* Check if local install is valid — both python.exe AND VERSION must exist.
+     * If either is missing, the previous extraction was interrupted — wipe and re-download. */
 
     char localPython[MAX_PATH * 2];
     snprintf(localPython, sizeof(localPython),
@@ -1106,9 +1035,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
         int installed = 0;
 
 #ifdef PORTABLE_MODE
-        /* ============================================================
-         * Portable: try local dist.zip first (offline install).
-         * ============================================================ */
+        /* Portable: try local dist.zip first (offline install). */
         char distZip[MAX_PATH * 2];
         snprintf(distZip, sizeof(distZip), "%s..\\dist.zip", exeDir);
 
@@ -1145,9 +1072,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
 #endif /* PORTABLE_MODE */
 
         if (!installed) {
-            /* ============================================================
-             * GitHub download (standalone always, portable fallback).
-             * ============================================================ */
+            /* GitHub download (standalone always, portable fallback). */
 
         /* Create local directory (recursively, like mkdir -p). */
         mkdir_recursive(localRoot);
@@ -1270,9 +1195,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     /* --- Launcher-side update check (throttled, once/day) --- */
     launcher_update_check(localRoot, appName, displayName);
 
-    /* --- Tell the app where its data lives ---
-     * Data always lives next to the exe, in whatever directory it runs from.
-     * SISTEMAS_DATA_ROOT = exeDir; the app writes to exeDir\data\. */
+    /* Tell the app where its data lives. Data always next to the exe. */
     SetEnvironmentVariableA("SISTEMAS_DATA_ROOT", exeDir);
 
     /* --- Launch python.exe -m <appName> (CREATE_NO_WINDOW = no console) --- */
@@ -1290,17 +1213,8 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdShow)
     log_message("Launching: %s cwd=%s", cmdLine, workDir);
 
     /* Capture stdout/stderr to a log file so python.exe crashes are visible.
-     * NOTE: the handles MUST be created inheritable (bInheritHandle=TRUE).
-     * With NULL security attributes they are not, and despite
-     * bInheritHandles=TRUE in CreateProcess the child receives invalid
-     * std handles — CPython then sets sys.stdout/sys.stderr to None and
-     * app.log stays forever empty (no logs, no crash tracebacks).
-     *
-     * Append so previous sessions' crash tracebacks survive; truncate
-     * once if the file has grown past APPLOG_MAX_BYTES (crash-loop
-     * protection). Opened with FILE_APPEND_DATA + full sharing so
-     * multiple apps can hold the log concurrently — every write goes to
-     * EOF, so sessions interleave at line granularity (fine for a log). */
+     * Handles must be inheritable (bInheritHandle=TRUE). Append mode survives
+     * previous sessions; truncate once past APPLOG_MAX_BYTES (crash-loop protection). */
     SECURITY_ATTRIBUTES secAttrs = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
 
     char appLogPath[MAX_PATH * 2];

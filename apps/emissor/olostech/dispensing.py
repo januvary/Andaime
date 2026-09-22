@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Complete Olostech dispensing automation.
-
-Flow (reverse-engineered from HAR):
-  1. Auth + login
-  2. Open attendance for patient
-  3. Look up professional
-  4. Open dispensacao_direta page
-  5. Look up material + add item
-  6. Conclude attendance
-"""
+"""Olostech dispensing automation. Flow: auth/login -> open attendance -> lookup professional -> dispensacao_direta -> material lookup/add -> conclude."""
 from __future__ import annotations
 
 import re
@@ -47,14 +38,7 @@ class Dispensing:
 
     def add_stock(self, material_recnum, quantity_needed, current_saldo=0,
                   loterecnum="", lote_desc="", lote_validade=""):
-        """Add stock via acerto (acrescimo) to cover a dispensation.
-
-        Adds exactly: quantity_needed - current_saldo.
-        For lot-controlled materials, pass loterecnum/lote_desc/lote_validade;
-        a zero-stock lot (even past validity) accepts stock and dispenses fine.
-        Returns (True, ""), (False, msg) on failure, or (None, msg) when the
-        item should be skipped.
-        """
+        """Add stock (acerto): exact = needed - saldo. Lot-controlled; zero-stock lot accepts. Returns (True,""), (False,msg) or (None,msg) skipped."""
         shortfall = quantity_needed - current_saldo
         if shortfall <= 0:
             return True, ""
@@ -95,10 +79,7 @@ class Dispensing:
         controlalote = mat_info.get("controlalote", "")
         self._log(f"  Material {material_recnum}: controlalote={controlalote or '?'}")
 
-        # Step 5: GravarAcertoEstoque - add the stock
-        # Field order from JS: true, motivo, date, estoque, material,
-        #   quantity, justificativa, NrLaudo, lstLote, formulario,
-        #   null, numeracaoInicial, numeracaoFinal
+        # GravarAcertoEstoque: JS field order — true, motivo, date, estoque, material, quantity, justificativa, NrLaudo, lstLote, formulario, null, numeracaoInicial, numeracaoFinal
         dados_parts = [
             "true",           # [0]
             "1",              # [1] motivo: acrescimo
@@ -266,11 +247,7 @@ class Dispensing:
 
     def open_dispensacao_direta(self, patient_sus, action_type=2,
                                  notificacao_nr="", receita_data=""):
-        """Open the dispensacao_direta page.
-        
-        For controlled actions (4,6,7,9), notificacao_nr and receita_data
-        are required.
-        """
+        """Open dispensacao_direta page. For controlled actions (4,6,7,9), notificacao_nr and receita_data required."""
         # Reset dispensacao_id for new session
         self.dispensacao_id = None
 
@@ -334,11 +311,7 @@ class Dispensing:
         return resp.status_code == 200
 
     def _lookup_material(self, material_code):
-        """Try material lookup, handling code format differences.
-        Olostech CSV codes are 5-digit (e.g. 35286) while the server's
-        ObterMaterialDispensacao expects the internal recnum (e.g. 3528),
-        which is the CSV code divided by 10. Always try the direct code
-        first, then the recnum form."""
+        """Material lookup: CSV codes 5-digit (e.g. 35286); server ObterMaterialDispensacao expects recnum (code/10). Try direct then recnum."""
         codes = [str(material_code)]
         if str(material_code).isdigit():
             codes.append(str(int(material_code) // 10))
@@ -564,9 +537,7 @@ class Dispensing:
                 duracao_max = int(duracao_raw) if str(duracao_raw).isdigit() else 30
             except (ValueError, TypeError):
                 duracao_max = 30
-            # The JS sets txtQtdePrescricaoUnidMed from the MATERIAL lookup
-            # (obterDadosMaterial.Value("Qtde_Unidade_Medida")), not the
-            # medication lookup.
+            # txtQtdePrescricaoUnidMed vem do MATERIAL (obterDadosMaterial), não do medicamento.
             qtde_unid = mat.get("qtde_unidade_medida") or \
                         med_data.get("qtde_unidade_medida") or "1"
             form_data["txtDuracaoTratamento"] = str(duracao_max)
@@ -578,9 +549,7 @@ class Dispensing:
             total_units = quantity * unid
             real_dias = dias if dias and dias > 0 else quantity
 
-            # Dias pedidos vao como estao; duracao_tratamento_max nao e
-            # teto confiavel e so vale como fallback se o servidor recusar.
-            # dose*dias == quantity*unid (inteiros).
+            # Dias pedidos vão como estão; duracao_tratamento_max só fallback se servidor recusar. dose*dias == quantity*unid (inteiros).
             def _pick(target: int) -> tuple[int, int]:
                 if target >= 1 and total_units % target == 0:
                     return total_units // target, target
@@ -689,11 +658,7 @@ class Dispensing:
                     self._all_dispensacao_ids.append(self.dispensacao_id)
                 self._log(f"  Dispensacao ID: {self.dispensacao_id}")
 
-            # The origem=1 response does not render the item rows: the browser
-            # auto-reloads via
-            #   enviarForm(null,'dispensacao_direta.asp?origem=0&Dispensacao=<id>')
-            # which shows the items. Re-open the page and capture the item
-            # chaves (btnCancelar<chave>) so we can roll them back on failure.
+            # origem=1 não renderiza itens; browser recarrega via enviarForm(...origem=0...) — reabrir para capturar chaves de rollback.
             if self.dispensacao_id:
                 self._refresh_item_chaves()
 
@@ -745,12 +710,7 @@ class Dispensing:
         return True
 
     def _refresh_item_chaves(self):
-        """Re-open the dispensation page to list its items and capture the
-        chaves needed to cancel them on rollback.
-
-        The item rows render on the page as:
-            <input ... id="btnCancelar<chave>" ... onClick="...">
-        """
+        """Re-open dispensation to list items and capture chaves for rollback (btnCancelar<chave>)."""
         if not self.dispensacao_id:
             return
 
@@ -799,20 +759,10 @@ class Dispensing:
                       "WARN")
 
     def rollback_dispensation(self, justificativa="Cancelamento por falha na dispensação"):
-        """Cancel dispensed items, then cancel the attendance.
-
-        The server blocks cancelarAtendimento while dispensation item
-        records exist. Manual flow is: cancel each item via
-        dispensacao_item_cancelar_popup.asp?origem=1, then cancel the
-        attendance.
-        """
+        """Cancel dispensed items, then attendance. Server blocks cancelarAtendimento while item records exist; cancel each item via dispensacao_item_cancelar_popup.asp?origem=1 first."""
         self._log(f"=== Rolling back dispensation (attendance {self.attendance_id}) ===")
 
-        # Re-collect chaves from every dispensation opened in this retirada:
-        # _item_chaves only holds what was captured so far, and a later
-        # group failure must also cancel earlier groups' items — otherwise
-        # the attendance can't be cancelled ("Existem Informações
-        # Registradas no Atendimento!").
+        # Re-collect chaves de todas dispensações desta retirada: falha posterior deve cancelar itens anteriores, senão atendimento não pode ser cancelado.
         current_disp = self.dispensacao_id
         try:
             for disp_id in list(self._all_dispensacao_ids):
@@ -856,14 +806,7 @@ class Dispensing:
         return self.cancel_attendance(justificativa) and ok
 
     def cancel_attendance(self, justificativa="Atendimento aberto por engano"):
-        """Cancel the currently open attendance.
-
-        Mirrors the JS in atendimento_cancelar_popup.asp:
-            dados = txtAtendimentoChave + "|#" + justificativa + "|#0|#0"
-        (no recepcao in the automated flow, so the last two params are 0).
-
-        Returns True on success.
-        """
+        """Cancel open attendance. Data format matches atendimento_cancelar_popup.asp JS: chave|#justificativa|#0|#0 (last two params 0, no recepcao). Returns True on success."""
         self._log(f"=== Cancelling attendance {self.attendance_id} ===")
         if not self.attendance_id:
             self._log("  No attendance to cancel", "WARN")
@@ -933,14 +876,7 @@ class Dispensing:
             return False
 
     def list_dispensed_items(self):
-        """Fetch the dispensation receipt and return the items dispensed.
-
-        Calls rel_fb_dispensacao_recibo.asp?Origem=0&Dispensacao=<id> which
-        renders a receipt table. Each item is a <tbody class="linha"> block
-        with a code/description/qty row (and an optional lot sub-row).
-
-        Returns a list of dicts: [{"code":..., "desc":..., "qty":...}, ...]
-        """
+        """Fetch receipt (rel_fb_dispensacao_recibo.asp) and return dispensed items as [{code, desc, qty}, ...]. Each item = tbody.linha block."""
         if not self.dispensacao_id:
             return []
 
@@ -1001,10 +937,7 @@ class Dispensing:
         return None
 
     def _detect_action_type(self, material_code, current_action, patient_sus):
-        """Find the recipe type the server expects for this material.
-
-        Returns (action, model_name) or None when undeterminable.
-        """
+        """Find expected recipe action/model for material; returns (action, model_name) or None."""
         mat = self._lookup_material(material_code)
         if not mat:
             return None
@@ -1047,32 +980,7 @@ class Dispensing:
     def dispense_retirada(
         self, patient_sus, professional_code, items, ask_notificacao=None
     ):
-        """Multi-item, multi-type dispensing for a full retirada.
-
-        Args:
-            patient_sus: Patient SUS number
-            professional_code: CRM or Olostech professional code
-            items: List of dicts with keys:
-                - material_code: Olostech CSV code
-                - material_desc: Description
-                - quantity: int
-                - action_type: 2/4/6/7/9
-                - notificacao_nr: str (for controlled, can be "")
-            ask_notificacao: optional ``(desc, suggested_action) ->
-                (action, number) | None`` called (possibly from a worker
-                thread — must block) when detection says an item needs
-                6/7 but no number was provided. None skips the item.
-
-        Flow:
-            1. Open attendance (once)
-            2. Look up professional (once)
-            3. Group items by action_type
-            4. For each group: open_dispensacao_direta → add each item
-            5. Conclude attendance (once)
-
-        Returns:
-            ``(success: bool, message: str)`` — message surfaces in the UI on failure.
-        """
+        """Dispense full retirada (multi-item, multi-type). Args: patient_sus, professional_code, items (dicts with material_code/desc/quantity/action_type/notificacao_nr), ask_notificacao (optional callback for missing 6/7 numbers). Flow: open attendance, group by action_type, dispense, conclude. Returns (bool, msg)."""
         if not items:
             self._log("No items to dispense", "ERROR")
             return False, "Nenhum item para dispensar"
@@ -1158,9 +1066,7 @@ class Dispensing:
             groups[at].append(item)
 
         self._log(f"\n=== Dispensing {len(valid_items)} item(s) in {len(groups)} group(s) ===")
-        # Track successes; failed holds (desc, error) tuples. Items skipped
-        # for lack of an accessible lot (None from add_item) are excluded
-        # from failed so they don't trigger a rollback of the whole retirada.
+        # Track successes; failed = (desc, error). Skipped items (no lot) excluded from failed to avoid full rollback.
         succeeded = []
         failed = []
         skipped_no_lot = []
@@ -1238,9 +1144,7 @@ class Dispensing:
                 "Nenhum item dispensado. Itens pulados: " + ", ".join(skipped_no_lot),
             )
 
-        # Step 5: Conclude. Exceptions here only surface the message without
-        # auto-rollback: the items may already be delivered and cancelling
-        # them would destroy records the user could still finish manually.
+        # Concluir: exceções apenas expõem mensagem sem rollback auto — itens podem já estar entregues; cancelar destruiria registros.
         try:
             if not self.conclude():
                 return False, "Falha ao concluir a dispensação"
@@ -1257,10 +1161,7 @@ class Dispensing:
         return True, msg
 
     def _rollback_after_failure(self, succeeded: list, message: str) -> str:
-        """Roll back the open attendance/dispensation after a failure.
-
-        Appends a note to ``message`` if the cleanup itself fails to complete.
-        """
+        """Rollback open attendance/dispensation after failure; appends note to message if cleanup fails."""
         self._log("Rolling back after failure", "ERROR")
         if succeeded or self._item_chaves or self.dispensacao_id:
             ok = self.rollback_dispensation()

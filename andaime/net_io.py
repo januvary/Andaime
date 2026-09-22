@@ -79,12 +79,7 @@ def is_transient_error(exc: BaseException) -> bool:
 def retry_on_network_error(
     max_retries: int = 2, base_delay: float = 1.0
 ) -> Callable[[Callable[..., _R]], Callable[..., _R]]:
-    """Decorador que retenta a função em erros de rede transitórios.
-
-    Args:
-        max_retries: tentativas de retry (padrão 2)
-        base_delay: atraso base em segundos, multiplicado pelo nº da tentativa
-    """
+    """Decorador que retenta a função em erros de rede transitórios."""
 
     def decorator(func: Callable[..., _R]) -> Callable[..., _R]:
         @functools.wraps(func)

@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Patient Fields Configuration Module
-
-Central configuration for all patient data fields.
-This allows adding new fields without modifying multiple files.
-"""
+"""Patient fields configuration module — central config for data fields."""
 
 import operator
 
@@ -203,15 +198,7 @@ SPECIAL_FIELDS = {
 
 
 def get_field_config(field_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Get configuration for a specific field.
-
-    Args:
-        field_name: Name of the field
-
-    Returns:
-        Field configuration dict or None if not found
-    """
+    """Configuração do campo (dict) ou None."""
     # Check main patient data fields
     if field_name in PATIENT_DATA_FIELDS:
         return PATIENT_DATA_FIELDS[field_name]
@@ -224,39 +211,18 @@ def get_field_config(field_name: str) -> Optional[Dict[str, Any]]:
 
 
 def get_all_patient_data_fields() -> List[str]:
-    """
-    Get list of all patient data field names.
-
-    Returns:
-        List of field names that should be in the pacientes table
-    """
+    """Lista de nomes de campos do paciente."""
     return list(PATIENT_DATA_FIELDS.keys())
 
 
 def is_multiple_instance_field(field_name: str) -> bool:
-    """
-    Check if a field supports multiple instances (like processo_n).
-
-    Args:
-        field_name: Name of the field
-
-    Returns:
-        True if field supports multiple instances
-    """
+    """Verifica se campo permite múltiplas instâncias."""
     config = get_field_config(field_name)
     return config.get("multiple", False) if config else False
 
 
 def get_fields_for_section(section_name: str) -> List[str]:
-    """
-    Obtém lista de campos para uma seção específica, ordenados por ui_metadata.order.
-
-    Args:
-        section_name: 'patient', 'options', etc.
-
-    Returns:
-        Lista de nomes de campos ordenados por ordem de exibição
-    """
+    """Campos de seção ordenados por ui_metadata.order."""
     fields = [
         (field_name, config.get("ui_metadata", {}).get("order", 999))
         for field_name, config in PATIENT_DATA_FIELDS.items()

@@ -1,21 +1,7 @@
 """Barra superior genérica (andaime.qt).
 
-Reproduz o leiaute exato da barra do Emissor: uma linha ``QHBoxLayout``
-dividida em colunas pesadas:
-
-- coluna 1 (``_COL_PATIENT``=5): botão de tema + busca
-  (``SearchableComboBox`` injetável, data-source agnóstica);
-- coluna 1.5 (peso 0 por padrão): ``mid_widget`` opcional (vazio);
-- coluna 2 (``_COL_OPTIONS``=6): botões de ação (vazia por padrão);
-- coluna 3 (``_COL_RIGHT``=3): widget à direita (título ou brasão), centralizado.
-
-``col_weights`` aceita tanto uma tupla de 3 quanto de 4 elementos; se
-fornecida com 3, a coluna 1.5 recebe peso 0 (colapsada).
-
-A linha de status é **separada** (ver ``MainWindow`` / app), espelhando
-o Emissor: um ``QLabel`` centralizado abaixo da barra, atualizado via
-``set_status``. Esta classe não acopla lógica de paciente: quem usa
-in jeta um ``search_fn``.
+Espelha a barra do Emissor: uma linha ``QHBoxLayout`` dividida em colunas
+— col1 (tema + busca), col2 (ações), col3 (widget à direita).
 """
 
 from __future__ import annotations
@@ -221,11 +207,7 @@ class TopBar(QFrame):
     # ========== API ==========
 
     def add_action(self, action: Any) -> None:
-        """Adiciona um botão de ação à coluna 2.
-
-        ``action`` pode ser um ``QWidget`` ou uma tupla
-        ``(texto, role, callback?)``.
-        """
+        """Adiciona um botão de ação à coluna 2."""
         for btn in self._coerce_actions([action]):
             self._action_layout.addWidget(btn)
 

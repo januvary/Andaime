@@ -1,29 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-andaime.updater — Auto-update for Python-style SISTEMAS deployments.
+"""andaime.updater — Auto-update for Python-style SISTEMAS deployments.
 
 Layout::
 
     <install_root>/
     ├── python/                          ← embedded CPython + deps
-    │   └── Lib/site-packages/andaime/   ← shared chassis
-    ├── apps/<module>/                   ← app code (e.g. apps/rac/)
-    ├── data/                            ← user data (NEVER touched by updates)
-    └── VERSION                          ← "1.2.3\\nruntime: <hash>"
+    ├── apps/<module>/                   ← app code
+    ├── data/                            ← user data (NEVER touched)
+    └── VERSION
 
 Update flow::
 
-    1. UpdateCheckWorker (background thread) queries GitHub Releases API.
+    1. UpdateCheckWorker queries GitHub Releases API.
     2. Compares app version + runtime hash.
-    3. Downloads ``update.zip`` (small) or ``payload.zip`` (full python/).
+    3. Downloads update.zip or payload.zip.
     4. Extracts to ``_update_staging/``.
     5. User clicks Restart → ``restart_app()``.
-    6. New process calls ``apply_pending_update()``.
-    7. Directories swapped atomically (``.old`` suffix for rollback).
-    8. New version launched with ``--post-update`` monitoring.
-    9. On success signature → cleanup ``.old`` dirs.
-   10. On failure/timeout → rollback ``.old`` dirs, relaunch old version.
+    6. ``apply_pending_update()`` swaps directories atomically.
+    7. New version launched with ``--post-update`` monitoring.
+    8. On success → cleanup ``.old`` dirs; on failure → rollback.
 """
 
 from __future__ import annotations
@@ -68,13 +64,7 @@ ANDAIME_REPO = "januvary/andaime"
 
 
 def get_install_root() -> Path:
-    """Return the SISTEMAS install root.
-
-    Detects the ``<install_root>/python/pythonw.exe`` layout used by both
-    standalone single-app builds and the SISTEMAS multi-app dist.
-
-    Falls back to ``__main__`` file resolution for dev mode.
-    """
+    """Return the SISTEMAS install root."""
     exe = Path(sys.executable).resolve()
 
     # SISTEMAS Python-style: <install_root>/python/pythonw.exe
@@ -105,13 +95,7 @@ def get_install_root() -> Path:
 
 
 def get_shared_root() -> Path:
-    """Return the directory that contains the running exe (data root).
-
-    When launched by the SISTEMAS launcher, ``SISTEMAS_DATA_ROOT`` is
-    set to the exe's directory so that data lives next to the exe
-    regardless of where the Python runtime is installed.
-    Falls back to ``Path.cwd()`` for dev mode.
-    """
+    """Return the directory that contains the running exe (data root)."""
     data_root = os.environ.get("SISTEMAS_DATA_ROOT")
     if data_root:
         return Path(data_root)
@@ -124,11 +108,7 @@ def staging_path() -> Path:
 
 
 def _get_app_module() -> str:
-    """Return the running app's module name (e.g. ``'rac'``).
-
-    When launched as ``pythonw.exe -m rac``, ``__main__.__package__`` is
-    ``'rac'``.
-    """
+    """Return the running app's module name (e.g. ``'rac'``)."""
     try:
         import __main__
 
@@ -146,15 +126,7 @@ def _get_app_module() -> str:
 
 
 def parse_manifest_text(text: str) -> dict[str, str]:
-    """Parse a VERSION manifest from raw text.
-
-    Format::
-
-        26.07.31-2202
-        runtime: d4c3b2a1
-        rac: f8e7d6c5
-        andaime: a1b2c3d4
-    """
+    """Parse a VERSION manifest from raw text."""
     manifest: dict[str, str] = {"datestamp": "", "runtime": ""}
     for line in text.strip().splitlines():
         line = line.strip()
@@ -400,14 +372,7 @@ def _sweep_stale_update_temps() -> None:
 
 
 def _detect_install_format(root: Path) -> str:
-    """Detect the deployment format of an installation.
-
-    Returns one of:
-
-    * ``"launcher"``   - SISTEMAS Python-style: ``apps/`` + ``python/`` dirs.
-    * ``"pyinstaller"`` - PyInstaller one-dir: ``_internal/`` dir.
-    * ``"unknown"``    - Cannot determine format.
-    """
+    """Detect the deployment format of an installation."""
     if not root.exists():
         return "unknown"
 
@@ -437,11 +402,7 @@ def _format_error_message(current_format: str, staged_format: str) -> str:
 
 
 def _acquire_lock(lock_path: Path) -> int | None:
-    """Exclusively acquire a lockfile, or return ``None`` if held.
-
-    Uses ``O_CREAT | O_EXCL`` so only one process can create it.  Stale
-    lockfiles (left by a killed process) are broken after a grace period.
-    """
+    """Exclusively acquire a lockfile, or return ``None`` if held."""
     try:
         fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.write(fd, str(os.getpid()).encode())
@@ -471,16 +432,7 @@ def _release_lock(lock_path: Path, lock_handle: int | None) -> None:
 
 
 def apply_pending_update() -> bool:
-    """Apply a staged update if one is waiting.
-
-    Called at the very start of ``main()`` **before** ``andaime.App`` is
-    constructed.  If a staging directory with a valid ``.update_tag`` exists,
-    the directories are swapped and the new version is launched with
-    post-update monitoring.
-
-    Returns ``True`` if an update was applied (the current process will be
-    replaced and should not continue initialisation).
-    """
+    """Apply a staged update if one is waiting."""
     root = get_install_root()
 
     # Always clean up stale rollback artifacts first, and sweep leaked
@@ -653,11 +605,7 @@ def _launch_with_monitoring(
     swaps: list[tuple[Path, Path]],
     old_version_content: str | None = None,
 ) -> None:
-    """Launch the updated app, watch for its success marker.
-
-    Success marker → exit (new process takes over). Fast crash → rollback
-    + relaunch the old version. Timeout → trust the live process and exit
-    (it may just be slow; killing it destroyed installs)."""
+    """Launch the updated app, watch for its success marker."""
     python_exe = _get_python_exe()
     root = get_install_root()
     temp_dir = Path(tempfile.mkdtemp(prefix="andaime_update_"))
@@ -822,18 +770,7 @@ def _show_update_error(error: Exception) -> None:
 
 
 class UpdateCheckWorker(QThread):
-    """Background thread that checks januvary/andaime for updates.
-
-    Uses hash-based comparison: downloads payload.zip when the runtime
-    hash differs, and app-update.zip when the local app hash differs.
-
-    Signals
-    -------
-    update_available(str, str) : ``(tag, release_notes)``
-    update_ready(str)          : ``(tag,)`` — download complete, awaiting restart
-    update_failed(str)         : ``(error_message,)``
-    no_update()                — all hashes match, already up to date
-    """
+    """Background thread that checks januvary/andaime for updates."""
 
     update_available = Signal(str, str)
     update_ready = Signal(str)

@@ -45,8 +45,7 @@ def __getattr__(name: str) -> Any:
     """Lazily resolve public attrs so ``import andaime`` stays cheap.
 
     ``App`` and ``SplashScreen`` pull PySide6 + the database/updater stack;
-    deferring them keeps a bare ``import andaime`` (e.g. for ``text`` or
-    ``dates`` utilities) from importing the whole runtime.
+    deferring them keeps a bare ``import andaime`` from importing the whole runtime.
     """
     if name == "App":
         from andaime.app import App

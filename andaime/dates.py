@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Date utilities for Brazilian business day calculations.
+"""Date utilities for Brazilian business day calculations.
 
-Provides holiday-aware date adjustments using Brazil/SP national holidays
+Holiday-aware date adjustments using Brazil/SP national holidays
 and optional pontos facultativos (optional holidays) loaded from JSON.
 """
 
@@ -127,12 +126,8 @@ _WEEKDAYS_PT = [
 def parse_date(text: str | None) -> date | None:
     """Parse a date string into a ``date``.
 
-    Accepts both Brazilian and ISO shapes:
-    - ``DD/MM`` (assumes current year), ``DD/MM/AA`` (2-digit year maps to
-      the 2000s) and ``DD/MM/AAAA`` with ``/``, ``-`` or ``.`` separators;
-    - ``AAAA-MM-DD`` (ISO), e.g. values stored in the database.
-    Returns ``None`` for empty or invalid input (including impossible
-    calendar dates).
+    Accepts Brazilian (DD/MM, DD/MM/AA, DD/MM/AAAA) and ISO (YYYY-MM-DD)
+    formats. Returns ``None`` for empty or invalid input.
     """
     text = (text or "").strip()
     if not text:
@@ -167,11 +162,7 @@ def parse_date(text: str | None) -> date | None:
 
 
 def format_date(dt: date, include_weekday: bool = False) -> str:
-    """Format a ``date`` as ``DD/MM/AAAA``.
-
-    With ``include_weekday=True`` appends the Portuguese weekday in
-    parentheses, e.g. ``13/03/2026 (sexta)``.
-    """
+    """Format a ``date`` as ``DD/MM/AAAA``, optionally with the weekday."""
     if include_weekday:
         return f"{dt.strftime('%d/%m/%Y')} ({_WEEKDAYS_PT[dt.weekday()]})"
     return dt.strftime("%d/%m/%Y")

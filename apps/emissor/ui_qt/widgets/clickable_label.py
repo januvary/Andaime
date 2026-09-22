@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Clickable Label
-QLabel que emite um sinal quando clicado.
-"""
+"""ClickableLabel — QLabel que emite sinal ao ser clicado."""
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCursor, QMouseEvent
@@ -11,11 +8,7 @@ from PySide6.QtWidgets import QLabel, QWidget
 
 
 class ClickableLabel(QLabel):
-    """
-    Label clicável para ações na interface Qt.
-
-    Emite o sinal ``clicked`` ao receber um clique do mouse.
-    """
+    """Label clicável; emite clicked / right_clicked."""
 
     clicked = Signal()
     right_clicked = Signal()
@@ -23,24 +16,12 @@ class ClickableLabel(QLabel):
     def __init__(
         self, text: str = "", parent: QWidget | None = None
     ) -> None:
-        """
-        Inicializa o label clicável.
-
-        Args:
-            text: Texto inicial do label.
-            parent: Widget pai opcional.
-        """
+        """text, parent opcional; cursor pointing-hand."""
         super().__init__(text, parent)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        """
-        Emite o sinal clicked (botão esquerdo) ou right_clicked (botão direito)
-        quando o label é pressionado.
-
-        Args:
-            event: Evento de pressionamento do mouse.
-        """
+        """Emite clicked (esquerdo) ou right_clicked (direito)."""
         if event.button() == Qt.MouseButton.RightButton:
             self.right_clicked.emit()
         else:

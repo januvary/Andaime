@@ -11,18 +11,7 @@ from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 def register_taskbar_identity(
     app_id: str, display_name: str, icon_path: Path | str | None = None
 ) -> None:
-    """Set AppUserModelID and register it in the Windows registry.
-
-    This ensures the taskbar shows the correct icon and display name for
-    processes that are not the app's own .exe (e.g. pythonw.exe running
-    ``-m``).  Must be called *before* QApplication is created.
-
-    - Sets ``SetCurrentProcessExplicitAppUserModelID`` so Windows groups
-      the process under *app_id*.
-    - Writes ``HKCU\\Software\\Classes\\AppUserModelId\\<app_id>`` with
-      ``DisplayName`` and ``IconUri`` so the taskbar resolves the icon
-      from the registry regardless of which process hosts the window.
-    """
+    """Set AppUserModelID and register it in the Windows registry."""
     if sys.platform != "win32":
         return
     try:

@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Utilitários de arquivo
-Funções UI-agnósticas para abertura de arquivos e operações comuns.
-"""
+"""Utilitários de arquivo — funções UI-agnósticas."""
 
 from __future__ import annotations
 
@@ -16,19 +13,7 @@ from emissor.utils.security import validate_file_path
 
 
 def open_file(file_path: str) -> None:
-    """
-    Abre arquivo com aplicativo padrão (cross-platform).
-
-    Valida o caminho antes de abrir para evitar problemas de segurança.
-    Levanta FileNotFoundError se o arquivo não existir.
-
-    Args:
-        file_path: Caminho do arquivo a abrir.
-
-    Raises:
-        FileNotFoundError: Se o caminho for inválido ou o arquivo não existir.
-        OSError: Se a abertura falhar.
-    """
+    """Abre arquivo com aplicativo padrão. Valida caminho; levanta se não existe."""
     try:
         safe_path = validate_file_path(file_path)
     except ValueError as e:

@@ -2,13 +2,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from andaime.net_io import network_mkdir
 from andaime.paths import get_root_directory
 
 
 def bap_data_dir() -> Path:
     """Diretório de dados do BAP: <root>/data (dentro da pasta do app)."""
     d = get_root_directory() / "data"
-    d.mkdir(parents=True, exist_ok=True)
+    network_mkdir(d)
     return d
 
 

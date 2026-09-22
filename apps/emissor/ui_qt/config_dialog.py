@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-QtConfigDialog — diálogo de configuração (Qt).
-
-Constrói sobre o ``QtConfigDialog`` compartilhado de ``andaime.qt.dialogs``,
-fornecendo o conteúdo intermediário (distribuição de retiradas + feriados),
-a ação central (Banco de Dados) e o ``on_save`` específico.
-"""
+"""QtConfigDialog — configuração (distribuição, feriados, banco de dados, on_save)."""
 
 from __future__ import annotations
 
@@ -39,12 +33,7 @@ class QtConfigDialog(_QtConfigDialog):
         config: dict[str, Any],
         launch_dashboard_callback: Callable | None = None,
     ) -> None:
-        """
-        Args:
-            parent: Janela pai
-            config: Configuração atual (passa por print_copies e dark_mode)
-            launch_dashboard_callback: Callback do botão Banco de Dados
-        """
+        """parent, config (distribuição/feriados/DB), launch_dashboard_callback."""
         self._config = config
         self._launch_dashboard = launch_dashboard_callback
 
@@ -74,7 +63,7 @@ class QtConfigDialog(_QtConfigDialog):
             on_reset=self._on_reset,
         )
 
-    # ========== Conteúdo intermediário ==========
+    # Conteúdo intermediário
 
     def _build_middle(self) -> QWidget:
         """Linhas: janela (dias) + toggle | Gerenciar feriados; auto Olostech."""
@@ -116,7 +105,7 @@ class QtConfigDialog(_QtConfigDialog):
 
         return container
 
-    # ========== Handlers ==========
+    # Handlers
 
     def _on_distribute_toggled(self, checked: bool) -> None:
         """Habilita/desabilita a janela conforme o toggle de distribuição."""

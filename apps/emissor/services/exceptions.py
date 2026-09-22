@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Exceções de Domínio
-Hierarquia de exceções específicas do Emissor.
-"""
+"""Exceções de domínio — hierarquia específica do Emissor (base EmissorError)."""
 
 
 class EmissorError(Exception):
@@ -13,21 +10,13 @@ class EmissorError(Exception):
 
 
 class ValidationError(EmissorError):
-    """
-    Erro de validação de dados.
-
-    Levantado quando campos obrigatórios estão faltando ou inválidos.
-    """
+    """Erro de validação: levantado quando campos obrigatórios estão faltando ou inválidos."""
 
     pass
 
 
 class DuplicatePatientError(EmissorError):
-    """
-    Paciente duplicado.
-
-    Levantado ao tentar criar paciente com nome já existente.
-    """
+    """Paciente duplicado: levantado ao tentar criar paciente com nome já existente."""
 
     def __init__(self, nome: str) -> None:
         self.nome = nome

@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-ItemsSection — itens da receita (Qt).
-
-Lista rolável de itens, cada um com: Descrição (autocomplete do catálogo),
-Código (autocomplete), Unidade, Quantidade e Dias. Selecionar Descrição ou
-Código preenche os demais campos do item (cross-fill a partir do catálogo).
-
-StateObserver: PATIENT_SELECTED carrega os itens, PATIENT_CLEARED limpa.
-"""
+"""ItemsSection — itens da receita (Qt): lista rolável + catálogo + suficiência.
+StateObserver: PATIENT_SELECTED carrega, PATIENT_CLEARED limpa."""
 
 from __future__ import annotations
 
@@ -55,13 +48,7 @@ class ItemsSection(QtSection):
     """Painel de itens da receita."""
 
     def __init__(self, parent: QWidget, app: QtApp) -> None:
-        """
-        Inicializa a seção de itens.
-
-        Args:
-            parent: Widget pai
-            app: Referência à aplicação principal (QtApp)
-        """
+        """Inicializa seção de itens; args: parent, app."""
         super().__init__(parent, app)
 
         # Cada entrada: dict com widgets da linha
@@ -83,24 +70,22 @@ class ItemsSection(QtSection):
 
         self._build_ui()
 
-    # ========== Catálogo ==========
+    # Catálogo
 
     def _load_catalog(self) -> None:
-        """Carrega o catálogo completo uma vez para autocomplete local."""
-        try:
-            rows = self.db.get_all_catalog_items()
-        except Exception as e:
-            ErrorHandler.log(
-                f"Erro ao carregar catálogo de itens: {e}",
-                level=ErrorLevel.WARNING,
-                context=ErrorContext.DATABASE,
-            )
-            rows = []
+        """Carrega catálogo para autocomplete (assíncrono)."""
+        self.run_db(
+            self.db.get_all_catalog_items,
+            on_done=self._apply_catalog,
+            on_error=self._on_catalog_load_error,
+        )
 
+    def _apply_catalog(self, rows: Any) -> None:
+        """Preenche o catálogo e atualiza os combos existentes (thread principal)."""
         self._catalog = {}
         self._desc_options = {}
         self._cod_options = {}
-        for row in rows:
+        for row in rows or []:
             item_id = str(row.get("item_id", "")).strip()
             descricao = str(row.get("descricao", "")).strip()
             unidade = str(row.get("unidade", "")).strip()
@@ -113,8 +98,23 @@ class ItemsSection(QtSection):
             }
             self._desc_options[item_id] = descricao
             self._cod_options[item_id] = item_id
+        self._refresh_catalog_combos()
 
-    # ========== UI ==========
+    def _on_catalog_load_error(self, exc: BaseException) -> None:
+        """Falha ao carregar catálogo — mantém opções vazias, sem travar a UI."""
+        ErrorHandler.log(
+            f"Erro ao carregar catálogo de itens: {exc}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.DATABASE,
+        )
+
+    def _refresh_catalog_combos(self) -> None:
+        """Atualiza as opções de todos os combos de item existentes."""
+        for entry in self._item_rows:
+            entry["desc"].set_search_fn(static_search_fn(self._desc_options))
+            entry["cod"].set_search_fn(static_search_fn(self._cod_options))
+
+    # UI
 
     def _build_ui(self) -> None:
         """Constrói o cabeçalho de colunas + lista rolável de itens."""
@@ -150,15 +150,7 @@ class ItemsSection(QtSection):
         self.add_item()
 
     def _build_column_row(self, is_header: bool = False) -> QHBoxLayout:
-        """
-        Constrói o cabeçalho de colunas (labels).
-
-        Args:
-            is_header: True para construir o cabeçalho de labels
-
-        Returns:
-            QHBoxLayout com os labels de coluna alinhados
-        """
+        """Cabeçalho de colunas (is_header); retorna QHBoxLayout."""
         row = QHBoxLayout()
         row.setSpacing(6)
         row.setContentsMargins(0, 0, 0, 0)
@@ -191,7 +183,7 @@ class ItemsSection(QtSection):
         row.addWidget(add_btn)
         return row
 
-    # ========== Linhas de item ==========
+    # Linhas de item
 
     def add_item(
         self,
@@ -201,16 +193,7 @@ class ItemsSection(QtSection):
         quantidade: str = "",
         dias: str = "",
     ) -> None:
-        """
-        Adiciona uma linha de item com valores iniciais opcionais.
-
-        Args:
-            descricao: Descrição inicial
-            codigo: Código (item_id) inicial
-            unidade: Unidade inicial
-            quantidade: Quantidade inicial
-            dias: Dias inicial
-        """
+        """Adiciona linha de item (descricao, codigo, unidade, quantidade, dias)."""
         if self._items_list_layout is None:
             return
 
@@ -332,15 +315,10 @@ class ItemsSection(QtSection):
         for i, entry in enumerate(self._item_rows):
             entry["num"].setText(str(i + 1))
 
-    # ========== Suficiência ==========
+    # Suficiência
 
     def _load_history(self, patient_id: int | None) -> None:
-        """
-        Carrega histórico de dispensações do paciente de forma assíncrona.
-
-        Args:
-            patient_id: ID do paciente selecionado ou None.
-        """
+        """Carrega histórico de dispensações (assíncrono); patient_id pode ser None."""
         self._history_by_item.clear()
         self._history_by_descricao.clear()
         self._history_patient_id = patient_id
@@ -353,12 +331,7 @@ class ItemsSection(QtSection):
         )
 
     def _on_history_loaded(self, rows: Any) -> None:
-        """
-        Processa resultado do histórico e atualiza os labels de suficiência.
-
-        Args:
-            rows: Linhas retornadas pelo banco de dados.
-        """
+        """Processa histórico e atualiza labels de suficiência."""
         current_patient_id = self.patient_id
         if current_patient_id != self._history_patient_id:
             return
@@ -372,15 +345,7 @@ class ItemsSection(QtSection):
     def _parse_history_rows(
         self, rows: Any
     ) -> tuple[dict[str, list[tuple[date, int]]], dict[str, list[tuple[date, int]]]]:
-        """
-        Converte linhas do banco em dicionários de histórico por item e descrição.
-
-        Args:
-            rows: Linhas do banco com item_id, descricao, data_retirada e dias.
-
-        Returns:
-            Tupla (historico_por_item_id, historico_por_descricao).
-        """
+        """Converte linhas do banco em dicionários de histórico."""
         by_item: dict[str, list[tuple[date, int]]] = {}
         by_descricao: dict[str, list[tuple[date, int]]] = {}
         for row in rows:
@@ -411,24 +376,11 @@ class ItemsSection(QtSection):
 
     @staticmethod
     def _normalize_suficiencia_key(text: str) -> str:
-        """
-        Normaliza texto para comparação de suficiência.
-
-        Args:
-            text: Texto a ser normalizado.
-
-        Returns:
-            Texto em minúsculas e sem espaços extras.
-        """
+        """Normaliza texto para comparação de suficiência."""
         return " ".join(text.lower().split())
 
     def _current_dispensation_date(self) -> date:
-        """
-        Retorna a data da retirada selecionada na DatesSection.
-
-        Returns:
-            Data da retirada ou data atual se não for possível parser.
-        """
+        """Data da retirada selecionada na DatesSection."""
         try:
             _, data_filename = self.app.dates_section.get_data_retirada_for_pdf()
             return date.fromisoformat(data_filename)
@@ -444,13 +396,7 @@ class ItemsSection(QtSection):
     def _update_suficiencia_for_row(
         self, entry: dict[str, Any], current_date: date
     ) -> None:
-        """
-        Calcula e exibe a suficiência de uma linha específica.
-
-        Args:
-            entry: Dicionário com widgets da linha.
-            current_date: Data da dispensação atual.
-        """
+        """Calcula e exibe suficiência de uma linha."""
         suf_label = entry.get("suf")
         if suf_label is None:
             return
@@ -498,12 +444,7 @@ class ItemsSection(QtSection):
             suf_label.setText("-/-/-")
 
     def _toggle_suficiencia_mode(self, row_widget: QWidget) -> None:
-        """
-        Alterna o modo de exibição da suficiência de uma linha.
-
-        Args:
-            row_widget: Widget da linha clicada.
-        """
+        """Alterna modo de exibição de suficiência."""
         current_mode = self._suficiencia_modes.get(row_widget, "salvo")
         new_mode = "hoje" if current_mode == "salvo" else "salvo"
         self._suficiencia_modes[row_widget] = new_mode
@@ -512,15 +453,7 @@ class ItemsSection(QtSection):
             self._update_suficiencia_for_row(entry, self._current_dispensation_date())
 
     def _open_suficiencia_menu(self, row_widget: QWidget) -> None:
-        """
-        Abre o menu de contexto da suficiência (botão direito).
-
-        O item "Resetar" é alternável (checkable): ligado, marca o item para
-        ser ignorado no histórico de suficiência ao salvar a retirada.
-
-        Args:
-            row_widget: Widget da linha clicada.
-        """
+        """Menu de suficiência (clique direito); reset é alternável."""
         entry = next((e for e in self._item_rows if e["widget"] is row_widget), None)
         if entry is None:
             return
@@ -534,14 +467,7 @@ class ItemsSection(QtSection):
         menu.exec(self.cursor().pos())
 
     def _toggle_reset_suficiencia(self, row_widget: QWidget) -> None:
-        """
-        Alterna o estado de reset (ignore histórico) de uma linha. Quando
-        ligado, purga o histórico em memória daquele item para feedback
-        imediato; a persistência ocorre ao salvar a retirada.
-
-        Args:
-            row_widget: Widget da linha a alternar.
-        """
+        """Alterna reset de linha; purga histórico ao ligar."""
         entry = next((e for e in self._item_rows if e["widget"] is row_widget), None)
         if entry is None:
             return
@@ -561,13 +487,7 @@ class ItemsSection(QtSection):
         self._update_suficiencia_for_row(entry, self._current_dispensation_date())
 
     def get_reset_item_keys(self) -> list[tuple[str, str]]:
-        """
-        Retorna os pares (item_id, descricao) das linhas com reset ativo,
-        para serem ignorados no histórico ao salvar a retirada.
-
-        Returns:
-            Lista de tuplas (item_id, descricao) normalizadas.
-        """
+        """Pares (item_id, descricao) com reset ativo."""
         keys: list[tuple[str, str]] = []
         for entry in self._item_rows:
             if not self._suficiencia_reset.get(entry["widget"], False):
@@ -591,13 +511,7 @@ class ItemsSection(QtSection):
         self.add_item()
 
     def load_items(self, items: Any) -> None:
-        """
-        Carrega uma lista de itens (do paciente).
-
-        Args:
-            items: Lista de dicts/objetos com item_id, descricao, unidade,
-                quantidade, dias
-        """
+        """Carrega lista de itens do paciente."""
         for entry in self._item_rows:
             entry["widget"].deleteLater()
         self._item_rows.clear()
@@ -618,13 +532,7 @@ class ItemsSection(QtSection):
         self.field_changed.emit()
 
     def get_items_data(self) -> list[dict[str, str]]:
-        """
-        Extrai os itens preenchidos (apenas os com descrição).
-
-        Returns:
-            Lista de dicionários com num/descricao/item_id/unidade/
-            quantidade/dias
-        """
+        """Extrai itens preenchidos (com descrição)."""
         items: list[dict[str, str]] = []
         for entry in self._item_rows:
             descricao = entry["desc"].current_text().strip()
@@ -645,19 +553,12 @@ class ItemsSection(QtSection):
     def finish_edit(self) -> None:
         """Qt: edições são commitadas imediatamente (no-op)."""
 
-    # ========== Autocomplete (catálogo) ==========
+    # Autocomplete
 
     def _on_desc_selected(
         self, key: object, cod_combo: SearchableComboBox, unid_edit: QLineEdit
     ) -> None:
-        """
-        Seleção de descrição: preenche código e unidade a partir do catálogo.
-
-        Args:
-            key: item_id selecionado
-            cod_combo: Combo de código da mesma linha
-            unid_edit: Campo unidade da mesma linha
-        """
+        """Preenche código/unidade ao selecionar descrição."""
         if not isinstance(key, str):
             return
 
@@ -673,14 +574,7 @@ class ItemsSection(QtSection):
     def _on_cod_selected(
         self, key: object, desc_combo: SearchableComboBox, unid_edit: QLineEdit
     ) -> None:
-        """
-        Seleção de código: preenche descrição e unidade a partir do catálogo.
-
-        Args:
-            key: item_id selecionado
-            desc_combo: Combo de descrição da mesma linha
-            unid_edit: Campo unidade da mesma linha
-        """
+        """Preenche descrição/unidade ao selecionar código."""
         if not isinstance(key, str):
             return
 
@@ -694,13 +588,10 @@ class ItemsSection(QtSection):
         self._update_suficiencia_labels()
 
     def _refresh_catalog(self) -> None:
-        """Recarrega o catálogo e atualiza opções de todos os combos existentes."""
+        """Recarrega catálogo; combos atualizados em _apply_catalog."""
         self._load_catalog()
-        for entry in self._item_rows:
-            entry["desc"].set_search_fn(static_search_fn(self._desc_options))
-            entry["cod"].set_search_fn(static_search_fn(self._cod_options))
 
-    # ========== StateObserver ==========
+    # StateObserver
 
     @on(StateEventType.PATIENT_SELECTED)
     def _on_patient_selected(self, data: dict) -> None:
@@ -728,7 +619,7 @@ class ItemsSection(QtSection):
     def _on_pdf_generated(self, data: dict) -> None:
         self._load_history(self.patient_id)
 
-    # ========== Helpers ==========
+    # Helpers
 
     @staticmethod
     def _set_combo_text(combo: SearchableComboBox, text: str) -> None:

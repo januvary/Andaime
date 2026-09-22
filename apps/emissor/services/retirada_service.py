@@ -49,11 +49,7 @@ class RetiradaService:
         self._pdf_generator = pdf_generator
 
     def validate_for_pdf(self, selected_patient: Any, data: dict[str, Any]) -> None:
-        """Valida campos obrigatórios para geração de PDF.
-
-        Lê os campos do formulário diretamente de ``data`` (fonte única,
-        completa e não-perdida), evitando encadeamento de parâmetros.
-        """
+        """Valida campos obrigatórios para PDF. Lê direto de data."""
         is_valid, error_msg = PatientDataValidator.validate_for_pdf_generation(
             selected_patient=selected_patient,
             processo_n=(data.get("processos") or [""])[0] or "",

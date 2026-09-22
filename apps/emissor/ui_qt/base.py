@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""QtSection — classe base para as seções da UI Qt.
-
-Espelha o contrato de BaseSection (CTk): referência à app, registro como
-StateObserver, cleanup de widgets e handler de erro. Cada seção é um QFrame
-(painel) com header opcional e área de conteúdo. A comunicação entre seções é
-sempre via StateManager (eventos), nunca por chamadas diretas."""
+"""QtSection — base Qt panel: app ref, StateObserver, cleanup, optional header."""
 
 from __future__ import annotations
 
@@ -74,7 +69,7 @@ class QtSection(QFrame, StateObserver):
         """ID do paciente selecionado (atalho para state_manager)."""
         return self._app.state_manager.get_patient_id()
 
-    # ========== Acesso a dados ==========
+    # Acesso a dados
 
     @property
     def state(self) -> StateManager:
@@ -91,10 +86,10 @@ class QtSection(QFrame, StateObserver):
         fn: Callable[..., Any],
         *args: Any,
         on_done: Callable[[Any], None],
+        on_error: Callable[[BaseException], None] | None = None,
     ) -> None:
-        """Executa ``fn`` (método de ``self.db``) no worker thread; o
-        resultado chega em ``on_done`` na thread principal."""
-        self._app.db_runner.run(fn, *args, on_done=on_done)
+        """Executa ``fn`` no worker; resultado em ``on_done`` na thread principal."""
+        self._app.db_runner.run(fn, *args, on_done=on_done, on_error=on_error)
 
     @staticmethod
     def set_edit_text(edit: QLineEdit | None, value: str) -> None:
@@ -106,7 +101,7 @@ class QtSection(QFrame, StateObserver):
         edit.setCursorPosition(0)
         edit.blockSignals(False)
 
-    # ========== Observer ==========
+    # Observer
 
     def _register_observer(self) -> None:
         """Registra a seção como observadora do StateManager."""
@@ -153,7 +148,7 @@ class QtSection(QFrame, StateObserver):
             show_dialog=True,
         )
 
-    # ========== Construção de UI ==========
+    # Construção de UI
 
     def add_header(self, title: str) -> QFrame:
         """Adiciona barra de header com título; retorna o QFrame para estilo."""
@@ -177,7 +172,7 @@ class QtSection(QFrame, StateObserver):
         self._root.addLayout(content)
         return content
 
-    # ========== Helpers de widget ==========
+    # Helpers de widget
 
     def register_widget(self, name: str, widget: QWidget | None) -> None:
         """Registra widget para tracking/cleanup."""
@@ -189,7 +184,7 @@ class QtSection(QFrame, StateObserver):
         """True se o widget é utilizável (não nulo)."""
         return widget is not None
 
-    # ========== Ciclo de vida ==========
+    # Ciclo de vida
 
     def finish_edit(self) -> None:
         """Hook chamado ao finalizar edição. Override nas subclasses."""

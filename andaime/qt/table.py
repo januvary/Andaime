@@ -1,13 +1,11 @@
 """Table helpers for Qt — two approaches, same module.
 
-**QTableWidget path** (simplest): use ``table_batch_populate`` to freeze
-``ResizeToContents`` columns during batch ``setItem``, avoiding the
-quadratic re-measure that occurs when inserting rows one at a time.
+**QTableWidget**: use ``table_batch_populate`` to freeze column resize
+during batch ``setItem``, avoiding quadratic re-measure.
 
-**QTableView + model path** (fastest, scales): use ``TableViewModel`` with
-``ColumnSpec`` definitions. The model holds plain data objects (no per-cell
-widget allocation); the view only paints visible rows. ``beginResetModel``
-/``endResetModel`` batches updates atomically — no manual signal blocking.
+**QTableView + model**: use ``TableViewModel`` with ``ColumnSpec``.
+The model holds plain data objects; the view only paints visible rows.
+``beginResetModel``/``endResetModel`` batches updates atomically.
 """
 
 from __future__ import annotations
@@ -31,23 +29,7 @@ from PySide6.QtWidgets import (
 
 @contextmanager
 def table_batch_populate(table: QTableWidget) -> Iterator[None]:
-    """Context manager for efficient batch population of a QTableWidget.
-
-    Freezes ``ResizeToContents`` columns to ``Fixed`` and blocks signals
-    during the context, then restores modes and does a single measurement
-    pass on exit. This avoids the quadratic re-measure that occurs when
-    ``setItem`` is called one row at a time with dynamic resize columns.
-
-    If sorting is enabled on the table, it is temporarily disabled and the
-    previous sort indicator is restored after population.
-
-    Usage::
-
-        with table_batch_populate(table):
-            table.setRowCount(len(rows))
-            for row, item in enumerate(rows):
-                table.setItem(row, 0, QTableWidgetItem(item.name))
-    """
+    """Context manager for efficient batch population of a QTableWidget."""
     header = table.horizontalHeader()
     dynamic = [
         c
@@ -81,13 +63,7 @@ def table_batch_populate(table: QTableWidget) -> Iterator[None]:
 
 
 class NoElideDelegate(QStyledItemDelegate):
-    """Draws cell text without ellipsis ("...") and adds a bottom separator.
-
-    By default, Qt elides text that doesn't fit a cell. This delegate draws
-    the text directly via ``painter.drawText``, which clips at the cell
-    boundary without inserting "...". A thin separator line is drawn at the
-    bottom of each row for visual separation when grid lines are hidden.
-    """
+    """Draws cell text without ellipsis and adds a bottom separator."""
 
     _TEXT_HMARGIN = 8
 
@@ -139,21 +115,7 @@ _PADDING_ROLE = Qt.ItemDataRole.UserRole + 1
 
 @dataclass(frozen=True)
 class ColumnSpec:
-    """Declarative column definition for ``TableViewModel``.
-
-    Attributes:
-        header: Header label text.
-        getter: ``(row_data) -> display_text`` called per cell.
-        alignment: Cell text alignment (default: centered).
-        header_alignment: Header text alignment (default: centered).
-        resize_mode: How the column resizes (default: Interactive).
-        width: Fixed pixel width (used when ``resize_mode=Fixed``).
-        foreground: Optional ``(row_data) -> QColor | None`` for per-row
-            foreground color (e.g. status colors).
-        padding: Extra horizontal padding (px per side) added to the cell's
-            size hint. Useful for ``ResizeToContents`` columns that look
-            too tight. Default: 0.
-    """
+    """Declarative column definition for ``TableViewModel``."""
 
     header: str
     getter: Callable[[Any], str]
@@ -166,17 +128,7 @@ class ColumnSpec:
 
 
 class TableViewModel(QAbstractTableModel):
-    """Generic table model backed by a list of plain data objects.
-
-    Each row is a data object (dataclass, namedtuple, dict, etc.).
-    ``ColumnSpec.getter`` extracts display text; ``ColumnSpec.foreground``
-    optionally returns a per-row ``QColor``. The row's ID (for lookups
-    via ``row_id`` / ``find_row_by_id``) comes from ``id_getter``.
-
-    Call ``set_rows(rows)`` to replace all data atomically — the view
-    updates in one pass via ``beginResetModel``/``endResetModel``, so no
-    manual signal blocking or resize freezing is needed.
-    """
+    """Generic table model backed by a list of plain data objects."""
 
     def __init__(
         self,

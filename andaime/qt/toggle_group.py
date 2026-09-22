@@ -1,12 +1,4 @@
-"""Grupo de botões tipo "toggle" (controle segmentado) — andaime.qt.
-
-Conjunto de botões onde exatamente um está ativo (comportamento de
-"radio"). O botão ativo usa o papel ``flat-fill`` (preenchido); os
-demais usam o estilo plano (``flat``). Os segmentos são dispostos em
-uma única linha, colados (espaçamento 0) e com divisores, formando um
-controle segmentado —— ( | | ). O visual de borda/divisores vem do QSS
-global (``ToggleGroup``), então reage ao tema automaticamente.
-"""
+"""Grupo de botões tipo "toggle" (controle segmentado) — andaime.qt."""
 
 from __future__ import annotations
 

@@ -1,16 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Olostech Authentication & Login Automation.
-
-Implementa a cadeia completa de autenticação Olostech:
-  1. Autenticação de máquina (SHA-1 de endereços MAC)
-  2. Rotação de domínio
-  3. Fluxo de login (credenciais -> unidade -> ambiente -> perfil)
-
-O formato do hash MAC (reverse-engineered do Java SaudeTech.exe) é:
-    SHA-1( mac_address|os_name|os_arch|processor_count )
-Codificação ISO-8859-1, saída em minúsculas.
-"""
+"""Olostech auth automation. MAC hash = SHA-1(mac|os|arch|cpu) ISO-8859-1 lowercase. Steps: machine auth, domain rotation, login."""
 
 from __future__ import annotations
 
@@ -33,20 +23,13 @@ from emissor.olostech.exceptions import OlostechAuthError, OlostechConfigError
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-# ---------------------------------------------------------------------------
-# Helpers de autenticação de máquina
-# ---------------------------------------------------------------------------
+# Authentication helpers
 
 BLACKLISTED_MACS = {"000000000000", "020054554e01", "000100012f9b"}
 
 
 def get_physical_mac_addresses(log_callback: Any | None = None) -> list[str]:
-    """Coleta endereços MAC físicos (estilo Java MacAddress).
-
-    Exclui blacklist e MACs localmente administrados (virtuais).
-    Retorna hex minúsculo sem separadores. Tenta 3x (rede pode não
-    estar pronta no boot — WinError 50); fallback uuid.getnode().
-    """
+    """Collect physical MACs (Java style). Excludes blacklist/virtually-administered MACs. Tries 3x (network may not be ready at boot), falls back to uuid.getnode(). Returns lowercase hex without separators."""
     def log(msg: str) -> None:
         if log_callback:
             log_callback(msg)
@@ -134,13 +117,7 @@ def get_physical_mac_addresses(log_callback: Any | None = None) -> list[str]:
 
 
 def java_style_os_name() -> str:
-    """Retorna o os.name como o Java reporta.
-
-    O Java (JDK 8u321+/11.0.13+/17+) reporta "Windows 11" em builds
-    >= 22000, enquanto platform.release() do Python sempre retorna "10".
-    O hash registrado pelo launcher Java usa o nome do Java — precisamos
-    reproduzi-lo exatamente.
-    """
+    """Return os.name as Java reports it. Java (JDK 8u321+/11/17+) reports "Windows 11" on builds >=22000; Python platform.release() always says "10". Hash matches Java launcher exactly."""
     if platform.system() != "Windows":
         return f"{platform.system()} {platform.release()}"
     try:
@@ -151,11 +128,7 @@ def java_style_os_name() -> str:
 
 
 def generate_mac_hash(mac_hex: str) -> str:
-    """Gera SHA-1 exatamente como a aplicação Java faz.
-
-    Formato: SHA-1( mac_hex|os.name|os.arch|processor_count )
-    Codificação ISO-8859-1.
-    """
+    """Generate SHA-1 exactly like Java app. Format: SHA-1(mac_hex|os.name|os.arch|cpu). ISO-8859-1 encoding."""
     os_name = java_style_os_name()
     os_arch = platform.machine().lower()
     cpu_count = os.cpu_count()
@@ -165,12 +138,7 @@ def generate_mac_hash(mac_hex: str) -> str:
 
 
 def build_machine_auth_params(log_callback: Any | None = None) -> tuple[str, str]:
-    """Monta parâmetros macaddress e dados para conferir.asp.
-
-    Retorna (macaddress_param, dados_param):
-      macaddress = hash1,hash2,...
-      dados = mac1|os|arch,mac2|os|arch,...
-    """
+    """Build mac/dados params for conferir.asp. Returns (macaddress_hashes, dados_str): hashes=hash1,hash2,...; dados=mac1|os|arch,..."""
     macs = get_physical_mac_addresses(log_callback)
     if not macs:
         raise OlostechAuthError("Nenhum endereço MAC físico encontrado")
@@ -183,9 +151,7 @@ def build_machine_auth_params(log_callback: Any | None = None) -> tuple[str, str
     return ",".join(hashes), ",".join(dados_parts)
 
 
-# ---------------------------------------------------------------------------
-# Autenticação
-# ---------------------------------------------------------------------------
+# Authentication
 
 class OlostechAuth:
     """Gerencia autenticação e login na plataforma Olostech."""
@@ -195,14 +161,7 @@ class OlostechAuth:
         config: dict[str, Any],
         log_callback: Any | None = None,
     ) -> None:
-        """Inicializa com configuração Olostech.
-
-        Args:
-            config: dict com as chaves obrigatórias:
-                username, password, lst_acesso, unit, environment, role,
-                aceite_chave.
-            log_callback: função opcional para receber mensagens de log.
-        """
+        """Init with Olostech config (username, password, lst_acesso, unit, env, role, aceite_chave) and optional log_callback."""
         self._validate_config(config)
         self.config = config
         self._log_cb = log_callback
@@ -250,9 +209,7 @@ class OlostechAuth:
         """Público para uso por módulos auxiliares (PatientAttendance etc.)."""
         self._log(msg, level)
 
-    # ------------------------------------------------------------------
     # FASE 1: Autenticação de máquina
-    # ------------------------------------------------------------------
 
     def machine_auth(self) -> bool:
         """Executa o protocolo de 3 passos de autenticação de máquina."""
@@ -305,9 +262,8 @@ class OlostechAuth:
 
         redirect_resp = self.session.get(redirect_url, timeout=60)
 
-        # lstAcesso fica na página do redirect (domínio w[x]), não no
-        # verifica.asp. O valor embute o id2 da máquina — o fallback da
-        # configuração só vale para a máquina que o gerou.
+        # lstAcesso está no redirect (domínio w[x]), não em verifica.asp; embute id2.
+        # Fallback de config só vale para máquina que o gerou.
         lst_match = (
             re.search(r'name="lstAcesso"[^>]*value="([^"]+)"', redirect_resp.text)
             or re.search(r'value="([^"]+)"[^>]*name="lstAcesso"', redirect_resp.text)
@@ -322,9 +278,7 @@ class OlostechAuth:
         self._log("Autenticação de máquina concluída.")
         return True
 
-    # ------------------------------------------------------------------
     # FASE 2: Login de usuário
-    # ------------------------------------------------------------------
 
     def _check_errors(self, text: str, step_name: str) -> list[str] | None:
         """Extrai mensagens de erro visíveis do HTML."""

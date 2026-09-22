@@ -249,10 +249,7 @@ class StateManager:
             return [dict(r) for r in self._receitas]
 
     def set_receitas(self, receitas: List[Dict[str, str]]) -> None:
-        """Define a lista de receitas e notifica observadores.
-
-        Receitas são compactas (sem buracos); cada item tem "data" e "tipo".
-        """
+        """Define lista de receitas (compactas, sem buracos; item = data+tipo) e notifica observadores."""
         normalized = []
         for r in receitas:
             data = (r.get("data") or "").strip()
@@ -280,12 +277,7 @@ class StateManager:
         self.emit(StateEventType.DATE_RECALCULATION_NEEDED)
 
     def update_date_field(self, field_name: str, value: Any) -> None:
-        """Atualiza um campo de data (normaliza None para "") e notifica.
-
-        Args:
-            field_name: 'periodicidade'
-            value: Valor (None vira "")
-        """
+        """Atualiza campo de data (normaliza None → "") e notifica. Args: field_name='periodicidade', value (None vira '")."""
         self.update_date_fields(**{field_name: value})
 
     def request_date_recalculation(self) -> None:
@@ -293,11 +285,7 @@ class StateManager:
         self.emit(StateEventType.DATE_RECALCULATION_NEEDED)
 
     def update_date_fields(self, **fields: Any) -> None:
-        """Atualiza múltiplos campos de data com única notificação.
-
-        Args:
-            **fields: pares para periodicidade
-        """
+        """Atualiza múltiplos campos de data com única notificação. Args: **fields = pares para periodicidade."""
         valid_fields = {"periodicidade"}
         invalid = [f for f in fields.keys() if f not in valid_fields]
         if invalid:
@@ -332,14 +320,7 @@ class StateManager:
         retirada_count_fn: Any = None,
         bloquear_balanco: bool = False,
     ) -> Dict[str, Any]:
-        """Calcula a próxima retirada e armazena no estado.
-
-        Args:
-            enable_distribution: habilita distribuição inteligente
-            distribution_window_days: dias para trás na janela (1-7)
-            retirada_count_fn: callable(start, end) → dict data→contagem
-            bloquear_balanco: evita últimos 5 dias úteis do mês
-        """
+        """Calcula próxima retirada e armazena no estado. Args: enable_distribution (inteligente), distribution_window_days (1-7), retirada_count_fn (callable), bloquear_balanco (evita últimos 5 dias úteis do mês)."""
         if not periodicidade_str:
             self.set_calculated_dates({})
             return {}

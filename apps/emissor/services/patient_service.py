@@ -74,9 +74,7 @@ class PatientService:
         data: dict[str, Any],
         current_patient: Patient | None = None,
     ) -> SavePatientResult:
-        """Salva dados combinados (pessoais + opções + itens), expandindo
-        campos multi-instância e preenchendo vazios do paciente atual.
-        Levanta ValidationError se ID inválido ou dados vazios."""
+        """Salva dados combinados (pessoais + opções + itens), expande multi-instância e preenche vazios; levanta ValidationError se ID inválido ou vazio."""
         if patient_id is None or patient_id <= 0:
             raise ValidationError("ID do paciente é obrigatório para salvar dados")
 
@@ -116,9 +114,7 @@ class PatientService:
     def _expand_multi_instance_fields(
         self, data: dict[str, Any], current_patient: Patient | None
     ) -> None:
-        """Expande campos multi-instância (ex.: processo_n → processo_2_n…)
-        e preenche campos ausentes do paciente atual com string vazia para
-        limpeza no banco."""
+        """Expande campos multi-instância (ex. processo_n → processo_2_n…) e preenche ausentes com '' para limpeza do banco."""
         fields_to_check = get_all_patient_data_fields()
 
         for field_name in fields_to_check.copy():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
@@ -9,13 +10,13 @@ from typing import Any
 import os
 
 from andaime.qt import ShortcutManager
-from andaime.db_worker import DatabaseWorker
 from andaime.error_handler import (
     ErrorContext,
     ErrorHandler,
     ErrorLevel,
     friendly_message,
 )
+from andaime.db_worker import RetryingDatabaseWorker, drain_worker
 from emissor.database.emissor_db import EmissorDatabase
 from emissor.services.patient_service import PatientService
 from emissor.services.retirada_service import RetiradaService
@@ -54,9 +55,7 @@ from PySide6.QtWidgets import (
 from emissor.state import DirtyTracker, StateManager
 from emissor.ui_qt.theme import get_palette, qpalette, set_theme, stylesheet
 
-# ============================================================================
 # Pesos do grid
-# ============================================================================
 
 _COL_PATIENT = 4
 _COL_OPTIONS = 6
@@ -88,10 +87,8 @@ class QtApp(QMainWindow):
         self._workflow_service: RetiradaWorkflowService | None = None
         register_cleanup(self._emissor_db.close, "emissor_database_qt")
 
-        # DB off-main-thread: worker dedicado (serializa a conexão) + bridge Qt
-        # que devolve resultados na thread principal via signal. Drenado em
-        # closeEvent antes do close() do banco (ver _drain_db_worker).
-        self._db_worker = DatabaseWorker(self._emissor_db)
+        # DB off-main-thread: worker dedicado (serializa conexão) + bridge Qt (signal para thread principal); reconexão automática se share cair.
+        self._db_worker = RetryingDatabaseWorker(self._emissor_db)
         self._db_runner = DbAsyncRunner(self._db_worker)
 
         self.config_manager = andaime_instance.config
@@ -207,13 +204,7 @@ class QtApp(QMainWindow):
         color: str | None = None,
         path: str | None = None,
     ) -> None:
-        """Define o texto do status global.
-
-        Args:
-            color: hex ou chave do tema (ex.: "status_success"); None = padrão
-            path: caminho de arquivo/pasta opcional; quando informado a linha
-                fica sublinhada e clicável, abrindo o explorador no caminho.
-        """
+        """Define texto do status global. Args: color (hex/chave tema ex. "status_success"; None=padrao), path (arquivo/pasta opcional; sublinha e abre explorador)."""
         if self._status_label is not None:
             self._status_label.set_status(text, color, path)
 
@@ -351,9 +342,7 @@ class QtApp(QMainWindow):
     # ========== Bloqueio de UI ==========
 
     def _lock_ui(self) -> None:
-        """Desabilita controles de usuário durante fases assíncronas
-        (geração de PDF, impressão e registro Olostech) para evitar
-        troca de paciente ou duplo-gatilho enquanto o worker roda."""
+        """Desabilita controles de usuário durante fases assíncronas (PDF, impressão, registro Olostech) para evitar troca de paciente / duplo-gatilho enquanto worker roda."""
         self._ui_lock_count += 1
         if self._ui_lock_count == 1:
             self.actions_section.set_pdf_actions_busy(True)
@@ -427,11 +416,7 @@ class QtApp(QMainWindow):
         )
 
     def _generate_pdf_workflow(self, auto_print: bool = False) -> None:
-        """Workflow central de geração de PDF — assíncrono via db_runner.
-
-        Args:
-            auto_print: se True, envia para impressora após salvar
-        """
+        """Workflow central de geração de PDF (assíncrono via db_runner). Args: auto_print (True = envia para impressora após salvar)."""
         self._finalize_active_edits()
 
         if self._workflow_service is None:
@@ -439,11 +424,82 @@ class QtApp(QMainWindow):
                 "Serviço de workflow não inicializado", color="status_error"
             )
             return
+
+        # Se datas ainda não calculadas e distribuição ligada: calcula primeiro no worker (contagem toca banco) e continua em _on_dates_ensured — thread principal não espera banco.
+        if self._dates_need_async_ensure():
+            self.search_section.set_status(
+                "Calculando datas...", color="status_warning"
+            )
+            self._lock_ui()
+            params = {
+                "data_retirada_str": self.dates_section.get_date_entries()["hoje"],
+                "periodicidade_str": self.state_manager.get_periodicidade(),
+                "distribution_window_days": self.config_manager.get(
+                    "distribution_window_days", 3
+                ),
+                "bloquear_balanco": self.state_manager.get_bloquear_balanco(),
+            }
+            db = self._emissor_db
+
+            def _calc_full_dates() -> dict:
+                from emissor.utils.date_utils import DateCalculator
+
+                return DateCalculator.calculate_proxima_vez(
+                    params["data_retirada_str"],
+                    periodicidade_str=params["periodicidade_str"],
+                    enable_distribution=True,
+                    distribution_window_days=params["distribution_window_days"],
+                    retirada_count_fn=db.count_retiradas_by_proxima_date,
+                    bloquear_balanco=params["bloquear_balanco"],
+                )
+
+            self._db_runner.run(
+                _calc_full_dates,
+                on_done=lambda result: self._on_dates_ensured(result, auto_print),
+                on_error=lambda exc: self._on_dates_ensure_failed(exc, auto_print),
+            )
+            return
+
+        self._continue_pdf_workflow(auto_print, lock_held=False)
+
+    def _dates_need_async_ensure(self) -> bool:
+        """True se falta calcular proxima_vez com distribuição (precisa do banco)."""
+        if not self.config_manager.get("distribute_retiradas", True):
+            return False
+        if (
+            self.state_manager.get_calculated_dates().get("proxima_vez")
+            is not None
+        ):
+            return False
+        return bool(self.state_manager.get_periodicidade())
+
+    def _on_dates_ensured(self, result: dict, auto_print: bool) -> None:
+        """Datas calculadas no worker — armazena e continua o workflow (UI thread)."""
+        self.state_manager.set_calculated_dates(result or {})
+        self._continue_pdf_workflow(auto_print, lock_held=True)
+
+    def _on_dates_ensure_failed(self, exc: BaseException, auto_print: bool) -> None:
+        """Falha no cálculo — continua com o fallback puro (sem banco)."""
+        ErrorHandler.log(
+            f"Erro ao calcular datas com distribuição: {exc}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.DATABASE,
+        )
+        self._continue_pdf_workflow(auto_print, lock_held=True)
+
+    def _continue_pdf_workflow(self, auto_print: bool, lock_held: bool) -> None:
+        """Valida, monta o request e submete prepare + commit ao worker."""
         workflow = self._workflow_service
+        if workflow is None:
+            if lock_held:
+                self._unlock_ui()
+            return
 
         # Validação rápida na thread da UI (campos obrigatórios).
         request = self._build_retirada_request()
         if request is None:
+            if lock_held:
+                self._unlock_ui()
             self.search_section.set_status(
                 "Local de salvamento não configurado.", color="status_error"
             )
@@ -451,7 +507,8 @@ class QtApp(QMainWindow):
 
         self.search_section.set_status("Gerando PDF...", color="status_warning")
         self._pending_auto_print = auto_print
-        self._lock_ui()
+        if not lock_held:
+            self._lock_ui()
 
         # Submeter prepare + commit ao worker thread.
         pdf_gen = self.pdf_generator
@@ -590,7 +647,8 @@ class QtApp(QMainWindow):
             self._unlock_ui()
 
     def save_patient_data(self) -> None:
-        """Salva os dados editados do paciente no banco de dados."""
+        """Salva dados do paciente no worker; resultado em
+        ``_on_save_data_done`` na thread principal."""
         self._finalize_active_edits()
 
         patient_data = self.patient_section.get_patient_data()
@@ -606,10 +664,78 @@ class QtApp(QMainWindow):
                     context=ErrorContext.VALIDATION,
                 )
                 return
+            is_new_patient = True
+            patient_id = None
+            current_patient = None
+        else:
+            is_new_patient = False
+            nome = ""
+            current_patient = self.state_manager.get_selected_patient()
+            patient_id = self.state_manager.get_patient_id()
 
-            try:
-                result = self._patient_service.create_patient(nome)
-            except DuplicatePatientError:
+        data_to_save: dict[str, Any] = patient_data
+        data_to_save.update(options_data)
+        data_to_save["itens"] = items_data
+
+        if (patient_id is None and not is_new_patient) or not data_to_save:
+            ErrorHandler.log(
+                "Nenhum dado para salvar",
+                level=ErrorLevel.WARNING,
+                context=ErrorContext.VALIDATION,
+            )
+            return
+
+        service = self._patient_service
+        db = self._emissor_db
+
+        def _save_work() -> dict[str, Any]:
+            if is_new_patient:
+                # Não seleciona o Patient vazio aqui: PATIENT_SELECTED
+                # limparia o formulário. Salva e reseleciona no fim.
+                created = service.create_patient(nome)
+                pid = created.patient_id
+            else:
+                pid = patient_id
+            saved = service.save_patient_data(pid, data_to_save, current_patient)
+            full = db.get_patient_by_id(pid) if is_new_patient else None
+            return {
+                "is_new": is_new_patient,
+                "patient_id": pid,
+                "patient_name": saved.patient_name,
+                "full_patient": full,
+            }
+
+        self.search_section.set_status("Salvando dados...", color="status_warning")
+        self._lock_ui()
+        self._db_runner.run(
+            _save_work,
+            on_done=lambda res: self._on_save_data_done(res, data_to_save),
+            on_error=lambda exc: self._on_save_data_error(exc, nome),
+        )
+
+    def _on_save_data_done(
+        self, res: dict[str, Any], data_to_save: dict[str, Any]
+    ) -> None:
+        """Aplica o resultado do salvamento (thread principal)."""
+        try:
+            if res["is_new"]:
+                if res["full_patient"] is not None:
+                    self.state_manager.set_selected_patient(res["full_patient"])
+                self.patient_section.set_name_id_editable(False)
+            else:
+                self.state_manager.update_selected_patient(data_to_save)
+            self.search_section.set_status(
+                text=f"Dados salvos! - {res['patient_name']}",
+                color="status_success",
+            )
+            self.dirty_tracker.set_baseline(self._build_dirty_payload())
+        finally:
+            self._unlock_ui()
+
+    def _on_save_data_error(self, exc: BaseException, nome: str) -> None:
+        """Trata erro do salvamento (thread principal)."""
+        try:
+            if isinstance(exc, DuplicatePatientError):
                 from PySide6.QtWidgets import QMessageBox
 
                 QMessageBox.warning(
@@ -625,72 +751,34 @@ class QtApp(QMainWindow):
                     level=ErrorLevel.WARNING,
                     context=ErrorContext.VALIDATION,
                 )
-                return
-            except ValidationError as e:
+            elif isinstance(exc, ValidationError):
                 ErrorHandler.log(
-                    str(e),
+                    str(exc),
                     level=ErrorLevel.WARNING,
                     context=ErrorContext.VALIDATION,
                 )
-                return
-
-            # Não seleciona o Patient vazio aqui: PATIENT_SELECTED limparia
-            # o formulário. Salva com o id retornado e reseleciona no fim.
-            is_new_patient = True
-            patient_id = result.patient_id
-            current_patient = None
-
-            self.patient_section.set_name_id_editable(False)
-            self.search_section.set_status(
-                text=f"Paciente criado: {result.patient_name} (ID: {result.patient_id})",
-                color="status_success",
-            )
-        else:
-            is_new_patient = False
-            current_patient = self.state_manager.get_selected_patient()
-            patient_id = self.state_manager.get_patient_id()
-
-        data_to_save: dict[str, Any] = patient_data
-        data_to_save.update(options_data)
-        data_to_save["itens"] = items_data
-
-        if patient_id is not None and data_to_save:
-            try:
-                save_result = self._patient_service.save_patient_data(
-                    patient_id, data_to_save, current_patient
+            elif isinstance(
+                exc, (OSError, sqlite3.OperationalError, sqlite3.DatabaseError)
+            ):
+                self.search_section.set_status(
+                    "Erro de rede ao salvar dados — tente novamente",
+                    color="status_error",
                 )
-            except ValidationError as e:
                 ErrorHandler.log(
-                    str(e),
-                    level=ErrorLevel.WARNING,
-                    context=ErrorContext.VALIDATION,
+                    f"Erro de rede/banco ao salvar dados: {exc}",
+                    level=ErrorLevel.ERROR,
+                    context=ErrorContext.DATABASE,
                 )
-                return
-
-            if is_new_patient:
-                saved_patient = self.db.get_patient_by_id(patient_id)
-                if saved_patient is not None:
-                    self.state_manager.set_selected_patient(saved_patient)
             else:
-                self.state_manager.update_selected_patient(data_to_save)
-            self.search_section.set_status(
-                text=f"Dados salvos! - {save_result.patient_name}",
-                color="status_success",
-            )
-            self.dirty_tracker.set_baseline(self._build_dirty_payload())
-        else:
-            ErrorHandler.log(
-                "Nenhum dado para salvar",
-                level=ErrorLevel.WARNING,
-                context=ErrorContext.VALIDATION,
-            )
+                ErrorHandler.handle_error(exc, context=ErrorContext.DATABASE)
+                self.search_section.set_status(
+                    f"Erro inesperado ao salvar: {exc}", color="status_error"
+                )
+        finally:
+            self._unlock_ui()
 
     def _build_dirty_payload(self) -> dict[str, Any]:
-        """Monta o payload de salvamento usado no diff de dirty state.
-
-        Espelha save_patient_data; atendido_por é excluído por ser campo
-        transitório (PDF apenas — patient_service o descarta ao salvar).
-        """
+        """Monta payload de salvamento para diff dirty state. Espelha save_patient_data; atendido_por excluído (campo transitório PDF — patient_service descarta ao salvar)."""
         payload: dict[str, Any] = self.patient_section.get_patient_data()
         payload.update(self.options_section.get_options_data())
         payload.pop("atendido_por", None)
@@ -768,11 +856,7 @@ class QtApp(QMainWindow):
         )
 
     def handle_scan(self) -> None:
-        """Digitaliza documento e salva em RECIBOS ASSINADOS do paciente.
-
-        Usa ``scan_dpi`` e ``scan_color_mode`` do AppConfig. O acquire TWAIN
-        roda em QThread dedicado; a cópia para a rede roda no db_worker.
-        """
+        """Digitaliza documento e salva em RECIBOS ASSINADOS do paciente. Usa scan_dpi/scan_color_mode do AppConfig; acquire TWAIN em QThread dedicado, cópia rede no db_worker."""
         from PySide6.QtCore import QThread, QObject, Signal, Slot
 
         patient = self.state_manager.get_selected_patient()
@@ -1064,14 +1148,15 @@ class QtApp(QMainWindow):
                 "Configure usuário e senha do Olostech",
                 color="status_warning",
             )
+            self._unlock_ui()
             return
 
         self.search_section.set_status(
             "Registrando no Olostech...",
             color="status_warning",
         )
-        # Pedidos de numero vindos da thread: o pump mostra o popup
-        # na thread da UI e devolve a resposta (worker bloqueia).
+        # Pedidos de número vindos da thread: o pump mostra o popup
+        # na thread da UI (worker bloqueia).
         notif_requests: queue.Queue = queue.Queue()
 
         def _ask_blocking(desc: str, action: int) -> tuple[int, str] | None:
@@ -1094,19 +1179,17 @@ class QtApp(QMainWindow):
                     context=ErrorContext.APP,
                 )
 
-        # Nunca troca worker em voo: destruir QThread em execucao aborta o processo.
-        running = self._olostech_worker
-        if running is not None and running.isRunning():
+        self._stop_olostech_pump()
+        # Rejeita duplicata: um worker já roda pro paciente atual.
+        existing = self._olostech_worker
+        if existing is not None and existing.isRunning():
             ErrorHandler.log(
                 "Registro Olostech já em andamento — ignorando novo início",
                 level=ErrorLevel.WARNING,
                 context=ErrorContext.APP,
             )
+            self._unlock_ui()
             return
-        # Só trava a UI se nenhum outro fase (PDF/print) já estiver travando.
-        if self._ui_lock_count == 0:
-            self._lock_ui()
-        self._stop_olostech_pump()
         self._olostech_pump = QTimer(self)
         self._olostech_pump.timeout.connect(_pump)
         self._olostech_pump.start(250)
@@ -1121,7 +1204,7 @@ class QtApp(QMainWindow):
             lambda ok, msg: self._on_olostech_done(retirada.id, ok, msg)
         )
         # Libera o worker só quando a thread terminou de fato (finished),
-        # nunca no slot de resultado — destruir antes disso aborta o app.
+        # nunca no slot de resultado — destruir antes aborta o app.
         worker = self._olostech_worker
         worker.finished.connect(
             lambda w=worker: self._on_olostech_worker_finished(w)
@@ -1198,22 +1281,6 @@ class QtApp(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Desregistra observers ao fechar."""
-        self._drain_db_worker()
+        drain_worker(getattr(self, "_db_worker", None))
         self._cleanup_sections()
         super().closeEvent(event)
-
-    def _drain_db_worker(self) -> None:
-        """Encerra o worker de DB aguardando tarefas pendentes.
-
-        Roda ANTES do close() do banco para que operações em voo completem.
-        """
-        worker = getattr(self, "_db_worker", None)
-        if worker is not None:
-            try:
-                worker.shutdown(wait=True)
-            except Exception as e:
-                ErrorHandler.log(
-                    f"Erro ao encerrar DB worker: {e}",
-                    level=ErrorLevel.WARNING,
-                    context=ErrorContext.SHUTDOWN,
-                )

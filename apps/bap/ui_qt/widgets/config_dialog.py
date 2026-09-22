@@ -16,6 +16,7 @@ from typing import Any, Callable
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QMessageBox, QWidget
 
+from andaime.net_io import network_mkdir
 from andaime.qt.dialogs import QtConfigDialog as _QtConfigDialog
 
 
@@ -73,7 +74,7 @@ class QtConfigDialog(_QtConfigDialog):
         location_path = Path(location_str)
         if not location_path.exists():
             try:
-                location_path.mkdir(parents=True, exist_ok=True)
+                network_mkdir(location_path)
             except OSError:
                 QMessageBox.warning(
                     self,

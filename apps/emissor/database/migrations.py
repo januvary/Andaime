@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Migrações de banco de dados do Emissor."""
+"""Migrações de banco de dados Emissor (idempotente via PRAGMA user_version, atual=11)."""
 
 from typing import Any
 
@@ -10,10 +10,7 @@ class DatabaseMigrator:
 
     @staticmethod
     def run_all(cursor: Any, conn: Any, db_path: str) -> None:
-        """Executa migrações pendentes (idempotente via PRAGMA user_version).
-
-        Versão atual: 11. Bancos novos já criam o schema completo.
-        """
+        """Executa migrações pendentes (idempotente, versão atual 11; bancos novos já têm schema completo)."""
         if db_path == ":memory:":
             return
 
@@ -29,12 +26,7 @@ class DatabaseMigrator:
 
     @staticmethod
     def _migrate_retirada_items_fk(cursor: Any) -> None:
-        """Reconstrói retirada_items com FK item_id → items_catalog (cascade).
-
-        SQLite não permite ADD FOREIGN KEY via ALTER TABLE; a tabela é
-        recriada e os dados copiados (lista de colunas dinâmica para
-        suportar bancos antigos sem ignorar_suficiencia).
-        """
+        """Reconstrói retirada_items com FK item_id → items_catalog (cascade). SQLite não permite ADD FOREIGN KEY via ALTER; recria tabela copiando dados (colunas dinâmicas para bancos antigos sem ignorar_suficiencia)."""
         cols = [row[1] for row in cursor.execute("PRAGMA table_info(retirada_items)").fetchall()]
         if not cols:
             return

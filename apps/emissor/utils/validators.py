@@ -17,11 +17,7 @@ class PatientDataValidator:
         data_retirada_str: str | None = None,
         tipo: str | None = None,
     ) -> Tuple[bool, str]:
-        """Valida campos obrigatórios para gerar PDF. Retorna (is_valid, msg).
-
-        ``tipo`` é o tipo selecionado na UI (fonte da verdade). Pacientes do
-        tipo "insulina" não exigem número de processo.
-        """
+        """Valida campos obrigatórios para PDF. Retorna (bool, msg). Insulina não exige processo."""
         errors = []
 
         if not selected_patient or not selected_patient.get("nome"):

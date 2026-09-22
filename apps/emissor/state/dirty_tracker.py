@@ -41,13 +41,7 @@ def _diff_rows(key: str, base_rows: list, curr_rows: list) -> set[str]:
 
 
 class DirtyTracker:
-    """
-    Rastreia mudanças não salvas comparando o payload atual (o mesmo dict
-    que seria persistido) com o baseline registrado na carga/salvamento.
-
-    Campos escalares são comparados por chave; campos lista (ex.: itens)
-    são comparados por linha+campo, gerando chaves como "itens[0].dias".
-    """
+    """Rastreia mudanças não salvas comparando payload atual com baseline (carga/salvamento). Escalares por chave; listas por linha+campo (ex. "itens[0].dias")."""
 
     def __init__(self, state_manager: "StateManager") -> None:
         self._state_manager = state_manager

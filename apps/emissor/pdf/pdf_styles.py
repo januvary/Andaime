@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Gerenciamento de Estilos e Flowables para PDF ReportLab
-
-Centraliza criação de estilos Paragraph e wrappers Flowable,
-eliminando estado global e melhorando testabilidade.
-"""
+"""Estilos PDF ReportLab — ParagraphStyles + helpers."""
 
 from typing import cast
 

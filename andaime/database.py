@@ -53,11 +53,7 @@ def _decode_mount_point(raw: str) -> str:
 
 
 def _read_proc_mounts() -> list[tuple[str, str, str]]:
-    """
-    Lê /proc/mounts e devolve (device, mount_point, fstype) por linha.
-
-    Isolado em função própria para permitir teste sem /proc/mounts real.
-    """
+    """Lê /proc/mounts e devolve (device, mount_point, fstype) por linha."""
     entries: list[tuple[str, str, str]] = []
     try:
         with open("/proc/mounts", "r", encoding="utf-8") as fh:
@@ -72,20 +68,11 @@ def _read_proc_mounts() -> list[tuple[str, str, str]]:
 
 
 def _is_network_path(path: str) -> bool:
-    """
-    Detecta se o caminho está num filesystem de rede (SMB/CIFS/NFS/etc.).
+    """Detecta se o caminho está num filesystem de rede (SMB/CIFS/NFS/etc).
 
     O modo WAL do SQLite é não-confiável em shares de rede: a coordenação
-    via arquivo ``-shm`` memory-mapped quebra, causando hangs (e risco de
-    corrupção) em acesso multi-processo. Usa-se rollback-journal (DELETE)
-    nesses casos.
-
-    Args:
-        path: Caminho do arquivo de banco.
-
-    Returns:
-        True se o caminho parecer estar num filesystem de rede.
-        False se for local ou se não for possível determinar (default WAL).
+    via arquivo ``-shm`` quebra, causando hangs e risco de corrupção
+    em acesso multi-processo. Usa-se rollback-journal (DELETE) nesses casos.
     """
     raw = path
 
@@ -434,10 +421,10 @@ class BaseDatabase(ABC):
     def transaction(self) -> Iterator[None]:
         """Group operations into a single commit.
 
-        Calls to ``_commit()`` inside the block are deferred; the outermost
-        block commits once on success or rolls back on error. Nesting is
-        safe — only the outermost block commits.
-        """
+    Calls to ``_commit()`` inside the block are deferred; the outermost
+    block commits once on success or rolls back on error. Nesting is
+    safe — only the outermost block commits.
+    """
         with self._lock:
             already = self._in_transaction
             if not already:

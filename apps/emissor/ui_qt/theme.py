@@ -1,5 +1,4 @@
-"""Compatibilidade: re-exporta o tema neutro compartilhado de ``andaime.qt.theme``
-(a paleta/QSS canônica vive lá; ``brasao_ink`` e seleção vêm do tema)."""
+"""Re-exporta tema neutro compartilhado (andaime.qt.theme); brasao_ink local."""
 
 from __future__ import annotations
 
@@ -65,11 +64,7 @@ def _radio_overlay(palette: dict[str, str]) -> str:
 
 
 def stylesheet(palette: dict[str, str]) -> str:
-    """QSS global (tema compartilhado + overlays de checkbox/radio do Emissor).
-
-    Aceita o dict retornado por ``get_palette`` para manter compatibilidade
-    com os chamadores existentes.
-    """
+    """QSS global (tema + checkbox/radio); aceita paleta de get_palette."""
     theme = "dark" if palette is DARK else "light"
     return (
         get_stylesheet(theme)

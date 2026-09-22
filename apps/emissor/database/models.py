@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Data Models
-Dataclasses para entidades do banco de dados Emissor.
-"""
+"""Data Models — dataclasses para entidades do banco Emissor."""
 
 from __future__ import annotations
 
@@ -30,10 +27,7 @@ def _safe_int(value: Any) -> int:
 
 
 def _normalize_date_display(value: str) -> str:
-    """Convert a stored date (ISO or BR) to BR ``DD/MM/YYYY`` for display.
-
-    Unparseable or empty values are returned unchanged.
-    """
+    """Convert stored date (ISO/BR) to BR DD/MM/YYYY for display; unparseable/empty unchanged."""
     if not value:
         return ""
     parsed = parse_date(value)
@@ -177,10 +171,7 @@ class Patient(Mapping):
         return result
 
     def get_processo(self, index: int) -> str:
-        """Retorna processo pelo índice (1-based). Index 1 = processo_n.
-
-        Índices além dos processos preenchidos retornam "" (nunca levantam).
-        """
+        """Retorna processo pelo índice (1-based); 1 = processo_n. Índices além dos preenchidos retornam '' (nunca levantam)."""
         if index == 1:
             return self.processo_n
         if 2 <= index <= len(self.extra_processos) + 1:
@@ -204,10 +195,7 @@ class Patient(Mapping):
         return count
 
     def get_receita(self, index: int) -> ReceitaEntry:
-        """Retorna receita pelo índice (1-based); vazia se fora do range.
-
-        Receitas são compactas (sem buracos): índice 1 é a primeira.
-        """
+        """Retorna receita pelo índice (1-based); vazia se fora do range. Receitas compactas (sem buracos), 1 = primeira."""
         if 1 <= index <= len(self.receitas):
             return self.receitas[index - 1]
         return ReceitaEntry()

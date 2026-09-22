@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Agenda Service — camada de leitura para o calendário de retornos.
-
-Espelha a lógica do antigo AgendaDatabase (standalone/agenda.py), sem UI e
-sem instância global de app: recebe banco e pasta de arquivamento por injeção,
-sendo reutilizável entre Tk, Qt e testes."""
+"""Agenda Service — leitura de calendário de retornos (espelha AgendaDatabase; recebe db/pasta por injeção, reutilizável Tk/Qt/testes)."""
 
 from __future__ import annotations
 
@@ -29,19 +25,7 @@ class AgendaService:
         self._save_root = Path(save_root) if save_root is not None else None
 
     def get_appointments_by_date(self) -> dict[str, list[dict[str, Any]]]:
-        """Retorna retornos agrupados por data_proxima_retirada. O status é
-        "pendente"/"retirado" conforme existência de retirada posterior do
-        mesmo paciente; caminhos de PDF relativos à pasta de salvamento.
-
-        Regra de "retirado" (derivada sob demanda, sem coluna substituida):
-        uma retirada R é marcada como retirada ("retirado em X") se existir
-        uma retirada posterior M do mesmo paciente tal que:
-          - M.data_retirada > R.data_proxima_retirada  (retirada após o prazo,
-            independente de itens — regra solta),  OU
-          - R.data_retirada < M.data_retirada <= R.data_proxima_retirada com
-            ao menos um item em comum (reposição dentro da janela).
-        Adota-se o M de data mais cedo que satisfaça a condição.
-        """
+        """Retorna retornos agrupados por data_proxima_retirada. Status pendente/retirado conforme retirada posterior do mesmo paciente (regras derivadas: M.data_retirada > R.data_proxima_retirada OU R.data_retirada < M.data_retirada <= R.data_proxima_retirada com item em comum; usa M mais cedo). Caminhos PDF relativos à pasta de salvamento."""
         all_retiradas = self._db.get_all_retiradas()
         item_sets = self._db.get_retirada_item_sets(
             [r.id for r in all_retiradas if r.id is not None]

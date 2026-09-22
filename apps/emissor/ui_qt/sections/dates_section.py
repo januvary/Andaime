@@ -1,16 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-DatesSection — seção de datas (Qt).
-
-Espelha DatesSectionV3 (CTk): Data da Retirada editável (QDateEdit com
-popup de calendário), Próxima Retirada e Validade da receita calculadas.
-É um StateObserver: reage a PATIENT_SELECTED/CLEARED/UPDATED e a
-DATE_RECALCULATION_NEEDED (com debounce via QTimer).
-
-O cálculo em si é delegado a state_manager.calculate_dates() (backend
-reutilizado da UI CTk). Apenas a camada de apresentação é nova.
-"""
+"""DatesSection — datas (retirada, próxima, validade); reage a eventos."""
 
 from __future__ import annotations
 
@@ -44,13 +34,7 @@ class DatesSection(QtSection):
     """Painel de datas: retirada editável + próximas calculadas."""
 
     def __init__(self, parent: QWidget, app: QtApp) -> None:
-        """
-        Inicializa a seção de datas.
-
-        Args:
-            parent: Widget pai
-            app: Referência à aplicação principal (QtApp)
-        """
+        """Inicializa datas (retirada, próxima, validade); args: parent, app."""
         super().__init__(parent, app)
         # Contêiner transparente — os boxes de data são os elementos visuais
         self.setProperty("class", "")
@@ -73,14 +57,17 @@ class DatesSection(QtSection):
         self._recalc_timer.setInterval(50)
         self._recalc_timer.timeout.connect(self.recalculate_dates)
 
-    # ========== UI ==========
+        # Geração anti-obsoleto: só o recálculo mais recente atualiza os labels.
+        self._recalc_seq = 0
+
+    # UI
 
     def _build_ui(self) -> None:
         """Constrói os três boxes de data (graded neutral)."""
         content = self.content_layout()
         content.setSpacing(6)
 
-        # === Última Retirada (histórico) ===
+        # Última Retirada
         box4, lay4 = self._date_box("date-box-4")
         self._ultima_retirada_label = QLabel("—")
         self._ultima_retirada_label.setStyleSheet(f"font-size: {PX_LARGE + 1}px;")
@@ -95,7 +82,7 @@ class DatesSection(QtSection):
         lay4.addWidget(self._proxima_marcada_label)
         content.addWidget(box4)
 
-        # === Data da Retirada (editável) ===
+        # Data da Retirada
         box1, lay1 = self._date_box("date-box-1")
         self._hoje_edit = QDateEdit()
         self._hoje_edit.setDisplayFormat("dd/MM/yyyy")
@@ -113,7 +100,7 @@ class DatesSection(QtSection):
         lay1.addWidget(self._retirada_registered_label)
         content.addWidget(box1)
 
-        # === Próxima Retirada (calculada) ===
+        # Próxima Retirada
         box2, lay2 = self._date_box("date-box-2")
         self._proxima_label = QLabel("—")
         self._proxima_label.setStyleSheet(f"font-size: {PX_LARGE + 1}px;")
@@ -131,15 +118,7 @@ class DatesSection(QtSection):
 
     @staticmethod
     def _date_box(class_name: str) -> tuple[QFrame, QVBoxLayout]:
-        """
-        Cria um contêiner de data com a classe de fundo indicada.
-
-        Args:
-            class_name: Classe QSS ("date-box-1/2/3") para a cor graded
-
-        Returns:
-            Tupla (QFrame, QVBoxLayout) pronto para receber widgets
-        """
+        """Contêiner de data (class_name QSS); retorna (QFrame, QVBoxLayout)."""
         frame = QFrame()
         frame.setProperty("class", class_name)
         lay = QVBoxLayout(frame)
@@ -154,7 +133,7 @@ class DatesSection(QtSection):
         lbl.setProperty("class", "dim")
         return lbl
 
-    # ========== Eventos ==========
+    # Eventos
 
     def _on_date_changed(self, _new_date: QDate) -> None:
         """Data da retirada mudou → checa retirada existente e pede recálculo."""
@@ -162,11 +141,7 @@ class DatesSection(QtSection):
         self.state.request_date_recalculation()
 
     def focus_retirada(self) -> None:
-        """Foca o campo de data da retirada (atalho Ctrl+T).
-
-        Na primeira pressão foca o campo. Em pressões repetidas (enquanto
-        o campo mantém o foco) avança entre os segmentos DD → MM → AA.
-        """
+        """Foca campo retirada (Ctrl+T); repetido avança DD→MM→AA."""
         if self._hoje_edit is None:
             return
 
@@ -192,27 +167,85 @@ class DatesSection(QtSection):
         self._hoje_edit.setDate(QDate.currentDate())
         self._hoje_edit.blockSignals(False)
 
-    # ========== Cálculo ==========
+    # Cálculo
 
     def recalculate_dates(self) -> None:
-        """Recalcula as datas via StateManager e atualiza os labels."""
+        """Recalcula datas via worker; labels atualizados em ``_apply_recalculated`."""
         if self._hoje_edit is None:
             return
 
-        data_retirada_str = self._hoje_edit.date().toString("dd/MM/yyyy")
-        result = self.state.calculate_dates(
-            data_retirada_str=data_retirada_str,
-            periodicidade_str=self.state.get_periodicidade(),
-            enable_distribution=self.app.config_manager.get(
+        params = {
+            "data_retirada_str": self._hoje_edit.date().toString("dd/MM/yyyy"),
+            "periodicidade_str": self.state.get_periodicidade(),
+            "enable_distribution": self.app.config_manager.get(
                 "distribute_retiradas", True
             ),
-            distribution_window_days=self.app.config_manager.get(
+            "distribution_window_days": self.app.config_manager.get(
                 "distribution_window_days", 3
             ),
-            retirada_count_fn=self.db.count_retiradas_by_proxima_date,
-            bloquear_balanco=self.state.get_bloquear_balanco(),
+            "bloquear_balanco": self.state.get_bloquear_balanco(),
+        }
+        if not params["periodicidade_str"]:
+            self.state.set_calculated_dates({})
+            self._set_label(self._proxima_label, "—")
+            self._set_label(self._proxima_countdown, "")
+            self._set_label(self._proxima_distribution, "")
+            return
+
+        self._recalc_seq += 1
+        seq = self._recalc_seq
+        db = self.db
+
+        def _calc() -> dict:
+            from emissor.utils.date_utils import DateCalculator
+
+            return DateCalculator.calculate_proxima_vez(
+                params["data_retirada_str"],
+                periodicidade_str=params["periodicidade_str"],
+                enable_distribution=params["enable_distribution"],
+                distribution_window_days=params["distribution_window_days"],
+                retirada_count_fn=db.count_retiradas_by_proxima_date,
+                bloquear_balanco=params["bloquear_balanco"],
+            )
+
+        self.run_db(
+            _calc,
+            on_done=lambda result: self._apply_recalculated(seq, result),
+            on_error=lambda exc: self._on_recalc_error(seq, exc, params),
         )
 
+    def _apply_recalculated(self, seq: int, result: Any) -> None:
+        """Aplica o resultado do recálculo e atualiza os labels (thread principal)."""
+        if seq != self._recalc_seq:
+            return  # obsoleto — um recálculo mais novo já foi pedido
+        self.state.set_calculated_dates(result or {})
+        self._update_proxima_labels(result or {})
+
+    def _on_recalc_error(self, seq: int, exc: BaseException, params: dict) -> None:
+        """Falha no recálculo (ex.: rede) — usa cálculo puro sem distribuição."""
+        if seq != self._recalc_seq:
+            return
+        from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
+        from emissor.utils.date_utils import DateCalculator
+
+        ErrorHandler.log(
+            f"Erro ao recalcular datas (usando cálculo sem distribuição): {exc}",
+            level=ErrorLevel.WARNING,
+            context=ErrorContext.DATABASE,
+        )
+        result = DateCalculator.calculate_proxima_vez(
+            params["data_retirada_str"],
+            periodicidade_str=params["periodicidade_str"],
+            enable_distribution=False,
+            distribution_window_days=params["distribution_window_days"],
+            retirada_count_fn=None,
+            bloquear_balanco=params["bloquear_balanco"],
+        )
+        self.state.set_calculated_dates(result or {})
+        self._update_proxima_labels(result or {})
+
+    def _update_proxima_labels(self, result: dict) -> None:
+        """Atualiza os labels da próxima retirada a partir do resultado."""
         if not result:
             self._set_label(self._proxima_label, "—")
             self._set_label(self._proxima_countdown, "")
@@ -259,12 +292,7 @@ class DatesSection(QtSection):
         )
 
     def _apply_existing_retirada(self, retirada: Any) -> None:
-        """
-        Atualiza o aviso de retirada existente (thread principal).
-
-        Args:
-            retirada: Registro retornado por db.get_retirada_by_date, ou None.
-        """
+        """Atualiza aviso de retirada existente (thread principal); retirada pode ser None."""
         if self._retirada_registered_label is None:
             return
         if retirada:
@@ -293,13 +321,7 @@ class DatesSection(QtSection):
         )
 
     def _apply_ultima_retirada(self, ultima: Any) -> None:
-        """
-        Popula os labels com a última retirada ativa (thread principal).
-
-        Args:
-            ultima: Retirada retornada por db.get_ultima_retirada_ativa,
-                    ou None se não houver retirada ativa.
-        """
+        """Popula labels da última retirada ativa; ultima pode ser None."""
         if self._ultima_retirada_label is None or self._proxima_marcada_label is None:
             return
         if ultima is None:
@@ -322,15 +344,10 @@ class DatesSection(QtSection):
         else:
             self._set_label(self._proxima_marcada_label, "")
 
-    # ========== Leitura pública ==========
+    # Leitura pública
 
     def get_data_retirada_for_pdf(self) -> tuple[str, str]:
-        """
-        Retorna a data da retirada validada para uso no PDF.
-
-        Returns:
-            Tupla (data formatada DD/MM/AAAA, data para nome de arquivo AAAA-MM-DD)
-        """
+        """Data da retirada validada para PDF (DD/MM/AAAA, AAAA-MM-DD)."""
         if self._hoje_edit is None:
             d = date.today()
         else:
@@ -343,12 +360,7 @@ class DatesSection(QtSection):
         return d.strftime("%d/%m/%Y"), d.strftime("%Y-%m-%d")
 
     def get_date_entries(self) -> dict[str, str]:
-        """
-        Retorna os valores dos campos de data.
-
-        Returns:
-            Dicionário com hoje/proxima_vez
-        """
+        """Valores dos campos de data; retorna dict (hoje, proxima_vez)."""
         hoje = (
             self._hoje_edit.date().toString("dd/MM/yyyy")
             if self._hoje_edit is not None
@@ -359,7 +371,7 @@ class DatesSection(QtSection):
             "proxima_vez": self._proxima_label.text() if self._proxima_label else "",
         }
 
-    # ========== StateObserver ==========
+    # StateObserver
 
     @on(StateEventType.PATIENT_SELECTED)
     def _on_patient_selected(self, data: dict) -> None:
@@ -394,19 +406,11 @@ class DatesSection(QtSection):
     def _on_date_recalc_needed(self, data: dict) -> None:
         self._recalc_timer.start()
 
-    # ========== Helpers ==========
+    # Helpers
 
     @staticmethod
     def _format_date(value: str) -> str:
-        """
-        Converte data YYYY-MM-DD (banco) para dd/MM/yyyy.
-
-        Args:
-            value: Data no formato ISO (AAAA-MM-DD) ou vazia.
-
-        Returns:
-            Data formatada, ou string vazia se inválida/ausente.
-        """
+        """Converte YYYY-MM-DD para dd/MM/yyyy; retorna vazio se inválido."""
         if not value:
             return ""
         try:

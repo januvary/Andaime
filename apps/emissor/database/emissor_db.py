@@ -56,9 +56,7 @@ class EmissorDatabase(BaseDatabase):
         except Exception:
             super()._log_initialization_success()
 
-    # ========================================================================
     # SCHEMA
-    # ========================================================================
 
     def _create_schema(self) -> None:
         """Cria o schema completo do banco unificado."""
@@ -167,9 +165,7 @@ class EmissorDatabase(BaseDatabase):
             "CREATE INDEX IF NOT EXISTS idx_retirada_items_retirada ON retirada_items(retirada_id)"
         )
 
-        # A coluna substituida foi removida do schema: o status de substituição
-        # é derivado sob demanda (ver agenda_service). Remover de bancos existentes
-        # é seguro — nada mais lê ou escreve a coluna.
+        # Coluna substituída removida do schema; status derivado sob demanda (agenda_service). Remoção segura — nada lê/escreve.
         cursor.execute("PRAGMA table_info(retiradas)")
         retirada_cols = {row[1] for row in cursor.fetchall()}
         if "substituida" in retirada_cols:
@@ -207,9 +203,7 @@ class EmissorDatabase(BaseDatabase):
             DatabaseMigrator.run_all(cursor, self.conn, self.db_path)
             self._commit()
 
-    # ========================================================================
     # HELPERS
-    # ========================================================================
 
     def _fetch_retirada_items(
         self, cursor: Any, retirada_id: int
@@ -240,9 +234,7 @@ class EmissorDatabase(BaseDatabase):
             mapping[row["retirada_id"]].add(row["item_id"])
         return mapping
 
-    # ========================================================================
     # PACIENTES
-    # ========================================================================
 
     @db_op("read")
     def get_all_patient_names(self) -> List[Dict[str, Any]]:
@@ -344,12 +336,7 @@ class EmissorDatabase(BaseDatabase):
     def _ensure_catalog_entry(
         self, cur: Any, item_id: str, descricao: str, unidade: str
     ) -> bool:
-        """Garante que item_id existe no catálogo (busca ou insere).
-
-        Retorna False se a descrição colide com outro ID (item deve ser
-        ignorado pelo chamador). Necessário para satisfazer a FK
-        retirada_items.item_id → items_catalog.
-        """
+        """Garante item_id no catálogo (busca/insere). Retorna False se descrição colide (ignorar item). Necessário para FK retirada_items → items_catalog."""
         cur.execute(
             "SELECT descricao, unidade FROM items_catalog WHERE item_id = ?",
             (item_id,),
@@ -453,9 +440,7 @@ class EmissorDatabase(BaseDatabase):
             ErrorHandler.handle_database_error(e, operation="deletar paciente")
             return False
 
-    # ========================================================================
     # ITEMS CATALOG
-    # ========================================================================
 
     @db_op("read")
     def get_all_catalog_items(self) -> List[Dict]:
@@ -479,10 +464,7 @@ class EmissorDatabase(BaseDatabase):
 
     @db_op("write")
     def upsert_profissional(self, nome: str, crm: str = "") -> Optional[int]:
-        """Cria ou atualiza um profissional mestre, retorna seu id.
-
-        Nomes são armazenados em maiúsculas; CRM vazio preserva o existente.
-        """
+        """Cria/atualiza profissional mestre; retorna id. Nomes em maiúsculas; CRM vazio preserva existente."""
         nome = (nome or "").strip().upper()
         if not nome:
             return None
@@ -516,9 +498,7 @@ class EmissorDatabase(BaseDatabase):
             self._commit()
         return cast(int, prof_id)
 
-    # ========================================================================
     # RETIRADAS
-    # ========================================================================
 
     @db_op("write")
     def save_retirada(
@@ -530,12 +510,7 @@ class EmissorDatabase(BaseDatabase):
         items: List[Dict],
         ignorar_itens: Optional[List[Tuple[str, str]]] = None,
     ) -> Optional[int]:
-        """Salva ou atualiza retirada com itens (snapshot).
-
-        Se ``ignorar_itens`` for informado, marca os itens correspondentes
-        de retiradas ANTERIORES como ignorados para suficiência (a nova
-        retirada passa a ser a linha de base).
-        """
+        """Salva/atualiza retirada com itens (snapshot). Se ignorar_itens informado, marca itens anteriores como ignorados (nova retirada = linha de base)."""
         try:
             self._ensure_connection()
             with self._cursor() as cur:
@@ -630,11 +605,7 @@ class EmissorDatabase(BaseDatabase):
         data_retirada: str,
         ignorar_itens: List[Tuple[str, str]],
     ) -> None:
-        """Marca itens de retiradas anteriores como ignorados para suficiência.
-
-        Para cada (item_id, descricao), marca retirada_items correspondentes
-        de retiradas anteriores à data_retirada informada.
-        """
+        """Marca itens de retiradas anteriores como ignorados para suficiência (por item_id/descricao antes de data_retirada)."""
         for item_id, descricao in ignorar_itens:
             if item_id:
                 cur.execute(
@@ -712,12 +683,7 @@ class EmissorDatabase(BaseDatabase):
 
     @db_op("read")
     def get_ultima_retirada_ativa(self, patient_id: int) -> Retirada | None:
-        """Retorna a retirada mais recente do paciente (linha de base ativa).
-
-        A substituição deixa de ser uma coluna e passa a ser derivada sob
-        demanda: a retirada mais recente (maior data_retirada) nunca é
-        "retirada", portanto é sempre a última ativa.
-        """
+        """Retorna retirada mais recente do paciente (linha de base ativa). Substituição derivada sob demanda; maior data_retirada = última ativa, nunca 'retirada'."""
         with self._cursor() as cur:
             cur.execute(
                 "SELECT id, patient_id, patient_name, data_retirada, data_proxima_retirada, "

@@ -1,12 +1,8 @@
-"""Operações de PDF compartilhadas entre os apps (BAP, Emissor, Negativas, ...).
+"""Operações de PDF compartilhadas entre os apps.
 
 Facade sobre as melhores bibliotecas por tarefa:
-
-- estrutura (abrir, contar, dividir, mesclar, extrair página): ``pypdf``
-- imagem -> PDF: ``img2pdf``
-- rasterização: ``pypdfium2``
-- criação de PDF (reportlab + svglib): ``DrawingFlowable``, ``load_svg_drawing``,
-  ``PDFConfig``, ``PDFStyleManager``
+estrutura (pypdf), imagem→PDF (img2pdf), rasterização (pypdfium2),
+criação (reportlab + svglib).
 """
 
 from __future__ import annotations
@@ -57,10 +53,7 @@ def _pikepdf_available() -> bool:
 
 
 def has_digital_signature(src: Union[bytes, str, Path]) -> bool:
-    """True se o PDF contiver ao menos um campo de assinatura (``/Sig``).
-
-    Só detecção (sem re-serializar): checa AcroForm e ``/Annots`` das páginas.
-    """
+    """True se o PDF contiver ao menos um campo de assinatura (``/Sig``)."""
     reader = open_pdf(src)
     try:
         fields = reader.get_fields()
@@ -113,8 +106,8 @@ def split_pages(src: Union[bytes, str, Path]) -> list[bytes]:
 def extract_page(src: Union[bytes, str, Path], page: int) -> bytes:
     """Extrai uma única página como PDF de página única (bytes).
 
-    PDFs assinados usam ``pikepdf`` (preserva ``/Sig``); os demais seguem
-    o caminho pypdf original.
+    PDFs assinados usam ``pikepdf`` (preserva ``/Sig``); os demais
+    seguem o caminho pypdf original.
     """
     if _pikepdf_available():
         try:
@@ -250,15 +243,7 @@ def _write_hashing(writer: Any, f: Any, hash_algo: Any) -> Any:
 
 
 def _clamped_layout_fun(imgwidthpx: float, imgheightpx: float, ndpi: int) -> Any:
-    """Layout padrão do img2pdf com as dimensões limitadas a 3–14400 pt.
-
-    O img2pdf aborta (via pikepdf) quando o DPI declarado — ou o tamanho em
-    pixels — produz uma página fora do limite do PDF (3–14400 unidades):
-    DPI absurdo (1, 9999), imagens minúsculas (ícones de poucos pixels) ou
-    gigantes (panoramas). Aqui a página é escalada uniformemente para caber,
-    preservando a proporção. Para imagens dentro do limite, o resultado é
-    idêntico ao layout padrão.
-    """
+    """Layout padrão do img2pdf com dimensões limitadas a 3–14400 pt."""
     import img2pdf  # type: ignore[import-untyped]
 
     pw, ph, iw, ih = img2pdf.default_layout_fun(imgwidthpx, imgheightpx, ndpi)
@@ -483,13 +468,7 @@ def load_svg_drawing(
 
 @dataclass
 class PDFConfig:
-    """Configurações base de layout para geração de PDF.
-
-    Fornece constantes de página, margens, tamanhos de fonte e espaçamento.
-    Apps devem herdar e adicionar colunas, cores ou configurações específicas.
-
-    Não importa reportlab — ``pagesize`` é armazenado como tupla ``(w, h)``.
-    """
+    """Configurações base de layout para geração de PDF."""
     # Página — tupla (width, height) em pontos; padrão A4.
     pagesize: tuple[float, float] = (A4_WIDTH, A4_HEIGHT)
     margin: float = 0.7 * CM
@@ -525,11 +504,7 @@ class PDFConfig:
 
 
 class PDFStyleManager:
-    """Gerenciador base de estilos Paragraph para ReportLab.
-
-    Cria e gerencia ParagraphStyles usados na geração de PDF.  Apps podem
-    herdar e adicionar estilos específicos via ``_setup_custom_styles``.
-    """
+    """Gerenciador base de estilos Paragraph para ReportLab."""
 
     def __init__(self, config: PDFConfig) -> None:
         from reportlab.lib.styles import getSampleStyleSheet

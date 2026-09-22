@@ -1,15 +1,8 @@
 """Barra inferior genérica (andaime.qt).
 
 Espelha a ``TopBar``: mesmo visual (``panel-footer``), 52px, e quatro
-colunas horizontais ponderadas por ``col_weights``:
-
-- col1 (esquerda): ``left_widget``
-- col2 (status): ``status_widget``
-- col3 (centro): ``center_widget`` + ``actions``
-- col4 (direita): ``right_widget`` + ``right_actions``
-
-Usada pelo SS-54 com o ``RemessaLabel`` à esquerda, o ``StatusLabel``
-em seguida, e o botão "Salvar" à direita.
+colunas ponderadas por ``col_weights``: col1 (esquerda), col2 (status),
+col3 (centro), col4 (direita).
 """
 
 from __future__ import annotations
@@ -96,25 +89,12 @@ class BottomBar(QFrame):
         layout.addWidget(col4, stretch=col_weights[3])
 
     def add_action(self, action: Any) -> None:
-        """Adiciona um botão de ação à coluna central.
-
-        ``action`` pode ser um ``QWidget`` ou uma tupla
-        ``(texto, role, callback?)``.
-        """
+        """Adiciona um botão de ação à coluna central."""
         for btn in coerce_actions([action]):
             self._action_layout.addWidget(btn)
 
     def action_button(self, text: str) -> QPushButton | None:
-        """Retorna o botão de ação cujo texto exato é ``text``.
-
-        Busca nas colunas central (``actions``) e direita (``right_actions``).
-
-        Args:
-            text: Texto exato do botão
-
-        Returns:
-            QPushButton encontrado ou None se não houver correspondência
-        """
+        """Retorna o botão cujo texto é ``text``."""
         for layout in (self._action_layout, self._right_layout):
             for i in range(layout.count()):
                 widget = layout.itemAt(i).widget()  # type: ignore[union-attr]

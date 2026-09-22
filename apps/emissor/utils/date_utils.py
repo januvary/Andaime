@@ -14,9 +14,7 @@ from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 # reconstruído várias vezes por adjust_for_balanco / find_optimal_next_date.
 _business_days_cache: Dict[tuple[int, int], List[date]] = {}
 
-# Fonte única da verdade sobre os tipos de receita. Usada pelo cálculo de
-# validade (date_utils), pelo texto do aviso no PDF (pdf_config) e pelos
-# rótulos da UI (options_section / patient_fields_config).
+# Fonte única: tipos de receita (cálculo, PDF, UI).
 TIPO_RECEITA_INFO: Dict[str, Dict[str, Any]] = {
     "tipo_a": {
         "dias": 180,
@@ -44,11 +42,7 @@ def get_tipo_receita_info(tipo_receita: str) -> Dict[str, Any]:
 def get_receitas_aviso(
     receitas: Iterable[Dict[str, Any]], default: str = "periodicamente"
 ) -> str:
-    """Texto do aviso de validade no PDF: 'strictest wins'.
-
-    Entre os tipos presentes nas receitas, usa o mais restritivo
-    (tipo_c > tipo_b > tipo_a). Sem receitas válidas, retorna ``default``.
-    """
+    """Retorna avisos de receitas (data + validade)."""
     presente = {
         r.get("tipo", "").strip().lower()
         for r in receitas
@@ -83,11 +77,7 @@ class DateCalculator(_BaseDateCalculator):
 
     @staticmethod
     def _format_countdown(days: int, past_prefix: str = "") -> str:
-        """Formata delta em dias como texto PT-BR.
-
-        Ex.: 5 → "em 5 dias", 0 → "hoje", -3 → "3 dias atrás"
-        (com past_prefix="expirou há " → "expirou há 3 dias atrás").
-        """
+        """Formata contagem regressiva (dias/horas)."""
         if days > 0:
             return f"em {days} dia{'s' if days != 1 else ''}"
         if days == 0:
@@ -104,14 +94,7 @@ class DateCalculator(_BaseDateCalculator):
         retirada_count_fn: Callable[[str, str], Dict[str, int]] | None = None,
         bloquear_balanco: bool = False,
     ) -> Dict[str, Any]:
-        """Calcula a próxima retirada (com distribuição opcional).
-
-        Args:
-            enable_distribution: habilita distribuição inteligente
-            distribution_window_days: dias para trás na janela (1-7)
-            retirada_count_fn: callable(start, end) → dict data→contagem
-            bloquear_balanco: evita últimos 6 dias úteis do mês
-        """
+        """Calcula próxima retirada; retorna dict com datas."""
         result: dict[str, Any] = {
             "proxima_vez": None,
             "proxima_vez_formatted": "-",
@@ -203,11 +186,7 @@ class DateCalculator(_BaseDateCalculator):
     def calculate_validade_receita(
         ultima_receita_str: str, tipo_receita: str
     ) -> Dict[str, Any]:
-        """Calcula a validade da receita (sem distribuição).
-
-        Args:
-            tipo_receita: 'tipo_a' (180d), 'tipo_b' (90d) ou 'tipo_c' (30d)
-        """
+        """Calcula validade da receita a partir de data início."""
         result: dict[str, Any] = {
             "validade_receita": None,
             "validade_receita_formatted": "-",
@@ -248,7 +227,7 @@ class DateCalculator(_BaseDateCalculator):
 
         return result
 
-    # ========== Bloqueio de balanço do almoxarifado ==========
+    # Bloqueio de balanço do almoxarifado
 
     BALANCO_BLOCK_DAYS: int = 6
 
@@ -328,13 +307,7 @@ class RetiradaDateDistributor:
         retirada_count_fn: Callable[[str, str], Dict[str, int]] | None = None,
         bloquear_balanco: bool = False,
     ) -> tuple[date, bool]:
-        """Encontra dia útil com menos retiradas em [base-max_days_back, base].
-
-        Args:
-            max_days_back: janela para trás (padrão 3)
-            retirada_count_fn: callable(start, end) → dict data→contagem
-            bloquear_balanco: exclui últimos 6 dias úteis do mês
-        """
+        """Encontra data ideal de próxima retirada."""
         if retirada_count_fn is None:
             raise ValueError("retirada_count_fn deve ser fornecido")
 

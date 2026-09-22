@@ -1,15 +1,10 @@
-"""
-Database worker — executa operações de banco numa única thread dedicada.
+"""Database worker — executa operações de banco numa única thread dedicada.
 
 O ``BaseDatabase`` já é thread-safe (``RLock`` + ``check_same_thread=False``),
 então este worker chama os métodos do db diretamente. As operações são
-serializadas em ordem FIFO (``ThreadPoolExecutor`` com 1 worker), garantindo
-que duas chamadas nunca concorram na conexão. Os resultados chegam via
-``concurrent.futures.Future``; a camada de UI faz o marshal de volta para a
-sua própria thread (Qt: signal; Tk: ``after``).
-
-Princípio: uma única thread de DB → sem locking extra, sem corrupção de
-conexão, e a UI nunca bloqueia numa chamada demorada.
+serializadas em ordem FIFO, garantindo que duas chamadas nunca concorram
+na conexão. Resultados chegam via ``concurrent.futures.Future``; a UI
+faz o marshal de volta para sua própria thread.
 """
 
 from __future__ import annotations
@@ -99,16 +94,10 @@ def drain_worker(worker: Any, timeout: float = 5.0) -> bool:
 
 
 class DatabaseWorker:
-    """
-    Executa operações de banco numa thread dedicada e serializada.
-
-    Attributes:
-        db: A instância do banco (tipicamente um BaseDatabase).
-    """
+    """Executa operações de banco numa thread dedicada e serializada."""
 
     def __init__(self, db: Any) -> None:
-        """
-        Inicializa o worker.
+        """Inicializa o worker.
 
         Args:
             db: Instância do banco cujos métodos serão executados off-thread.
@@ -124,23 +113,10 @@ class DatabaseWorker:
         return self._db
 
     def submit(self, fn: Callable[..., _R], *args: Any, **kwargs: Any) -> Future[_R]:
-        """
-        Enfileira ``fn(*args, **kwargs)`` na thread de DB e devolve um Future.
+        """Enfileira ``fn(*args, **kwargs)`` na thread de DB e devolve um Future.
 
-        A chamada retorna imediatamente (não bloqueia). O resultado (ou
-        exceção) fica disponível no Future retornado. Operações são
+        A chamada retorna imediatamente (não bloqueia). Operações são
         executadas na ordem de submissão (FIFO), uma por vez.
-
-        Args:
-            fn: Função a executar (tipicamente um método do db).
-            *args: Argumentos posicionais para fn.
-            **kwargs: Argumentos nomeados para fn.
-
-        Returns:
-            Future para o resultado de fn.
-
-        Raises:
-            RuntimeError: Se chamado após shutdown().
         """
         with self._lock:
             if self._shutdown:
@@ -148,14 +124,10 @@ class DatabaseWorker:
             return self._executor.submit(fn, *args, **kwargs)
 
     def shutdown(self, wait: bool = True) -> None:
-        """
-        Encerra o worker, liberando a thread.
+        """Encerra o worker, liberando a thread.
 
         Chamadas posteriores a submit() levantam RuntimeError. Operações
         já enfileiradas são concluídas antes do encerramento (se wait=True).
-
-        Args:
-            wait: Se True, aguarda as tarefas pendentes terminarem.
         """
         with self._lock:
             self._shutdown = True

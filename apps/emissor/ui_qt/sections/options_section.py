@@ -1,17 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-OptionsSection — seção de opções (Qt).
-
-Espelha OptionsSectionV3 (CTk): Tipo, Periodicidade, Última receita,
-Atendido por, Tipo de Receita e Observações. É um StateObserver que reage
-a PATIENT_SELECTED/CLEARED/UPDATED e PROCESSO_COUNT_CHANGED.
-
-Radios são desselecionáveis (clicar no ativo desliga o grupo). O grid de
-receitas (data + validade/tipo + vencimento automático) e a periodicidade
-alimentam o cálculo de datas via state_manager — logo, editá-los aqui
-recalcula a DatesSection em tempo real.
-"""
+"""OptionsSection — opções (Qt): tipo, periodicidade, última receita, processo.
+StateObserver: PATIENT_SELECTED/CLEARED/UPDATED + PROCESSO_COUNT_CHANGED."""
 
 from __future__ import annotations
 
@@ -63,13 +53,7 @@ class OptionsSection(QtSection):
     """Painel de opções do recibo."""
 
     def __init__(self, parent: QWidget, app: QtApp) -> None:
-        """
-        Inicializa a seção de opções.
-
-        Args:
-            parent: Widget pai
-            app: Referência à aplicação principal (QtApp)
-        """
+        """Inicializa seção; args: parent, app."""
         super().__init__(parent, app)
 
         self._tipo_combo: QComboBox | None = None
@@ -90,7 +74,7 @@ class OptionsSection(QtSection):
 
         self._build_ui()
 
-    # ========== UI ==========
+# UI =
 
     def _build_ui(self) -> None:
         """Constrói os campos de opções."""
@@ -98,7 +82,7 @@ class OptionsSection(QtSection):
         content.setSpacing(10)
         content.setContentsMargins(15, 15, 12, 12)
 
-        # === Periodicidade (esquerda) + Tipo (direita) ===
+        # Periodicidade + Tipo
         tipo_row = QHBoxLayout()
         tipo_row.addWidget(QLabel("Periodicidade:"))
         self._periodicidade_edit = QLineEdit()
@@ -129,7 +113,7 @@ class OptionsSection(QtSection):
         content.addLayout(tipo_row)
         content.addSpacing(8)
 
-        # === Evitar dias de balanço + Atendido por (alinhado à direita) ===
+        # Evitar dias de balanço + Atendido
         period_row = QHBoxLayout()
         period_row.addWidget(QLabel("Evitar dias de balanço:"))
         self._bloquear_balanco_radio = QRadioButton("")
@@ -147,7 +131,7 @@ class OptionsSection(QtSection):
         period_row.addLayout(atend_col)
         content.addLayout(period_row)
 
-        # === Receitas + Observações (mesma linha) ===
+        # Receitas + Observações
         rec_atend_obs = QHBoxLayout()
         rec_atend_obs.setSpacing(8)
         rec_atend_obs.addWidget(self._build_receitas_widget())
@@ -162,11 +146,7 @@ class OptionsSection(QtSection):
         content.addLayout(rec_atend_obs)
 
     def _build_receitas_widget(self) -> QWidget:
-        """Constrói o grid de receitas (data/tipo/vencimento + add/remove).
-
-        Colunas: Data da receita | Validade da receita | Data de vencimento
-        | (+/-). Rows são compactas (1..3) e o vencimento é automático.
-        """
+        """Constrói grid de receitas."""
         box = QGroupBox()
         self._receitas_box = box
         grid = QGridLayout(box)
@@ -289,12 +269,7 @@ class OptionsSection(QtSection):
         self.field_changed.emit()
 
     def _update_vencimento(self, entry: dict[str, Any]) -> None:
-        """Atualiza o rótulo de vencimento da linha (data + tipo).
-
-        Receitas tipo C (30d, controle especial) exibem "Controlado" no
-        campo de data e não têm vencimento; ao sair de tipo C, a data volta
-        a ficar em branco (nada é persistido para a linha).
-        """
+        """Atualiza vencimento do grid de receitas."""
         tipo = entry["tipo"].currentData() or ""
         if tipo == _TIPO_C:
             if entry["date"].text().strip() != _CONTROLADO_TEXT:
@@ -311,7 +286,7 @@ class OptionsSection(QtSection):
         formatted = resultado.get("validade_receita_formatted", "-")
         entry["venc"].setText(formatted if formatted != "-" else "—")
 
-    # ========== Handlers de Tipo ==========
+# Handlers de Tipo =
 
     def _on_tipo_changed(self, *_args: Any) -> None:
         """Mudou o tipo selecionado no dropdown → notifica StateManager."""
@@ -322,7 +297,7 @@ class OptionsSection(QtSection):
         self.field_changed.emit()
         self.state.emit(StateEventType.TIPO_CHANGED, tipo=self._last_tipo)
 
-    # ========== Handlers de campos ==========
+# Handlers de campos =
 
     def _on_periodicidade_changed(self) -> None:
         """Periodicidade mudou → afeta próxima retirada (com distribuição)."""
@@ -348,15 +323,10 @@ class OptionsSection(QtSection):
             return
         self.field_changed.emit()
 
-    # ========== Setters públicos ==========
+# Setters públicos =
 
     def set_municipal_e_revezado_enabled(self, enabled: bool) -> None:
-        """
-        Habilita/desabilita a opção Municipal e Revezado.
-
-        Args:
-            enabled: True se há 2+ processos
-        """
+        """Habilita/desabilita Municipal e Revezado."""
         if self._tipo_model is not None:
             for row in range(self._tipo_model.rowCount()):
                 item = self._tipo_model.item(row)
@@ -367,12 +337,7 @@ class OptionsSection(QtSection):
                     item.setEnabled(enabled)
 
     def set_tipo_values(self, tipo: str) -> None:
-        """
-        Define valor de tipo no dropdown (sem notificar/semas marcar dirty).
-
-        Args:
-            tipo: Valor do tipo (ou "")
-        """
+        """Define tipo no dropdown sem marcar dirty."""
         if self._tipo_combo is None:
             return
         idx = self._tipo_combo.findData(tipo)
@@ -383,7 +348,7 @@ class OptionsSection(QtSection):
         self._tipo_combo.blockSignals(False)
         self._last_tipo = tipo
 
-    # ========== Getters ==========
+# Getters =
 
     def get_tipo(self) -> str:
         """Retorna o tipo selecionado."""
@@ -399,11 +364,7 @@ class OptionsSection(QtSection):
         return receitas
 
     def _row_value(self, entry: dict[str, Any]) -> dict[str, str] | None:
-        """Valor persistido de uma linha de receita (``None`` se vazia).
-
-        Linhas tipo C exibem "Controlado" na UI mas não guardam data: a
-        coluna de data é descartada para não persistir o texto de exibição.
-        """
+        """Retorna valor da linha para a tabela."""
         tipo = entry["tipo"].currentData() or ""
         data = "" if tipo == _TIPO_C else entry["date"].text().strip()
         if not data and not tipo:
@@ -433,14 +394,7 @@ class OptionsSection(QtSection):
         return self._bloquear_balanco_active
 
     def get_options_data(self) -> dict[str, Any]:
-        """
-        Extrai todos os valores como dicionário (sempre inclui as chaves,
-        mesmo em branco) — fonte não-perdida para validação e PDF.
-
-        Returns:
-            Dicionário com tipo/periodicidade/receita_*_data|_tipo/
-            observacoes/atendido_por
-        """
+        """Extrai dados das opções (tipo, municipal, revezado, etc.)."""
         receitas = self.get_receitas()
         options: dict[str, Any] = {
             "tipo": self.get_tipo(),
@@ -474,7 +428,7 @@ class OptionsSection(QtSection):
         self.state.set_receitas([])
         self.state.update_date_field("periodicidade", "")
 
-    # ========== StateObserver ==========
+# StateObserver =
 
     @on(StateEventType.PATIENT_SELECTED)
     def _on_patient_selected(self, data: dict) -> None:
@@ -512,7 +466,7 @@ class OptionsSection(QtSection):
         count = data.get("count", 0)
         self.set_municipal_e_revezado_enabled(count >= 2)
 
-    # ========== Helpers ==========
+# Helpers =
 
     def _load_from_patient(self, patient_data: Any) -> None:
         """Carrega campos a partir dos dados do paciente (sem marcar dirty)."""
@@ -579,11 +533,7 @@ class OptionsSection(QtSection):
 
 
 class _CenteredCombo(QComboBox):
-    """QComboBox não-editable com o texto do campo centralizado.
-
-    Não usa line edit (que travaria o clique/popup); apenas pinta o texto
-    do item atual centralizado mantendo o comportamento nativo do dropdown.
-    """
+    """QComboBox centralizado; não-editable."""
 
     def paintEvent(self, event: Any) -> None:
         painter = QStylePainter(self)

@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Database Module - Módulo de banco de dados do Emissor
-
-Fornece acesso ao banco de dados unificado e funcionalidades de migração.
-"""
+"""Database module — acesso unificado e migração."""
 
 from .emissor_db import EmissorDatabase
 from .models import Patient

@@ -15,10 +15,7 @@ from emissor.utils.date_utils import get_receitas_aviso
 class PDFConfig(BasePDFConfig):
     """Constantes centralizadas de layout, cores e fontes do PDF Emissor."""
 
-    # ========================================================================
-    # LARGURAS DE COLUNAS (proporções do total_width)
-    # ========================================================================
-
+    # Colunas
     # Header (logo + texto)
     COL_LOGO_WIDTH: float = 0.15
     COL_TEXT_WIDTH: float = 0.81
@@ -46,23 +43,14 @@ class PDFConfig(BasePDFConfig):
     COL_HOURS_AFTERNOON: float = 0.25
     COL_HOURS_PHONE: float = 0.50
 
-    # ========================================================================
-    # CORES
-    # ========================================================================
-
+    # Cores
     COLOR_BORDER = colors.black
     COLOR_HEADER_BG = colors.HexColor("#e8e8e8")
 
-    # ========================================================================
-    # TAMANHOS DE FONTE (extras)
-    # ========================================================================
-
+    # Fontes
     FONT_SIZE_EXTRA_LARGE: int = 13
 
-    # ========================================================================
-    # ESPAÇAMENTO (extras)
-    # ========================================================================
-
+    # Espaçamento
     PADDING_LOGO: int = 26  # LEFTPADDING específico para logo
 
 

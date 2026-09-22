@@ -13,19 +13,13 @@ from andaime.pdf import load_svg_drawing
 from emissor.pdf.pdf_config import PDFConfig, PDFDataContext
 from emissor.pdf.pdf_styles import PDFStyleManager
 from emissor.utils.date_utils import DateCalculator
-from emissor.utils.net_io import atomic_write_path
+from andaime.net_io import atomic_write_path
 
-# ============================================================================
-# TABLE BUILDERS
-# ============================================================================
+# Table builders
 
 
 class TableBuilderBase:
-    """Base para os builders de tabela do PDF.
-
-    Centraliza o construtor (config + styles) e o padrão repetitivo de
-    aplicar uma borda 1px + comandos extras via ``_apply_style``.
-    """
+    """Base dos builders de tabela. Centraliza config + estilos."""
 
     def __init__(self, config: PDFConfig, styles: PDFStyleManager):
         self.config = config
@@ -487,12 +481,7 @@ class ItemsTableBuilder(TableBuilderBase):
 
 
 class PrescriptionTableBuilder(TableBuilderBase):
-    """Builder para as datas das prescrições (não tipo C).
-
-    Uma linha por receita: "TRAZER NOVA PRESCRIÇÃO APÓS: {vencimento}" |
-    "ÚLTIMA PRESCRIÇÃO: {data}". Receitas tipo_c (30 dias) são omitidas.
-    Retorna None se não houver nenhuma receita elegível.
-    """
+    """Builder de prescrições (não tipo C). Omitidas receitas tipo_c (30 dias)."""
 
     def build(self, datas: Dict) -> List[Any] | None:
         """Cria as tabelas de prescrição. Retorna None se vazio."""
@@ -742,9 +731,7 @@ class HoursSectionBuilder(TableBuilderBase):
         return table
 
 
-# ============================================================================
-# PDF GENERATOR CLASS
-# ============================================================================
+# PDF generator
 
 
 class MandadoJudicialPDF:
@@ -839,12 +826,7 @@ class MandadoJudicialPDF:
         context: PDFDataContext,
         output_path: str | None = None,
     ) -> BytesIO | None:
-        """Gera o PDF a partir do contexto de dados.
-
-        Args:
-            context: PDFDataContext (criado via from_raw_data)
-            output_path: caminho destino; se None, retorna BytesIO
-        """
+        """Gera PDF do contexto. Args: context, output_path (None = BytesIO)."""
         elements = self._build_elements(context)
 
         if output_path:
@@ -872,9 +854,7 @@ class MandadoJudicialPDF:
             return buffer
 
 
-# ============================================================================
-# WRAPPER PARA COMPATIBILIDADE (API PÚBLICA)
-# ============================================================================
+# Compatibility wrapper
 
 
 class ReportLabPDFGenerator:

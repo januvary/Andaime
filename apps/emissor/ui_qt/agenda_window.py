@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-AgendaWindow — Visualizador de Calendário de Retornos (Qt).
-
-Janela interna do Emissor. Compartilha a conexão de banco e configuração
-com a aplicação principal.
-"""
+"""AgendaWindow — calendário de retornos (Qt)."""
 
 from __future__ import annotations
 
@@ -53,16 +48,7 @@ _HOLIDAY_BORDER_COLOR = "#d4af37"
 
 
 def _load_special_dates(year: int, root: Path) -> set[str]:
-    """
-    Carrega feriados nacionais e pontos facultativos para o ano.
-
-    Args:
-        year: Ano de referência.
-        root: Raiz do projeto (mantido para compatibilidade de assinatura).
-
-    Returns:
-        Conjunto de datas no formato YYYY-MM-DD.
-    """
+    """Feriados nacionais + facultativos para year; retorna set YYYY-MM-DD."""
     from andaime.dates import DateCalculator
 
     special: set[str] = set()
@@ -73,16 +59,7 @@ def _load_special_dates(year: int, root: Path) -> set[str]:
 
 
 def _date_status_color(date_str: str, palette: dict[str, str]) -> tuple[str, str]:
-    """
-    Retorna (cor_fundo, cor_texto) para uma célula de dia conforme a data.
-
-    Args:
-        date_str: Data no formato YYYY-MM-DD.
-        palette: Paleta de cores atual.
-
-    Returns:
-        Tupla (cor_fundo, cor_texto).
-    """
+    """Cor de célula conforme data (hoje, passado, futuro); retorna (bg, fg)."""
     today = datetime.now().strftime("%Y-%m-%d")
     if date_str < today:
         return "#d4946a", "white"
@@ -92,9 +69,7 @@ def _date_status_color(date_str: str, palette: dict[str, str]) -> tuple[str, str
 
 
 class _PatientDialog(QDialog):
-    """
-    Diálogo com a lista de pacientes para uma data selecionada.
-    """
+    """Diálogo de seleção de paciente para uma data."""
 
     def __init__(
         self,
@@ -215,9 +190,7 @@ class _PatientDialog(QDialog):
 
 
 class _CalendarView(QWidget):
-    """
-    Grade de calendário com 6 semanas (42 células) reutilizando os widgets.
-    """
+    """Calendário 6 semanas (42 células) reutilizando widgets."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -549,18 +522,7 @@ class AgendaWindow(QMainWindow):
 def open_agenda(
     parent: QWidget, db: Any, config_manager: Any, root: Path
 ) -> AgendaWindow:
-    """
-    Abre a janela da Agenda.
-
-    Args:
-        parent: Widget pai.
-        db: Instância do banco de dados.
-        config_manager: Gerenciador de configuração.
-        root: Raiz do projeto.
-
-    Returns:
-        A janela da Agenda já exibida.
-    """
+    """Abre AgendaWindow; retorna a janela exibida."""
     window = AgendaWindow(parent, db, config_manager, root)
     window.show()
     return window

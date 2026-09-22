@@ -1,9 +1,4 @@
-"""Linha de status transiente (andaime.qt).
-
-``StatusLine`` é um ``QLabel`` centralizado, com cor opcional e — quando um
-caminho é informado — sublinhado e clicável, abrindo o explorador de
-arquivos no caminho ao ser clicado.
-"""
+"""Linha de status transiente (andaime.qt)."""
 
 from __future__ import annotations
 
@@ -34,13 +29,7 @@ class StatusLine(QLabel):
         color: str | None = None,
         path: str | None = None,
     ) -> None:
-        """Define o texto e a aparência da linha de status.
-
-        Args:
-            text: texto exibido
-            color: chave de paleta (ex.: "status_success") ou cor CSS literal
-            path: caminho opcional; torna a linha clicável (abre o explorador)
-        """
+        """Define o texto e a aparência da linha de status."""
         self.setText(text)
         self._path = path
         style = ""

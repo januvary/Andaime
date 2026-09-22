@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 from andaime.error_handler import ErrorContext, ErrorHandler, ErrorLevel
 from emissor.services.exceptions import EmissorError
-from emissor.utils.net_io import atomic_write_path, network_mkdir
+from andaime.net_io import atomic_write_path, network_mkdir
 from emissor.utils.paths import resolve_archive_dir
 from emissor.utils.security import sanitize_filename
 
@@ -29,11 +29,7 @@ _COLOR_MODE_TO_MODE = {
 
 
 def _trim_white(img: "Image.Image") -> "Image.Image":
-    """Crops fully-blank borders (rows/cols where every pixel is near-white).
-
-    Only trims borders where *every* pixel is within the near-white threshold,
-    so content is never touched. Safe to run unconditionally on every page.
-    """
+    """Crops fully-blank borders (near-white only); trims only where every pixel within threshold — content untouched. Safe unconditionally."""
     from PIL import Image, ImageChops
 
     bg = Image.new(img.mode, img.size, 1 if img.mode == "1" else 255)
@@ -188,9 +184,7 @@ class TwainBackend:
                 # CAP_INDICATORS = no progress indicator.
                 self._try_set_cap(src, "indicators", False)
 
-                # Try low-level acquire pattern (request_acquire +
-                # xfer_image_natively) which gives more control over driver
-                # UI than the convenience acquire() wrapper.
+                # Low-level acquire (request_acquire + xfer_image_natively): mais controle de driver UI que acquire() wrapper.er.
                 images = self._do_acquire(src, twain, dpi)
                 return images
             finally:
@@ -509,11 +503,7 @@ class SimulatedBackend:
 
 
 def _resolve_backend(backend_name: str = "auto") -> ScannerBackend:
-    """Resolve o backend de digitalização pelo nome configurado.
-
-    A variável de ambiente ``EMISSOR_SCAN_BACKEND`` tem precedência sobre
-    *backend_name* (útil para debug/CI).
-    """
+    """Resolve backend pelo nome configurado; env EMISSOR_SCAN_BACKEND tem precedência sobre backend_name (debug/CI)."""
     import sys
 
     name = os.environ.get("EMISSOR_SCAN_BACKEND", "").lower() or backend_name.lower()
@@ -552,14 +542,7 @@ class ScannerService:
         backend: ScannerBackend | None = None,
         backend_name: str = "auto",
     ) -> None:
-        """Inicializa o serviço (backend padrão: auto).
-
-        Args:
-            backend: Backend específico (bypassa resolução por nome).
-            backend_name: Nome do backend para resolução automática
-                ("auto", "twain", "wia", "sim"). Ignorado se *backend* for
-                fornecido.
-        """
+        """Init serviço (backend padrão auto). Args: backend (específico, bypassa nome) ou backend_name ("auto"/"twain"/"wia"/"sim"); ignorado se backend fornecido."""
         self._save_root = Path(save_root)
         self._backend = backend or _resolve_backend(backend_name)
 
@@ -575,11 +558,7 @@ class ScannerService:
         dpi: int = 200,
         color_mode: str = "grayscale",
     ) -> Path:
-        """Digitaliza e salva o PDF no diretório do paciente (acquire + copy).
-
-        Para uso assíncrono, chame ``acquire_locally()`` (thread da UI) e
-        ``copy_to_network()`` (worker) separadamente.
-        """
+        """Digitaliza e salva PDF no diretório paciente (acquire+copy). Uso assíncrono: ``acquire_locally()`` (UI) + ``copy_to_network()`` (worker) separadamente."""
         local_tmp = self.acquire_locally(dpi=dpi, color_mode=color_mode)
         return self.copy_to_network(
             local_tmp=local_tmp,
@@ -593,16 +572,10 @@ class ScannerService:
         dpi: int = 200,
         color_mode: str = "grayscale",
     ) -> Path:
-        """Adquire imagens e salva PDF temporário local (thread da UI).
-
-        Args:
-            color_mode: "grayscale", "color" ou "bw"
-        """
+        """Adquire imagens e salva PDF temporário local (thread UI). Args: color_mode = "grayscale"/"color"/"bw"."""
         images = self._backend.acquire(dpi=dpi, color_mode=color_mode)
 
-        # Diagnóstico de campo: com EMISSOR_SCAN_DUMP=1, salva cada imagem
-        # crua em %TEMP%/emissor_scan_dump/ + loga DPI/orientação. Útil pois
-        # WIA só é validável na máquina-alvo (Windows + scanner real).
+        # Diagnóstico: EMISSOR_SCAN_DUMP=1 salva imagens cruas em %TEMP%/emissor_scan_dump/ + loga DPI/orientação. WIA só validável na máquina-alvo.ndows + scanner real).
         if os.environ.get("EMISSOR_SCAN_DUMP", "").strip() in ("1", "true", "True"):
             try:
                 self._dump_debug_images(images, dpi, color_mode)

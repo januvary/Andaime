@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""PdfPickerDialog (Qt) — lista os PDFs da pasta do paciente.
-
-Exibe em um grupo os recibos assinados (digitalizações) e em outro os
-recibos gerados, ordenados do mais recente para o mais antigo. O usuário
-abre um PDF com duplo clique ou selecionando e clicando em "Abrir".
-"""
+"""PdfPickerDialog — lista PDFs do paciente (assinados primeiro, depois gerados)."""
 
 from __future__ import annotations
 
@@ -50,11 +45,7 @@ def _display_name(path: Path) -> str:
 
 
 def collect_patient_pdfs(archive_dir: Path) -> dict[str, list[Path]]:
-    """Coleta os PDFs do paciente agrupados, mais recentes primeiro.
-
-    O grupo de recibos assinados (subpasta) aparece à frente dos recibos
-    gerados na pasta principal. Grupos vazios são omitidos.
-    """
+    """Agrupa PDFs do paciente (assinados à frente); omite grupos vazios."""
     grupos: dict[str, list[Path]] = {}
 
     scan_dir = archive_dir / SCAN_SUBFOLDER

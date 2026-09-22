@@ -15,11 +15,7 @@ from typing import Any, Callable
 
 
 def friendly_message(error: Exception) -> str:
-    """Curta descrição legível de uma exceção para superfícies de UI.
-
-    Status lines compõem ``f"Erro ao X: {friendly_message(exc)}"`` —
-    a causa raiz continua no log via ``handle_error``.
-    """
+    """Curta descrição legível de uma exceção para superfícies de UI."""
     if isinstance(error, PermissionError):
         return "sem permissão"
     if isinstance(error, FileNotFoundError):

@@ -20,11 +20,7 @@ from andaime.error_handler import ErrorHandler, ErrorContext, ErrorLevel
 
 
 class PontosStore:
-    """Persistent store for optional-holiday (pontos facultativos) data.
-
-    All mutations go through this class; ``save()`` writes atomically.
-    The JSON shape is ``{"pontos_facultativos": {"2026": ["02/01", ...], ...}}``.
-    """
+    """Persistent store for optional-holiday (pontos facultativos) data."""
 
     def __init__(self, path: Path) -> None:
         self._path = path

@@ -16,13 +16,7 @@ from emissor.state.state_manager import StateManager
 
 @dataclass(frozen=True)
 class RetiradaRequest:
-    """Dados coletados da UI para gerar uma retirada (stateless).
-
-    ``data`` é a fonte única e completa dos campos do formulário (inclui
-    chaves vazias); ``selected_patient`` é o registro salvo (fora de ``data``).
-    ``data_retirada_for_pdf`` usa formato AAAA-MM-DD para o nome do arquivo e
-    difere de ``data["datas"]["hoje"]`` (DD/MM/AAAA, para exibição/validação).
-    """
+    """Dados de retirada (stateless): ``data`` = todos os campos do formulário (inclui vazios); ``selected_patient`` = registro salvo; ``data_retirada_for_pdf`` = formato AAAA-MM-DD (nome arquivo), difere de ``data["datas"]["hoje"]`` (DD/MM/AAAA para exibição/validação)."""
 
     selected_patient: Any
     data: dict[str, Any]
@@ -62,7 +56,7 @@ class RetiradaWorkflowService:
         self._db = db
 
     def ensure_dates_computed(self, data_retirada_str: str) -> None:
-        """Pré-calcula ``proxima_vez`` se ainda não foi calculado (thread da UI)."""
+        """Pré-calcula ``proxima_vez`` se não calculado (thread UI). Rede síncrona pura (sem I/O, sem distribuição); cálculo completo (com contagem/distribuição, toca banco) é assíncrono em ``dates_section.recalculate_dates`` / ``QtApp._generate_pdf_workflow`` — apenas preenche lacuna para recibo ter data."""
         calculated = self._state.get_calculated_dates()
         proxima_vez = calculated.get("proxima_vez")
 
@@ -70,13 +64,12 @@ class RetiradaWorkflowService:
         if proxima_vez is not None or not periodicidade:
             return
 
-        config = self._config.get_all()
         self._state.calculate_dates(
             data_retirada_str=data_retirada_str,
             periodicidade_str=periodicidade,
-            enable_distribution=config.distribute_retiradas,
-            distribution_window_days=config.distribution_window_days,
-            retirada_count_fn=self._db.count_retiradas_by_proxima_date,
+            enable_distribution=False,
+            distribution_window_days=3,
+            retirada_count_fn=None,
             bloquear_balanco=self._state.get_bloquear_balanco(),
         )
 

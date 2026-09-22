@@ -1,8 +1,4 @@
-"""Context menu utilities — themed QMenu creation and common patterns.
-
-Provides a styled ``QMenu`` factory and a checkable menu builder that
-eliminates repeated boilerplate across projects.
-"""
+"""Context menu utilities — themed QMenu creation and common patterns."""
 
 from __future__ import annotations
 
@@ -61,18 +57,7 @@ def build_checkable_menu(
     on_select: Callable[[str], None],
     exclusions: set[str] | None = None,
 ) -> QMenu:
-    """Build a QMenu with checkable items (radio-style selection).
-
-    Args:
-        parent: Parent widget for the menu.
-        items: Mapping of ``{key: label}`` for each menu item.
-        current: The key of the currently selected item.
-        on_select: Callback invoked with the selected key.
-        exclusions: Keys to skip (not shown in the menu).
-
-    Returns:
-        A styled QMenu ready to be shown with ``menu.exec()``.
-    """
+    """Build a QMenu with checkable items (radio-style selection)."""
     menu = styled_menu(parent)
     skip = exclusions or set()
     for key, label in items.items():
