@@ -29,6 +29,8 @@ fi
 
 cd "$SCRIPT_DIR" || { echo -e "${RED}[ERROR]${NC} Cannot cd to $SCRIPT_DIR"; exit 1; }
 
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
 echo -e "${YELLOW}============================================${NC}"
 echo -e "${YELLOW}SISTEMAS - Portable Release ${TAG}${NC}"
 echo -e "${YELLOW}============================================${NC}"
@@ -53,6 +55,22 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 echo -e "  ${GREEN}Andaime repo clean.${NC}"
+echo ""
+
+# ============================================
+# Preflight: local must not be behind the remote.
+# Releasing from a stale clone breaks the final push AND misplaces the
+# release tag (gh creates it from the remote tip, not local HEAD).
+# ============================================
+git fetch origin "$CURRENT_BRANCH" >/dev/null 2>&1 || true
+behind="$(git rev-list --count "HEAD..origin/${CURRENT_BRANCH}" 2>/dev/null || echo 0)"
+ahead="$(git rev-list --count "origin/${CURRENT_BRANCH}..HEAD" 2>/dev/null || echo 0)"
+if [ "${behind:-0}" -gt 0 ]; then
+    echo -e "${RED}[ERROR]${NC} Local ${CURRENT_BRANCH} is ${behind} commit(s) behind origin/${CURRENT_BRANCH} (${ahead} ahead)."
+    echo -e "  Merge or rebase first, then re-run the release. Aborting."
+    exit 1
+fi
+echo -e "  ${GREEN}In sync with origin/${CURRENT_BRANCH}.${NC}"
 echo ""
 
 # ============================================
@@ -81,9 +99,9 @@ for app_key in "${APP_ORDER[@]}"; do
         echo -e "  ${GREEN}✓${NC} $display: committed uncommitted changes"
     fi
 
-    git push origin HEAD >/dev/null 2>&1 \
+    push_err="$(git push origin HEAD 2>&1)" \
         && echo -e "  ${GREEN}✓${NC} $display: pushed" \
-        || echo -e "  ${YELLOW}!${NC} $display: push failed (no remote?)"
+        || { echo -e "  ${YELLOW}!${NC} $display: push failed:"; echo "$push_err" | head -5; }
 done
 echo ""
 
@@ -191,10 +209,9 @@ if ! git diff --cached --quiet; then
     git commit -m "Release ${TAG}" >/dev/null
 fi
 
-CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-git push origin "$CURRENT_BRANCH" 2>/dev/null \
+push_err="$(git push origin "$CURRENT_BRANCH" 2>&1)" \
     && echo -e "  ${GREEN}Pushed to origin/${CURRENT_BRANCH}${NC}" \
-    || echo -e "  ${YELLOW}!${NC} Push failed (no remote?)"
+    || { echo -e "  ${RED}[ERROR]${NC} Push to origin/${CURRENT_BRANCH} failed:"; echo "$push_err" | head -8; exit 1; }
 
 echo ""
 echo -e "${GREEN}Done!${NC}"
