@@ -1,15 +1,4 @@
-"""Importação das remessas da planilha REMESSAS ENVIADAS.xlsx.
-
-Fluxo em duas etapas:
-  1. ``extract_xlsx_to_temp`` lê a planilha inteira e a espelha num banco
-     SQLite temporário (data/remessas_import.db) com as tabelas ``remessas``
-     e ``solicitacoes``.
-  2. ``transfer_patients`` copia os pacientes únicos (por nome normalizado)
-     para o banco principal (ss54.db), sem duplicar os já existentes.
-
-O banco temporário permanece disponível para futuras transferências
-(lotes/processos) conforme necessário.
-"""
+"""Importação das remessas da planilha REMESSAS ENVIADAS.xlsx."""
 
 from __future__ import annotations
 
@@ -51,11 +40,7 @@ def extract_xlsx_to_temp(
     xlsx_path: str | None = None,
     temp_db_path: str | None = None,
 ) -> dict[str, int]:
-    """Lê a planilha e popula o banco temporário.
-
-    Returns:
-        Dicionário com ``remessas`` e ``solicitacoes`` (contagens).
-    """
+    """Lê a planilha e popula o banco temporário."""
     if xlsx_path is None:
         xlsx_path = _default_xlsx_path()
     if temp_db_path is None:
@@ -155,9 +140,7 @@ def _unique_patients(temp_db_path: str | None = None) -> dict[str, str]:
     seen: dict[str, str] = {}
     for r in rows:
         nome = to_upper_normalized(r["nome"])
-        # Ignora linhas que não são nomes de pacientes:
-        # sem letras, sem espaço (rótulos únicos como "ABRIL/2026"),
-        # ou contendo "/".
+        # Ignora linhas que não são nomes de pacientes.
         if not nome or not any(c.isalpha() for c in nome):
             continue
         if "/" in nome or " " not in nome:
@@ -193,13 +176,7 @@ def transfer_remessas(
     db: SS54Database,
     temp_db_path: str | None = None,
 ) -> int:
-    """Insere lotes (remessas) do banco temporário no banco principal.
-
-    Cada linha "REMESSA:" vira um Lote com sua data. Ignora remessas
-    sem data e não duplica lotes já existentes (por data).
-
-    Retorna o número de lotes adicionados.
-    """
+    """Insere lotes do banco temporário no principal."""
     if temp_db_path is None:
         temp_db_path = _default_temp_db_path()
     if not os.path.exists(temp_db_path):
@@ -222,11 +199,7 @@ def transfer_remessas(
 
 
 def _normalize_tipo(raw: Any) -> str | None:
-    """Mapeia o ``tipo`` livre da planilha para uma das 3 categorias do app.
-
-    Retorna ``None`` para valores não mapeáveis (vazios ou números puros),
-    que devem ser ignorados na importação.
-    """
+    """Mapeia o ``tipo`` livre da planilha para uma das 3 categorias."""
     t = _norm(raw).upper()
     if not t or t.isdigit():
         return None
@@ -249,25 +222,7 @@ _STATUS_NOTIF = [r"ENCAMINHAD", r"AVISAD", r"NAO ATENDE", r"SEM SUCESSO",
 
 
 def _infer_status(retorno: Any) -> Status | None:
-    """Infere o status do processo a partir do texto de ``retorno_drs``.
-
-    Retorna a chave canônica do status ou ``None`` quando há texto mas
-    nenhum sinal reconhecido (deve ser tratado manualmente). Campo vazio
-    vira ``"enviado"`` (a solicitação consta na planilha, logo foi enviada).
-
-    Ordem de prioridade (primeira que casar vence):
-      1. encerrado  - óbito/falecimento/judicialização
-      2. negado     - indeferido/negativa/"não autorizado"/"não deferido"
-      3. autorizado - deferido/autorizado/aprovado
-      4. correcao   - relatório solicitado, exceto se reenviado
-      5. autorizado - disponível/ligar/compra/em atendimento
-      6. correcao   - questionamento do DRS
-      7. enviado    - reenviado
-      8. correcao   - pendência/correção/corrigir
-      9. enviado    - enviado/recebido/cobrado/ver e-mail
-     10. enviado    - protocolo DRS
-     11. encerrado  - apenas notificação (avisado/encaminhado/etc.)
-    """
+    """Infere o status do processo a partir de ``retorno_drs``."""
     t = _status_norm(retorno)
     if not t:
         return Status.ENVIADO
@@ -332,9 +287,8 @@ def _infer_status(retorno: Any) -> Status | None:
     return None
 
 
-# Tipos livres que são nomes de medicamentos específicos. Para esses,
-# o nome do medicamento vira a descricao do processo e o conteúdo original
-# da descricao (normalmente protocolo/data) é prefixado à observacoes.
+# Tipos livres que são nomes de medicamentos específicos: o nome
+# vira a descricao e o conteúdo original é prefixado às observacoes.
 _DRUG_TIPOS: set[str] = {
     "ALFAEPOETINA 10000UI",
     "ARIPIPRAZOL 15 MG  / FLUVOXAMINA 50 MG",
@@ -382,11 +336,7 @@ def _format_drug_entry(
     descricao: str,
     retorno: str,
 ) -> tuple[str, str]:
-    """Para medicamentos de nome específico, usa o nome como descricao e
-    prefixa o texto original da descricao às observacoes.
-
-    Retorna (descricao, observacoes).
-    """
+    """Para medicamentos de nome específico, nome vira descricao."""
     if tipo_raw not in _DRUG_TIPOS:
         return descricao, retorno
     novo_retorno = f"{descricao} {retorno}".strip() if descricao else retorno
@@ -397,19 +347,7 @@ def transfer_solicitacoes(
     db: SS54Database,
     temp_db_path: str | None = None,
 ) -> int:
-    """Cria processos a partir das solicitações da planilha.
-
-    Cada linha vira um ``Processo`` no grupo (paciente, lote, tipo,
-    solicitacao); o ciclo é o ordinal natural pela ordem de inserção. É
-    idempotente: só cria os processos que faltam no grupo, evitando
-    duplicar em re-execuções do import.
-
-    ``retorno_drs`` (coluna D) vai para ``observacoes``; o ``status`` é
-    inferido do próprio ``retorno_drs`` via ``_infer_status`` (ou fica
-    ``NULL`` quando o texto não tem sinal reconhecido).
-
-    Retorna o número de processos adicionados.
-    """
+    """Cria processos a partir das solicitações da planilha."""
     if temp_db_path is None:
         temp_db_path = _default_temp_db_path()
     if not os.path.exists(temp_db_path):
@@ -505,11 +443,7 @@ def transfer_solicitacoes(
 
 
 def _parse_dates_from_text(text: str, default_year: int) -> list[date]:
-    """Extrai datas no formato D/M[/YY] ou DD/MM[/YYYY] de um texto livre.
-
-    Datas sem ano recebem ``default_year`` (normalmente o ano da remessa).
-    Retorna uma lista ordenada de ``datetime.date`` únicos.
-    """
+    """Extrai datas no formato D/M[/YY] ou DD/MM[/YYYY] de um texto."""
     dates: list[date] = []
     seen: set[tuple[int, int, int]] = set()
     for m in re.finditer(r"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b", text):
@@ -552,14 +486,7 @@ def _norm_date_token(token: str) -> tuple[int, int, int | None]:
 
 
 def normalize_dates(text: str, default_year: int) -> str:
-    """Normaliza todas as datas livres de ``text`` para ``DD/MM/YYYY``.
-
-    Aceita formatos separados por barra (``D/M``, ``D/M/AA``, ``D/M/AAAA``,
-    incluindo barras duplas ``D//M``) e por hífen (``D-M``, ``AAAA- D/M``).
-    Datas sem ano recebem ``default_year`` (normalmente o ano da remessa).
-    Não altera o restante do texto (ex.: números de protocolo). Usado na
-    importação para deixar o histórico de ``observacoes`` consistente.
-    """
+    """Normaliza todas as datas livres de ``text`` para ``DD/MM/YYYY``."""
     if not text:
         return text
 
@@ -600,16 +527,7 @@ def expire_old_autorizados(
     dias_limite: int = 180,
     dias_limite_sem_data: int = 210,
 ) -> int:
-    """Marca como ``expirado`` os processos ``autorizado`` antigos.
-
-    Regra:
-      - Se houver datas parseáveis em ``observacoes`` e alguma for anterior
-        a ``hoje - dias_limite``, expira.
-      - Se não houver datas parseáveis em ``observacoes``, expira se a data
-        da remessa + ``dias_limite_sem_data`` já tiver passado.
-
-    Retorna o número de processos expirados.
-    """
+    """Marca como ``expirado`` os processos ``autorizado`` antigos."""
     hoje = datetime.now().date()
     cutoff_com_data = hoje - timedelta(days=dias_limite)
     processos = db.get_processos_by_status(Status.AUTORIZADO)

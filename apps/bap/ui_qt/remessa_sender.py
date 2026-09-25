@@ -1,17 +1,8 @@
 """Orquestra o envio de remessas via Gmail (rascunhos + Drive).
 
-``RemessaSender`` é um ``QObject`` que centraliza todo o fluxo de envio de
-remessas: montagem dos PDFs combinados, autenticação OAuth, criação de
-rascunhos no Gmail, verificação de rascunhos pendentes e varredura de
-mensagens DRS. O trabalho pesado roda em ``_EnviarRemessaWorker`` (QThread);
-a UI (diálogos de autorização/confirmação) é gerenciada aqui, na thread
-principal do Qt.
-
-Sinais emitidos para a ``MainWindow``:
-- ``status_changed(text, color)`` — atualiza a linha de status das páginas.
-- ``info(text)`` / ``warn(text)`` — exibe caixa de mensagem informativa/aviso.
-- ``remessas_changed()`` — pede refresh da tabela de remessas.
-- ``atulizacoes_changed()`` — pede atualização do contador de atualizações DRS.
+``RemessaSender`` centraliza o fluxo de envio: PDFs, OAuth, rascunhos,
+verificação e varredura DRS. Heavy lifting em ``_EnviarRemessaWorker`` (QThread);
+UI na thread principal.
 """
 
 from __future__ import annotations
@@ -43,16 +34,11 @@ def _gmail_service(cfg):
 
 
 class _EnviarRemessaWorker(QThread):
-    """Monta os PDFs combinados + autentica no Gmail + cria rascunhos (off-thread).
+    """Monta os PDFs + autentica no Gmail + cria rascunhos (off-thread).
 
-    A montagem dos grupos (leitura de BLOBs + merge de PDFs), que travaria a
-    GUI se feita na thread principal, roda aqui. Emite ``auth_needed`` (com a
-    URL de autorização) quando é necessário consentimento interativo. Escritas
-    no banco acontecem aqui (ex.: cache do ``pdf_sig`` via ``ensure_processo_pdf``);
-    a serialização com a thread principal é garantida pelo lock da conexão.
-    O resultado é devolvido para a GUI, que persiste os ``pending_sends``.
-    Progresso sai por ``progress(feitos, total)`` e é espelhado na linha de status.
-    """
+    A montagem dos grupos (BLOBs + merge de PDFs) roda aqui; emite
+    ``auth_needed`` se necessário. Writes no banco acontecem aqui;
+    resultado é devolvido à GUI via ``pending_sends``."""
 
     auth_needed = Signal(str)
     done = Signal(object)  # list[(RemessaGroup, DraftResult)]
@@ -72,10 +58,7 @@ class _EnviarRemessaWorker(QThread):
             handle.cancel()
 
     def _obtain_creds(self, cfg):
-        """Resolve as credenciais OAuth, disparando o fluxo interativo se preciso.
-
-        Retorna ``(service, creds)`` ou levanta ``GmailError``.
-        """
+        """Resolve as credenciais OAuth, disparando fluxo interativo se preciso."""
         from bap.utils import gmail_client
         from bap.utils.gmail_client import GmailError
         from google.oauth2.credentials import Credentials
@@ -146,10 +129,8 @@ class _EnviarRemessaWorker(QThread):
             try:
                 results = self._create_drafts(service, creds, groups, cfg)
             except GmailAuthRequired:
-                # Token existe mas não tem escopos suficientes (ex.: falta
-                # drive.file após ampliação dos escopos). Apaga o token
-                # obsoleto e repete o fluxo de consentimento, depois tenta
-                # novamente uma vez.
+            # Token existe mas não tem escopos suficientes (ex.: falta
+            # drive.file). Apaga o token obsoleto e repete o fluxo.
                 gmail_client.resolve_token_path(
                     cfg.gmail_token_path
                 ).unlink(missing_ok=True)

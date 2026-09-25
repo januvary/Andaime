@@ -1,13 +1,5 @@
-"""Página de Documentos (SS-54): cada página possui seu próprio chrome.
-
-Esta página reúne, em um único widget:
-- ``Header`` (duas barras superiores);
-- a linha de status (abaixo do cabeçalho);
-- o ``DocumentGrid`` (conteúdo);
-- a ``BottomBar`` inferior (RemessaLabel + StatusLabel + ações).
-
-A ``MainWindow`` conecta-se aos sinais reemitidos e injeta o estado do
-backend (pacientes, remessa ativa, status, itens da grade).
+"""Página de Documentos (SS-54): cada página tem seu próprio chrome —
+Header, linha de status, DocumentGrid e BottomBar.
 """
 
 from __future__ import annotations

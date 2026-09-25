@@ -49,6 +49,21 @@ class ModeloTexto:
 
 
 @dataclass
+class Destinatario:
+    id: int
+    nome: str
+    ultimo_uso: str = ""
+
+    @classmethod
+    def from_row(cls, row: dict) -> "Destinatario":
+        return cls(
+            id=row["id"],
+            nome=row["nome"],
+            ultimo_uso=row.get("ultimo_uso") or ""
+        )
+
+
+@dataclass
 class ItemSelecionado:
     """Item selecionado para gerar documento."""
     id: int

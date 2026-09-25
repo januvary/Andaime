@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-QtConfigDialog (BAP) — diálogo de configuração (Qt).
+QtConfigDialog (BAP) — diálogo de configuração.
 
-Constrói sobre o ``QtConfigDialog`` compartilhado de ``andaime.qt.dialogs`` —
-o mesmo base usado pelo Emissor. A SS-54 não tem seção intermediária; os botões
-centrais são "Exportar Planilha" e "Banco de Dados".
+Baseado no ``QtConfigDialog`` de ``andaime.qt.dialogs``; sem seção
+intermediária. Botões centrais: "Exportar Planilha" e "Banco de Dados".
 """
 
 from __future__ import annotations
@@ -30,13 +29,8 @@ class QtConfigDialog(_QtConfigDialog):
         export_callback: Callable | None = None,
         dashboard_callback: Callable | None = None,
     ) -> None:
-        """
-        Args:
-            parent: Janela pai
-            config: Configuração atual (``arquivos_root`` e ``default_root``)
-            export_callback: Callback do botão Exportar Planilha
-            dashboard_callback: Callback do botão Banco de Dados
-        """
+        """Args: parent, config, export_callback, dashboard_callback."""
+
         self._config = config
         self._export = export_callback
         self._dashboard_cb = dashboard_callback

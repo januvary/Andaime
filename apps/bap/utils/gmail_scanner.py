@@ -18,9 +18,9 @@ from rapidfuzz.process import extractOne
 from bap.utils.import_remessas import _infer_status, _status_norm
 
 
-# Limite inferior (exclusivo) para o escaneamento de e-mails DRS.
-# "after:AAAA/MM/DD" considera mensagens posteriores a essa data; usar o
-# dia seguinte a junho (30/06) cobre 01/07/2026 em diante.
+# Limite inferior (exclusivo) para escaneamento DRS.
+# "after:AAAA/MM/DD" cobre mensagens posteriores a essa data;
+# usar o dia seguinte a junho cobre 01/07/2026 em diante.
 SCAN_AFTER_DATE = "2026/06/30"
 
 
@@ -170,9 +170,7 @@ def scan_drs_messages(db, service, max_results: int = 100) -> int:
         if not matches:
             continue
 
-        # Supressão de subconjunto: se o nome de um paciente detectado é
-        # subconjunto estrito do de outro no mesmo e-mail, mantém o mais
-        # específico (evita que um nome curto "sequestre" a menção do longo).
+        # Supressão de subconjunto: nome curto "sequestra" a menção do longo.
         _name_tokens = {pid: set(nome.split()) for pid, nome in name_map}
         drop: set[int] = set()
         for pid_a, _ in matches:

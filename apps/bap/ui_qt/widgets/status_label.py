@@ -1,9 +1,5 @@
-"""Seletor de status do processo (barra inferior, ao lado da remessa).
-
-Um rótulo clicável "Status: [STATUS]" que abre um diálogo com as opções
-de status possíveis (definidas em ``src.constants.STATUS_LABELS``).
-Selecionar uma atualiza o rótulo e emite ``status_changed`` com a chave
-canônica do status (minúscula).
+"""Seletor de status do processo — rótulo "Status: [STATUS]" clicável
+que abre diálogo com as opções (definidas em ``STATUS_LABELS``).
 """
 
 from __future__ import annotations

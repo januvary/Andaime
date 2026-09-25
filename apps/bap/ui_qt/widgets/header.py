@@ -1,13 +1,8 @@
-"""Cabeçalho do SS-54: duas barras superiores em um grid de 5 colunas.
+"""Cabeçalho do SS-54: duas barras superiores em grid de 5 colunas.
 
-As duas barras compartilham o mesmo grid de 5 colunas para que os campos
-se alinhem verticalmente:
-
-- Barra 1: tema | novo | nome do paciente (2 colunas) | telefone
+As barras compartilham o mesmo grid para alinhamento vertical:
+- Barra 1: tema | novo | nome (2 cols) | telefone
 - Barra 2: config | ciclo | solicitação | tipo | descrição
-
-A busca de paciente e a busca por telefone são duas ``SearchableComboBox``
-que se auto-preenchem (cross-fill) ao selecionar um paciente.
 """
 
 from __future__ import annotations
@@ -133,9 +128,8 @@ class Header(QWidget):
         )
 
     def _build_layout(self) -> None:
-        # Um único grid de 5 colunas para ambas as barras, garantindo que
-        # as colunas tenham exatamente a mesma largura/prop达o nas duas
-        # linhas, independentemente do tamanho da janela.
+    # Um grid de 5 colunas para ambas as barras, garantindo largura
+    # idêntica entre as linhas independentemente do tamanho da janela.
         grid = QGridLayout()
         grid.setContentsMargins(12, 6, 12, 6)
         grid.setHorizontalSpacing(8)
@@ -270,9 +264,8 @@ class Header(QWidget):
     def set_descricoes(self, descricoes: list[str]) -> None:
         """Alimenta o autocomplete do campo descrição com valores já usados.
 
-        O efeito fica restrito a este campo: selecionar uma sugestão apenas
-        preenche a descrição (não cross-preenche nenhum outro campo), e a
-        descrição pode ser digitada livremente em qualquer processo.
+        Restrito a este campo; não cross-preenche outros. A descrição
+        pode ser digitada livremente em qualquer processo.
         """
         opts = {d: d for d in descricoes if d}
         self._descricao.set_search_fn(static_search_fn(opts))

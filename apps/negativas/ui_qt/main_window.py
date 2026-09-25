@@ -4,7 +4,6 @@ import sys
 import webbrowser
 import copy
 from pathlib import Path
-from datetime import datetime
 from typing import Optional, Dict, List
 
 from PySide6.QtCore import Qt, QTimer, QDate
@@ -241,8 +240,10 @@ class MainWindow(QMainWindow):
         label.setProperty("heading", "section")
         layout.addWidget(label)
 
-        self.destinatario_input = QLineEdit()
-        self.destinatario_input.setPlaceholderText("Ex: À Autoridade Judiciária")
+        self.destinatario_input = SearchableComboBox(
+            self._search_destinatarios,
+            placeholder="Ex: À Autoridade Judiciária",
+        )
         layout.addWidget(self.destinatario_input)
         return frame
 
@@ -349,10 +350,12 @@ class MainWindow(QMainWindow):
         self.limpar_btn = make_button("Limpar Tudo", role="flat")
         self.imprimir_btn = make_button("Salvar PDF", role="primary")
         self.copiar_btn = make_button("Copiar Texto", role="flat")
+        self.dashboard_btn = make_button("Banco de Dados", role="flat")
 
         layout.addWidget(self.imprimir_btn)
         layout.addWidget(self.copiar_btn)
         layout.addWidget(self.limpar_btn)
+        layout.addWidget(self.dashboard_btn)
         return frame
 
     def _create_resultado(self) -> QFrame:
@@ -392,6 +395,7 @@ class MainWindow(QMainWindow):
         self.limpar_btn.clicked.connect(self._limpar_tudo)
         self.imprimir_btn.clicked.connect(self._imprimir_documento)
         self.copiar_btn.clicked.connect(self._copiar_texto)
+        self.dashboard_btn.clicked.connect(self._launch_dashboard)
 
         self.search_combo.selection_changed.connect(self._on_medicamento_selecionado)
 
@@ -400,7 +404,10 @@ class MainWindow(QMainWindow):
         self.check_dgmi.toggled.connect(self._atualizar_preview_imediato)
 
         # Text fields → debounced update
-        self.destinatario_input.textChanged.connect(self._debounce_preview)
+        self.destinatario_input.text_edited.connect(self._debounce_preview)
+        self.destinatario_input.selection_changed.connect(
+            lambda _key: self._debounce_preview()
+        )
         self.nome_daf_input.textChanged.connect(self._debounce_preview)
         self.nome_dgmi_input.textChanged.connect(self._debounce_preview)
 
@@ -413,6 +420,10 @@ class MainWindow(QMainWindow):
     def _search_medicamentos(self, query: str) -> Dict[str, str]:
         medicamentos = self.db.buscar_medicamentos(query)
         return {str(m.id): f"{m.nome} ({m.categoria})" for m in medicamentos}
+
+    def _search_destinatarios(self, query: str) -> Dict[str, str]:
+        destinatarios = self.db.buscar_destinatarios(query)
+        return {str(d.id): d.nome for d in destinatarios}
 
     def _on_medicamento_selecionado(self, medicamento_id: Optional[str]):
         if medicamento_id:
@@ -588,7 +599,7 @@ class MainWindow(QMainWindow):
     def _coletar_dados(self) -> NegativaData:
         """Lê todos os campos do formulário e retorna um snapshot."""
         return NegativaData(
-            destinatario=self.destinatario_input.text().strip()
+            destinatario=self.destinatario_input.current_text().strip()
             or "autoridade competente",
             usos_daf=self.check_daf.isChecked(),
             usos_dgmi=self.check_dgmi.isChecked(),
@@ -634,6 +645,9 @@ class MainWindow(QMainWindow):
         from negativas.pdf.negativa_pdf import NegativaPDF
 
         data = self._coletar_dados()
+        digitado = self.destinatario_input.current_text().strip()
+        if digitado:
+            self.db.salvar_destinatario(digitado)
         safe_dest = data.destinatario.replace(" ", "_")
         safe_date = data.data_hoje.replace("/", "-")
         filename = f"Negativa_{safe_dest}_{safe_date}.pdf"
@@ -663,6 +677,30 @@ class MainWindow(QMainWindow):
         clipboard = QApplication.clipboard()
         clipboard.setText(self.resultado_text.toPlainText())
         self._status_line.set_status("Texto copiado para a área de transferência!", "status_success")
+
+    def _launch_dashboard(self) -> None:
+        """Abre o Dashboard interno como janela filha."""
+        from andaime.paths import get_root_directory
+        from andaime.qt.dashboard import DashboardService, open_dashboard
+
+        existing = getattr(self, "_dashboard_window", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        data_dir = get_root_directory() / "data"
+        service = DashboardService.from_directory(
+            data_dir,
+            non_editable_columns={
+                "medicamentos": ["id"],
+                "modelos_texto": ["id"],
+                "destinatarios": ["id"],
+            },
+        )
+        self._dashboard_window = open_dashboard(
+            self, service, get_theme() == "dark"
+        )
 
     def _on_theme_toggled(self, dark_mode: bool):
         """Handle theme toggle from the header button."""
@@ -777,29 +815,19 @@ class MainWindow(QMainWindow):
         # Carrega nomes salvos
         nome_daf = self.config.get("nome_daf", "")
         nome_dgmi = self.config.get("nome_dgmi", "")
-        data_hoje = self.config.get("data_hoje", "")
 
         if nome_daf:
             self.nome_daf_input.setText(nome_daf)
         if nome_dgmi:
             self.nome_dgmi_input.setText(nome_dgmi)
-        if data_hoje:
-            try:
-                from datetime import datetime
-                dt = datetime.strptime(data_hoje, "%d/%m/%Y")
-                self.data_edit.setDate(QDate(dt.year, dt.month, dt.day))
-            except ValueError:
-                pass
 
     def _save_nomes_config(self):
         """Salva os nomes das divisões no config."""
         nome_daf = self.nome_daf_input.text().strip()
         nome_dgmi = self.nome_dgmi_input.text().strip()
-        data_hoje = self.data_edit.text().strip()
 
         self.config.set("nome_daf", nome_daf)
         self.config.set("nome_dgmi", nome_dgmi)
-        self.config.set("data_hoje", data_hoje)
 
     def closeEvent(self, event):
         """Cleanup resources when window closes."""

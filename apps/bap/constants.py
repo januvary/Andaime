@@ -51,12 +51,9 @@ STATUS_LABELS = {
     Status.ENCERRADO: "Encerrado",
 }
 
-# Transições de status permitidas (máquina de estados). Além do que está
-# aqui, ``allowed_status_transitions`` aplica duas regras universais:
-#   - um status nulo/vazio pode mudar para qualquer status;
-#   - qualquer status pode mudar para "encerrado".
-# ``NULL_STATUS`` é um sentinel para a opção "sem status" (limpar o status),
-# usada para fechar o ciclo (encerrado -> nulo).
+# Transições de status (máquina de estados). Além de
+# ``STATUS_TRANSITIONS``, duas regras universais: nulo vai para
+# qualquer status; qualquer status vai para "encerrado".
 NULL_STATUS = "__null__"
 NULL_STATUS_LABEL = "Nenhum"
 
@@ -85,13 +82,11 @@ def status_display_label(key: str | None) -> str:
 
 
 def allowed_status_transitions(current: str | None) -> list[Status | str]:
-    """Retorna as chaves de status para as quais ``current`` pode mudar.
+    """Retorna os status para os quais ``current`` pode mudar.
 
-    - status nulo/vazio pode ir para qualquer status;
-    - qualquer status (exceto ele mesmo) pode ir para ``encerrado``;
-    - ``encerrado`` pode voltar para nulo (``NULL_STATUS``), fechando o ciclo.
-
-    O resultado segue a ordem de ``STATUS_LABELS`` (com ``encerrado`` ao fim).
+    Status nulo vai para qualquer status; qualquer status vai para
+    ``encerrado``; ``encerrado`` volta para nulo. Resultado segue
+    a ordem de ``STATUS_LABELS``.
     """
     if not current or current == NULL_STATUS:
         return list(STATUS_LABELS.keys())
@@ -104,10 +99,8 @@ def allowed_status_transitions(current: str | None) -> list[Status | str]:
         result.append(Status.ENCERRADO)
     return result
 
-# Cores do status — seguem o padrão do Emissor: tons neutros de cinza
-# mais as três cores semânticas (success/warning/error). Cada status é
-# mapeado para uma chave da paleta do tema (``andaime.qt.theme.colors``),
-# resolvida em tempo de execução para se adaptar a ambos os temas.
+# Cores do status — tons neutros de cinza mais as semânticas
+# (success/warning/error), mapeadas para a paleta do tema.
 STATUS_SEMANTIC = {
     Status.EM_ANALISE: "text_dim",       # em andamento (neutro)
     Status.INCOMPLETO: "status_warning",  # requer atenção

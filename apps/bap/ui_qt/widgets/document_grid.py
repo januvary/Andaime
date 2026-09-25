@@ -128,9 +128,9 @@ class _Tile(QWidget):
         self._badge.setMaximumWidth(128)
         self._update_badge()
 
-        # Placeholder de carregamento assíncrono da miniatura: aparece quando a
-        # tile nasce sem pixmap (sempre, via ``_make_tile``) e desaparece quando
-        # ``set_pixmap`` a entrega — animação leve sem dependências (QTimer).
+        # Placeholder de loading assíncrono: aparece quando a tile
+        # nasce sem pixmap (sempre) e desaparece quando ``set_pixmap``
+        # a entrega.
         self._loading_lbl = QLabel(self)
         self._loading_lbl.setStyleSheet(
             f"color: {colors()['text_dim']}; font-size: 24px; "
@@ -482,10 +482,10 @@ class DocumentGrid(QWidget):
         # Geração monotônica: cada carga incremental (drop ou set_items) captura
         # a geração atual; se outra carga começar, a anterior aborta o loop.
         self._load_gen: int = 0
-        # Pool single-threaded: pdfium não é thread-safe e o lock em
-        # andaime.pdf serializa as chamadas de qualquer jeito. Com 4 threads,
-        # 3 ficavam bloqueadas no lock (desperdício) e tarefas antigas de um
-        # processo anterior entupiam a fila do próximo.
+        # Pool single-threaded: pdfium não é thread-safe;
+        # lock em andaime.pdf serializa as chamadas.
+        # Com 4 threads, 3 ficavam bloqueadas (desperdício) e
+        # tarefas antigas entupiam a fila do próximo.
         self._thumb_pool = QThreadPool(self)
         self._thumb_pool.setMaxThreadCount(1)
         self._thumb_signal = _ThumbnailSignal()

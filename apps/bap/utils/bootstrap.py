@@ -10,11 +10,7 @@ from bap.utils.config import SS54Config
 
 
 def ensure_initialized() -> None:
-    """Garante que o andaime e o ConfigManager estão inicializados.
-
-    Idempotente: no-op quando já inicializado (ex.: dentro do app em execução).
-    Usado pelos entry points CLI standalone (import_remessas, export_to_xlsx).
-    """
+    """Garante que o andaime e o ConfigManager estão inicializados."""
     if getattr(andaime, "_app_root", None) is None:
         andaime.init("BAP", "BAP", Path(".").resolve())
     ConfigManager.init(SS54Config)

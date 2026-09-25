@@ -1,11 +1,4 @@
-"""Preparação de remessas para o DRS (montagem dos rascunhos de e-mail).
-
-Coleta os processos ``completo`` da remessa ativa, separa por tipo de
-solicitação (renovação × primeira solicitação), garante que o PDF combinado
-de cada processo esteja atualizado e monta o corpo (HTML) e os anexos de cada
-grupo. O envio em si (criação do rascunho no Gmail) é responsabilidade do
-``gmail_client`` + da camada de UI.
-"""
+"""Preparação de remessas para o DRS (rascunhos de e-mail)."""
 
 from __future__ import annotations
 
@@ -85,18 +78,7 @@ def ensure_processo_pdf(
     root: Path,
     processo: Processo,
 ) -> tuple[str | None, bool]:
-    """Garante o PDF combinado do processo, regenerando apenas se necessário.
-
-    Retorna ``(caminho_pdf, tem_documentos)``. Quando o processo não tem
-    documentos, retorna ``(None, False)``.
-
-    A assinatura deriva só de metadados (``compute_processo_sig``): decidir se
-    o PDF combinado está atualizado **não lê nenhum BLOB**. Só ao regenerar os
-    BLOBs são lidos, uma única vez, em batch (uma query para todos).
-
-    Para processos arquivados, o PDF é a fonte de verdade; a verificação é
-    apenas de existência do arquivo, já que os BLOBs foram removidos.
-    """
+    """Garante o PDF combinado do processo, regenerando apenas se necessário."""
     if processo.id is None:
         return None, False
 
@@ -190,11 +172,7 @@ def build_remessa_group(
     processos: list[Processo],
     on_process: Callable[[], None] | None = None,
 ) -> RemessaGroup | None:
-    """Monta um grupo de envio a partir de uma lista de processos ``completo``.
-
-    Retorna ``None`` se não houver processos no grupo. ``on_process`` é
-    chamado após cada processo (para progresso).
-    """
+    """Monta um grupo de envio a partir de processos ``completo``."""
     if not processos:
         return None
 

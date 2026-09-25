@@ -31,14 +31,14 @@ class SS54Database(BaseDatabase):
     def __init__(self, db_path: Optional[str] = None) -> None:
         if db_path is None:
             db_path = str(bap_data_dir() / "ss54.db")
-        # Banco separado (anexado) para os conteúdos dos arquivos, mantendo o
-        # banco principal pequeno e barato de copiar/backupear. Apenas o banco
-        # principal é copiado nos backups; os BLOBs (grandes) ficam de fora.
+        # Banco separado (anexo) para conteúdos de arquivos;
+        # mantém o principal leve para cópias/backups.
         self._arquivos_db_path = self._compute_arquivos_db_path(db_path)
         super().__init__(db_path=db_path, entity_name="ss54")
         self._backup_retention = 2
-        # VACUUM pendente: setado pelas deleções e executado só após o commit
-        # da transação mais externa (VACUUM não roda dentro de transação).
+        # VACUUM pendente: setado pelas deleções, executado só
+        # após o commit da transação mais externa (VACUUM não roda
+        # dentro de transação).
         self._vacuum_pending = False
         # Suspensões ativas do VACUUM automático (operações em lote seguram
         # o flush até o fim do lote — ver vacuum_hold).
@@ -172,9 +172,9 @@ class SS54Database(BaseDatabase):
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_drs_messages_paciente_msg
                         ON drs_messages(paciente_id, message_id);
                     """)
-                # Conteúdos (BLOBs) vivem no banco anexado ``ss54_arquivos.db``.
-                # Sem FK entre bancos (SQLite não suporta); a integridade é
-                # mantida na aplicação (ver ``delete_arquivo``/``delete_processo``).
+                # Conteúdos (BLOBs) vivem no banco anexado;
+                # sem FK entre bancos (SQLite não suporta);
+                # integridade mantida na aplicação.
                 cur.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS {self.ARQUIVOS_DB_ALIAS}.arquivo_conteudos (
@@ -395,9 +395,9 @@ class SS54Database(BaseDatabase):
             (Status.INCOMPLETO, Status.EM_ANALISE, lote_id),
         )
         count = 0
-        # Uma única transação para toda a movimentação: atômica (tudo ou
-        # nada) e um só commit — cada commit individual é caro em shares de
-        # rede (journal_mode=DELETE).
+        # Uma única transação para toda a movimentação:
+        # atômica e um só commit (cada commit individual é caro
+        # em shares de rede).
         with self.transaction():
             for row in rows:
                 if self.reassign_processo_lote(row["id"], lote_id) is not None:
@@ -542,12 +542,9 @@ class SS54Database(BaseDatabase):
     def _fetch_processos_joined(
         self, where: str = "", params: tuple = (), order_by: str = ""
     ) -> list[dict]:
-        # O último status_log de cada processo vem de uma derived table com
-        # window function (um único scan de status_logs por query), em vez de
-        # um subselect correlacionado por linha de processo. O desempate por
-        # ``id DESC`` preserva a semântica de "mais recente" mesmo com
-        # ``created_at`` iguais ou fora de ordem (imports com timestamps
-        # customizados).
+        # Último status_log via derived table com window function
+        # (um scan por query, não subselect correlacionado). O
+        # desempate por ``id DESC`` preserva "mais recente".
         sql = (
             "SELECT p.*, pac.nome as paciente_nome, pac.telefone as paciente_telefone, l.date as lote_date, "
             "sl.observacoes AS last_obs, sl.created_at AS last_obs_at "
@@ -1066,9 +1063,9 @@ class SS54Database(BaseDatabase):
 
     @db_op("write")
     def update_arquivo_conteudo(self, arquivo_id: int, conteudo: bytes) -> bool:
-        # Hash regravado junto ao conteúdo, na mesma transação (ambas as DBs
-        # ATTACHadas compartilham a conexão): conteúdo e hash nunca divergem,
-        # então a assinatura do processo (só metadados) é sempre fiel.
+        # Hash regravado junto ao conteúdo, na mesma transação
+        # (ambas as DBs compartilham a conexão): conteúdo e hash
+        # nunca divergem.
         content_sha256 = (
             hashlib.sha256(conteudo).hexdigest() if conteudo is not None else ""
         )

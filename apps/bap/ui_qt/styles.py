@@ -1,8 +1,4 @@
-"""Compatibilidade: re-exporta o tema compartilhado de ``andaime.qt.theme``.
-
-A paleta/QSS canônica vive em ``andaime.qt``; este módulo apenas
-re-exporta a API para não quebrar os imports existentes.
-"""
+"""Compatibilidade: re-exporta o tema de ``andaime.qt.theme``."""
 
 from andaime.qt.theme import (
     DARK,

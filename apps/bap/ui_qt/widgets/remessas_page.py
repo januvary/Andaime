@@ -1,12 +1,6 @@
-"""Página de Remessas (SS-54).
-
-Espelha a ``PreviewPage`` do RAC: a área principal é um ``QTabWidget``
-com duas abas (Renovação / Solicitação), cada uma com uma busca e uma
-tabela de processos (um processo por linha).
-
-A página **não** possui barra superior nem seletor de status — apenas a
-barra inferior própria (RemessaLabel à esquerda, "Retornar" no centro,
-"Enviar Remessa" à direita).
+"""Página de Remessas (SS-54) — ``QTabWidget`` com abas (Renovação /
+Solicitação), cada uma com busca e tabela de processos. Apenas a
+barra inferior própria (sem barra superior ou seletor de status).
 """
 
 from __future__ import annotations
@@ -69,9 +63,8 @@ from andaime.qt.dialogs import KEEP_OPEN, prompt_dialog
 _TAB_KEYS = ["primeira", "renovacao"]
 
 
-# Cache de QColor por (tema, status): o lambda ``foreground`` da coluna
-# Status roda a cada repaint de célula; evita reconstruir o dict de cores
-# e o QColor em todo paint.
+# Cache de QColor por (tema, status): o lambda ``foreground`` da
+# coluna Status roda a cada repaint; evita reconstruir cores.
 _STATUS_COLOR_CACHE: dict = {}
 
 

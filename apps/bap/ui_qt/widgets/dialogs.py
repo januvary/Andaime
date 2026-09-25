@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """Diálogos no padrão compartilhado (andaime.qt.dialogs).
 
-Primitivas compartilhadas (RAC/Emissor/SS-54) vêm de ``andaime.qt.dialogs``;
-apenas o seletor de lista ``pick_from_list`` é específico da SS-54.
+Primitivas vêm de ``andaime.qt.dialogs``; apenas ``pick_from_list`` é
+específico da SS-54.
 """
 
 from __future__ import annotations
@@ -38,12 +38,11 @@ def pick_from_list(
     min_width: int = 420,
     max_height: int = 320,
 ) -> object | None:
-    """Abre um diálogo "escolha um de uma lista".
+    """Diálogo "escolha um de uma lista".
 
-    ``formatter(item)`` devolve ``(rótulo, dado)``; o ``dado`` é retornado
-    quando o usuário confirma (duplo-clique ou botão). ``None`` se cancelar
-    ou nada estiver selecionado. Compartilhado por seletores da RemessasPage
-    (lote/processo) que eram quase idênticos.
+    ``formatter(item)`` devolve ``(rótulo, dado)``; o ``dado`` é
+    retornado ao confirmar. ``None`` se cancelar. Compartilhado por
+    seletores da RemessasPage (lote/processo).
     """
     dlg, layout = scaffold_dialog(parent, title, spacing=12, min_width=min_width)
 

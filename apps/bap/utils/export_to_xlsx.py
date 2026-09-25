@@ -1,12 +1,4 @@
-"""Exporta os processos do banco principal (ss54.db) para uma planilha Excel.
-
-Uso:
-    PYTHONPATH=. python -m src.utils.export_to_xlsx
-
-O formato segue o layout da planilha original: uma aba por remessa, com
-seções "PRIMEIRA SOLICITAÇÃO" e "RENOVAÇÃO" e as colunas clássicas do
-processo administrativo SS-54.
-"""
+"""Exporta os processos do banco (ss54.db) para planilha Excel."""
 
 from __future__ import annotations
 

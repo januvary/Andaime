@@ -21,17 +21,7 @@ def generate_protocolo(lote_date: str, initials: str, seq: int) -> str:
 
 
 def normalize_phone(raw: str | None) -> str:
-    """Normaliza um telefone para apenas dígitos (formato de armazenamento).
-
-    - Remove qualquer caractere não numérico.
-    - Remove o código do país (55) quando presente.
-    - Se houver mais de um número no mesmo campo, usa o primeiro.
-    - Retorna "" quando o valor não parece um telefone válido
-      (menos de 10 dígitos, ex.: anotações como "Avisado a Erika.").
-
-    Telefones brasileiros válidos têm 10 (fixo com DDD) ou 11 (celular
-    com DDD) dígitos.
-    """
+    """Normaliza um telefone para apenas dígitos (formato de armazenamento)."""
     if not raw:
         return ""
     digits = _digits(raw)
@@ -63,12 +53,7 @@ def _mask_complete(d: str) -> str:
 
 
 def format_phone(value: str | None) -> str:
-    """Formata um telefone (dígitos) para exibição.
-
-    - 11 dígitos: ``XX XXXXX-XXXX`` (celular)
-    - 10 dígitos: ``XX XXXX-XXXX`` (fixo)
-    Caso não corresponda, retorna o valor original sem alteração.
-    """
+    """Formata um telefone (dígitos) para exibição."""
     if not value:
         return ""
     d = _digits(value)
@@ -78,16 +63,7 @@ def format_phone(value: str | None) -> str:
 
 
 def format_phone_live(text: str | None) -> str:
-    """Formata um telefone parcialmente, à medida que é digitado.
-
-    Aplica a máscara progressivamente conforme os dígitos são inseridos,
-    limitando a 11 dígitos (padrão brasileiro com DDD):
-
-    - até 2 dígitos:  ``XX``
-    - 3 a 6 dígitos:  ``XX XXXX``
-    - 7 a 10 dígitos: ``XX XXXX-XXXX`` (fixo)
-    - 11 dígitos:     ``XX XXXXX-XXXX`` (celular)
-    """
+    """Formata um telefone parcialmente, à medida que é digitado."""
     if not text:
         return ""
     d = _digits(text, limit=11)

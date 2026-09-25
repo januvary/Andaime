@@ -1,18 +1,7 @@
-"""Cliente Gmail para criação de rascunhos (drafts) da remessa DRS.
+"""Cliente Gmail para rascunhos DRS.
 
-Usa OAuth de aplicativo desktop (client ID do tipo "Desktop app"). Na
-primeira execução abre o navegador para consentimento; o token é armazenado
-localmente e reutilizado/renovado nas execuções seguintes.
-
-Os anexos são enviados via Google Drive (chip de anexo do Gmail), o que
-contorna o limite de ~25 MB da mensagem ``raw``: o PDF é carregado no Drive e
-referenciado no rascunho, sem trafegar os bytes pela Gmail API.
-
-Escopos:
-- ``gmail.compose``  -> criar rascunhos
-- ``gmail.metadata`` -> ler rótulos (labels) da mensagem para detectar envio
-- ``gmail.readonly`` -> varredura de mensagens DRS
-- ``drive.file``     -> criar/ler apenas os arquivos que o app cria no Drive
+OAuth desktop; token local. Anexos via Drive (chip do Gmail),
+contornando o limite de ~25 MB da mensagem ``raw``.
 """
 
 from __future__ import annotations
@@ -44,11 +33,7 @@ class GmailError(Exception):
 
 
 class GmailAuthRequired(GmailError):
-    """O token atual não tem escopos suficientes (ex.: falta ``drive.file``).
-
-    Deve ser tratado como "token ausente": apagar o ``gmail_token.json`` e
-    disparar novamente o fluxo de consentimento interativo.
-    """
+    """Token sem escopos suficientes (ex.: falta ``drive.file``)."""
 
 
 @dataclass
@@ -59,11 +44,7 @@ class DraftResult:
 
 
 def resolve_credentials_path(configured: str = "") -> Path | None:
-    """Resolve o caminho do ``credentials.json``.
-
-    Ordem: caminho configurado -> ``data/credentials.json`` ->
-    primeiro ``data/client_secret_*.json`` encontrado.
-    """
+    """Resolve o caminho do ``credentials.json``."""
     if configured:
         p = Path(configured)
         return p if p.exists() else None
@@ -84,13 +65,7 @@ def resolve_token_path(configured: str = "") -> Path:
 
 
 def get_service(credentials_path: str = "", token_path: str = ""):
-    """Retorna o serviço Gmail a partir do token local (não-interativo).
-
-    Usa o token existente, renovando-o se possível. Levanta ``GmailError`` se
-    as credenciais não estiverem disponíveis ou o consentimento for necessário
-    (neste caso, o chamador deve iniciar o fluxo interativo via
-    :func:`start_auth_flow`).
-    """
+    """Retorna o serviço Gmail a partir do token local."""
     # Imports adiados: a dependência só é exigida quando o envio é usado.
     try:
         from google.auth.transport.requests import Request
@@ -153,18 +128,16 @@ def _get_http_error():
         return Exception
 
 
-# Cache de ids de pastas do Drive por credencial, para não refazer a
-# árvore ``REMESSAS/...`` a cada upload. Chave: id do token (ou objeto creds).
+# Cache de ids de pastas do Drive por credencial (evita
+# refazer a árvore ``REMESSAS/...`` a cada upload).
 _FOLDER_CACHE: dict = {}
 
 
 def _ensure_drive_folder(creds, relpath: str) -> str:
-    """Garante a árvore de pastas ``relpath`` (POSIX, ex.: ``REMESSAS/2026/07-17/RENOVAÇÕES``)
-    no Drive e retorna o ``fileId`` da pasta final.
+    """Garante a árvore de pastas ``relpath`` no Drive.
 
-    Cria as pastas conforme necessário (uma por segmento de caminho) e compartilha
-    cada uma com o dono do token implicitamente (já é dono ao criar). Usa cache por
-    ``creds`` para evitar repetir a resolução em múltiplos anexos do mesmo envio.
+    Cria pastas conforme necessário; usa cache por ``creds`` para
+    evitar repetir a resolução no mesmo envio.
     """
     service = drive_service_from_credentials(creds)
     cache_key = getattr(creds, "token", None) or id(creds)
@@ -257,12 +230,7 @@ def _http_error_message(exc: Exception) -> str:
 
 
 def _is_scope_error(exc: Exception) -> bool:
-    """Detecta erro de escopo/permissão insuficiente do Google (403).
-
-    O motivo real retornado pela API do Drive é ``insufficientPermissions``
-    (não ``insufficientScopes``, que é do endpoint de autorização). Cobrimos
-    ambos, além de ``invalid_scope`` e ``authError``.
-    """
+    """Detecta erro de escopo/permissão insuficiente do Google."""
     HttpError = _get_http_error()
     try:
         if isinstance(exc, HttpError):
@@ -300,13 +268,7 @@ def _raise_if_scope_error(exc: Exception) -> None:
 def upload_drive_file(
     creds, path: str, name: str, parent_id: str | None = None
 ) -> tuple[str, str]:
-    """Faz upload de ``path`` para o Google Drive (escopo ``drive.file``).
-
-    Retorna ``(file_id, web_view_link)``. O ``web_view_link`` é o link
-    compartilhável usado para montar o "chip" do anexo no corpo do e-mail.
-    Se ``parent_id`` for informado, o arquivo é criado dentro dessa pasta.
-    O app só pode ver/gerenciar os arquivos que ele mesmo cria (escopo mínimo).
-    """
+    """Faz upload de ``path`` para o Google Drive."""
     try:
         from googleapiclient.http import MediaFileUpload
     except ImportError as e:  # pragma: no cover
@@ -427,12 +389,7 @@ _AUTH_SUCCESS_MESSAGE = (
 
 
 class AuthFlowHandle:
-    """Fluxo OAuth em andamento.
-
-    ``auth_url`` deve ser exibido ao usuário. ``wait()`` bloqueia aguardando o
-    redirecionamento do navegador para o servidor local e, portanto, deve ser
-    executado *fora* da thread da interface gráfica.
-    """
+    """Fluxo OAuth em andamento."""
 
     def __init__(self, flow, local_server, wsgi_app, auth_url: str, token_path: Path):
         self.flow = flow
@@ -478,13 +435,7 @@ class AuthFlowHandle:
 
 
 def start_auth_flow(credentials_path: str = "", token_path: str = "") -> AuthFlowHandle:
-    """Inicia o fluxo OAuth de servidor local **sem** abrir o navegador.
-
-    Retorna um :class:`AuthFlowHandle` com a URL de autorização a ser exibida.
-    Diferente de ``flow.run_local_server``, isto não bloqueia nem tenta abrir
-    o navegador automaticamente — evitando o congelamento da GUI e falhas de
-    sandbox do navegador. Chame ``handle.wait()`` numa thread separada.
-    """
+    """Inicia o fluxo OAuth de servidor local **sem** abrir o navegador."""
     try:
         import wsgiref.simple_server
 
@@ -524,12 +475,7 @@ def start_auth_flow(credentials_path: str = "", token_path: str = "") -> AuthFlo
 
 
 def _drive_chip_html(name: str, link: str) -> str:
-    """Monta o "chip" de anexo do Drive no mesmo formato que o Gmail usa.
-
-    O chip é um ``<div class="gmail_chip gmail_drive_chip">`` com um link para
-    o arquivo no Drive. É assim que o Gmail reconhece e renderiza anexos do
-    Drive (não é um anexo MIME comum, nem o ``drive-api-payload.json``).
-    """
+    """Monta o "chip" de anexo do Drive no formato do Gmail."""
     safe_name = (
         name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     )
@@ -560,12 +506,7 @@ def _build_mime(
     drive_attachments: list[tuple[str, str]],
     sender: str = "",
 ) -> tuple[str, str]:
-    """Monta a mensagem MIME e retorna ``(raw_base64url, rfc822_msgid)``.
-
-    Os anexos do Drive são incorporados ao corpo como "chips" (mesmo formato
-    que o Gmail produz ao anexar um arquivo do Drive pela interface), e não
-    como partes MIME ``application/json`` (que o Gmail não reconhece).
-    """
+    """Monta a mensagem MIME e retorna ``(raw_base64url, rfc822_msgid)``."""
     message = MIMEMultipart("alternative")
     message["To"] = to
     message["Subject"] = subject
@@ -604,19 +545,7 @@ def create_draft(
     creds=None,
     drive_folder: str = "",
 ) -> DraftResult:
-    """Cria um rascunho no Gmail e retorna seus identificadores.
-
-    Os anexos são enviados via Google Drive: cada ``(path, name)`` em
-    ``attachments`` é carregado no Drive (escopo ``drive.file``), compartilhado
-    com o destinatário (``to``) e referenciado no rascunho como um chip de
-    anexo do Drive. O rascunho em si permanece pequeno, independentemente do
-    tamanho dos PDFs.
-
-    ``creds`` (credenciais OAuth já obtidas) é necessário para o upload/share.
-    ``drive_folder`` é o caminho relativo (estilo POSIX, ex.:
-    ``REMESSAS/2026/07-17/RENOVAÇÕES``) onde os arquivos são armazenados no
-    Drive, espelhando a estrutura de pastas local.
-    """
+    """Cria um rascunho no Gmail com anexos via Drive."""
     if creds is None:
         raise GmailError(
             "Credenciais OAuth necessárias para anexar arquivos via Drive."
@@ -666,14 +595,7 @@ def create_draft(
 
 
 def get_draft_message_labels(service, draft_id: str) -> list[str] | None:
-    """Retorna os rótulos da mensagem associada ao rascunho.
-
-    Usa o ``draft_id`` (estável) para resolver o ``message_id`` atual —
-    quando um rascunho é enviado pelo Gmail, o ``message_id`` original muda,
-    mas o ``draft_id`` permanece e passa a apontar para a nova mensagem.
-
-    Retorna ``None`` se o rascunho não existe mais (descartado/removido).
-    """
+    """Retorna os rótulos da mensagem associada ao rascunho."""
     HttpError = _get_http_error()
 
     try:

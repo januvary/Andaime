@@ -1,15 +1,4 @@
-"""Serviço de remessas (lotes) do SS-54.
-
-Mantém o agendamento automático de remessas, espelhando o padrão
-histórico da planilha: envios **quinzenais** (a cada 14 dias), com
-a data alvo ajustada para o dia útil mais próximo quando cai em
-fim de semana ou feriado (regra espelhada do RAC via ``DateCalculator``).
-
-Na inicialização, cria as remessas vencidas (a partir da última existente,
-de 14 em 14 dias) até hoje. Quando uma nova remessa é criada, as remessas
-anteriores são arquivadas: seus PDFs combinados passam a ser a fonte de
-verdade e os BLOBs dos arquivos são removidos do banco.
-"""
+"""Serviço de remessas (lotes) do SS-54 — agendamento quinzenal."""
 
 from __future__ import annotations
 
@@ -48,12 +37,7 @@ def _create_lote_moving_incompletos(db: SS54Database, date_iso: str) -> Lote:
 
 
 def _archive_processo(db: SS54Database, root: Path, processo: Processo | object) -> bool:
-    """Arquiva um processo: garante PDF e remove BLOBs.
-
-    Idempotente: se já estiver arquivado, retorna ``True`` sem alterar nada.
-    Se o PDF não existir, cria a partir dos BLOBs atuais. Preserva os metadados
-    na tabela ``arquivos`` (conteúdo fica ``NULL``).
-    """
+    """Arquiva um processo: garante PDF e remove BLOBs (idempotente)."""
     if isinstance(processo, Processo) and processo.is_archived:
         return True
 
@@ -94,13 +78,7 @@ def _archive_processo(db: SS54Database, root: Path, processo: Processo | object)
 def archive_previous_lotes(
     db: SS54Database, root: Path, new_lote: Lote
 ) -> dict:
-    """Arquiva todos os processos de remessas anteriores a ``new_lote``.
-
-    Para cada lote com data anterior a ``new_lote.date``, garante o PDF de cada
-    processo e remove seus BLOBs. O VACUUM automático fica suspenso durante
-    o lote inteiro (``vacuum_hold``): um único VACUUM ao final substitui um
-    por processo. Retorna relatório com contadores.
-    """
+    """Arquiva todos os processos de remessas anteriores a ``new_lote``."""
     report = {"processos": 0, "arquivados": 0, "ignorados": 0, "erros": 0, "error_detail": []}
     with db.vacuum_hold():
         lotes = db.get_all_lotes()
@@ -135,11 +113,7 @@ def archive_previous_lotes(
 
 
 def _ensure_lote_at_next_or_today(db: SS54Database, root: Path | None, lotes) -> tuple[int, Lote | None]:
-    """Cria a próxima remessa quinzenal (ou âncora em hoje se vazio).
-
-    ``lotes`` já vem ordenada DESC por data (``get_all_lotes``). Retorna
-    ``(0, None)`` se a próxima data já existe, ``(1, lote)`` se criou.
-    """
+    """Cria a próxima remessa quinzenal (ou âncora em hoje se vazio)."""
     if not lotes:
         lote = _create_lote_moving_incompletos(db, date.today().isoformat())
         return 1, lote

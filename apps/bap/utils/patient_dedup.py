@@ -1,10 +1,4 @@
-"""Detecção de pacientes duplicados (mesma pessoa com nomes distintos).
-
-O cadastro veio com nomes pouco confiáveis (sobrenomes faltando, erros de
-digitação, variações fonéticas), então a mesma pessoa costuma aparecer em
-mais de um registro. Esta rotina acha pares de pacientes cujos nomes são
-suficientemente semelhantes para serem o mesmo indivíduo.
-"""
+"""Detecção de pacientes duplicados (mesma pessoa, nomes distintos)."""
 
 from __future__ import annotations
 
@@ -17,12 +11,7 @@ from bap.utils.import_remessas import _status_norm
 def find_duplicate_patients(
     db, threshold: float = 90.0
 ) -> list[dict]:
-    """Retorna pares de pacientes que provavelmente são a mesma pessoa.
-
-    Cada item traz os dois ids, os nomes originais, a pontuação de
-    similaridade (``token_set_ratio``) e a quantidade de processos de cada
-    um, para ajudar na decisão de mesclagem.
-    """
+    """Retorna pares de pacientes provavelmente iguais."""
     pacientes = db.get_all_pacientes()
     rows = [
         (p.id, p.nome, _status_norm(p.nome))

@@ -1,14 +1,9 @@
-"""Seletor da remessa ativa (lote) — espelha o seletor de Malote do RAC.
+"""Seletor da remessa ativa (lote) — espelha o ``MaloteLabel`` do RAC.
 
-Um rótulo clicável na barra inferior esquerda mostra a data da remessa
-ativa; ao clicar, abre um diálogo listando as remessas existentes
-(selecionar uma a torna ativa). Ao contrário do RAC:
-- não há cálculo de data de retorno;
-- "malotes" chamam-se "remessas" aqui.
-
-O diálogo possui barra inferior com "Nova Remessa" (criação manual) e
-"Fechar". O sinal ``remessa_changed`` é emitido uma única vez, ao fechar
-o diálogo, e apenas quando a remessa ativa realmente mudou.
+Rótulo clicável na barra inferior; ao clicar abre diálogo com as
+remessas. Diferenças do RAC: sem cálculo de data de retorno;
+"malotes" chamam-se "remessas". O sinal ``remessa_changed`` só é
+emitido ao fechar o diálogo, quando a remessa ativa realmente mudou.
 """
 
 from __future__ import annotations
@@ -43,11 +38,7 @@ from bap.utils.date_utils import format_date_display
 
 
 class RemessaLabel(QWidget):
-    """Seletor clicável (esquerda da barra inferior) da remessa ativa.
-
-    Espelha o ``MaloteLabel`` do RAC: um rótulo "Remessa:" em cinza
-    seguido da data em destaque, clicável.
-    """
+    """Seletor clicável da remessa ativa — rótulo "Remessa:" + data."""
 
     remessa_changed = Signal(object)  # Lote | None
     status_message = Signal(str, object)  # (texto, cor|None) — feedback do diálogo
@@ -124,11 +115,10 @@ def _lote_key(lote: Optional[Lote]):
 
 
 def _activate_if_changed(label: "RemessaLabel", lote: Lote) -> bool:
-    """Aplica ``lote`` como ativo silenciosamente, apenas se mudou de fato.
+    """Aplica ``lote`` como ativo silenciosamente, apenas se mudou.
 
-    O ``remessa_changed`` do rótulo só é emitido ao fechar o diálogo, pelo
-    próprio ``show_remessa_dialog``, e somente quando a chave diferir da
-    inicial — evita refreshes redundantes na MainWindow (padrão RAC).
+    O ``remessa_changed`` só é emitido ao fechar o diálogo, e só quando
+    a chave difere da inicial — evita refreshes redundantes.
     """
     current = label.active()
     if current is not None and current.id == lote.id and current.date == lote.date:

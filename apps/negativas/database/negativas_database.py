@@ -10,7 +10,7 @@ from andaime.error_handler import ErrorHandler, ErrorLevel
 from andaime.text import to_upper_normalized
 from andaime.paths import resolve_db_path
 
-from negativas.models import Medicamento, ModeloTexto
+from negativas.models import Destinatario, Medicamento, ModeloTexto
 
 # Caminhos para os arquivos de dados
 _MODELOS_PATH = Path(__file__).resolve().parent / "modelos.json"
@@ -41,6 +41,12 @@ class NegativasDatabase(BaseDatabase):
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         tipo TEXT NOT NULL UNIQUE,
                         texto TEXT NOT NULL
+                    );
+
+                    CREATE TABLE IF NOT EXISTS destinatarios (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nome TEXT NOT NULL UNIQUE,
+                        ultimo_uso TEXT NOT NULL DEFAULT ''
                     );
                     
                     CREATE INDEX IF NOT EXISTS idx_medicamentos_nome ON medicamentos(nome COLLATE NOCASE);
@@ -252,3 +258,43 @@ class NegativasDatabase(BaseDatabase):
         """Retorna todos os modelos de texto."""
         rows = self._fetch_all_table("modelos_texto")
         return [ModeloTexto.from_row(r) for r in rows]
+
+    # ========== DESTINATÁRIOS ==========
+
+    @db_op("write")
+    def salvar_destinatario(self, nome: str) -> bool:
+        """Registra um destinatário no histórico (upsert por nome)."""
+        nome = (nome or "").strip()
+        if not nome:
+            return False
+        try:
+            from datetime import datetime
+            agora = datetime.now().isoformat(timespec="seconds")
+            with self._cursor() as cur:
+                cur.execute(
+                    "INSERT INTO destinatarios (nome, ultimo_uso) VALUES (?, ?) "
+                    "ON CONFLICT(nome) DO UPDATE SET ultimo_uso = excluded.ultimo_uso",
+                    (nome, agora),
+                )
+            self._commit()
+            return True
+        except Exception as e:
+            ErrorHandler.log(
+                f"Erro ao salvar destinatário: {e}",
+                level=ErrorLevel.WARNING,
+                context="Database",
+            )
+            return False
+
+    @db_op("read")
+    def buscar_destinatarios(self, query: str) -> List[Destinatario]:
+        """Busca destinatários por nome para autocomplete (mais recentes primeiro)."""
+        if not query or not query.strip():
+            return []
+        rows = self._fetch_all_table("destinatarios", order_by="ultimo_uso DESC")
+        norm = to_upper_normalized(query.strip())
+        return [
+            Destinatario.from_row(r)
+            for r in rows
+            if norm in to_upper_normalized(r.get("nome") or "")
+        ]

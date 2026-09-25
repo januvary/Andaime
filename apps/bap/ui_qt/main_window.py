@@ -76,9 +76,8 @@ class MainWindow(QMainWindow):
 
         root.addWidget(self._stack, stretch=1)
 
-        # Injeta o db nos rótulos de remessa já na construção: o
-        # ``init_backend`` roda assíncrono, e antes dele o clique acertaria
-        # um ``RemessaLabel`` sem db, cujo diálogo retorna em silêncio.
+        # Injeta o db nos rótulos: ``init_backend`` roda assíncrono,
+        # e antes dele o clique acertaria um ``RemessaLabel`` sem db.
         self._doc_page.set_remessa_db(self.db)
         self._remessa_page.set_remessa_db(self.db)
 
@@ -446,10 +445,9 @@ class MainWindow(QMainWindow):
         self._sync_grid()
 
     def _sync_grid(self, processo: Processo | None = None) -> None:
-        # Durante o carregamento programático de um processo (open_processo),
-        # os setters do cabeçalho emitem sinais que disparariam syncs parciais
-        # (com contexto incompleto) e trocas de remessa indevidas. Suprimimos
-        # esses syncs; open_processo faz um único sync final.
+        # Durante o carregamento programático, os setters do cabeçalho
+        # emitem sinais que disparariam syncs parciais e trocas de
+        # remessa indevidas. Suprimimos; open_processo faz sync final.
         if self._loading:
             return
         self._grid.set_doc_exclusions(
@@ -460,9 +458,9 @@ class MainWindow(QMainWindow):
         if processo is None:
             processo = self._current_processo()
         if processo is None:
-            # Regra única: só limpa a grade quando o sync anterior mostrava um
-            # processo (processo -> nenhum). Se já não havia processo (nenhum ->
-            # nenhum), preserva os arquivos montados manualmente na grade.
+            # Só limpa a grade quando o sync anterior mostrava um
+            # processo (processo -> nenhum). Se já não havia processo,
+            # preserva os arquivos montados manualmente.
             if self._grid_showing_process:
                 self._grid.set_items([])
                 self._header.set_descricao("")
@@ -581,8 +579,8 @@ class MainWindow(QMainWindow):
         self._grid.sort_by_doc_type()
         items_snapshot = [copy.copy(it) for it in self._grid.items()]
 
-        # Trava a grade durante o Save: impede que drops/edições alterem a
-        # ordem dos itens vivos e desalinhem o snapshot ao aplicar o resultado.
+        # Trava a grade durante o Save: impede que drops/edições
+        # alterem a ordem dos itens vivos e desalinhem o snapshot.
         # _saving bloqueia também a navegação entre páginas (ver navigate_to).
         self._saving = True
         self._grid.set_locked(True)
@@ -702,9 +700,8 @@ class MainWindow(QMainWindow):
         existing = {a.id: a for a in arqs}
         seen: set[int] = set()
 
-        # Metadados (criação/atualização/remoção de arquivos) em uma única
-        # transação: atômico e um só commit. A montagem do PDF fica fora —
-        # é I/O de disco e não deve segurar um write lock no banco.
+        # Metadados em transação única (atômico);
+        # a montagem do PDF fica fora (I/O de disco).
         with self.db.transaction():
             for ordem, item in enumerate(items, start=1):
                 aid = item.arquivo_id
@@ -819,10 +816,8 @@ class MainWindow(QMainWindow):
         if res is None:
             return
 
-        # Aplica o estado persistido de volta aos itens vivos da grade (em
-        # ordem) — sem recriar tiles nem re-renderizar thumbnails, já que a
-        # grade já exibe exatamente o que o usuário vê. A grade ficou travada
-        # durante o Save, então a ordem dos itens vivos casa com o snapshot.
+        # Aplica o estado persistido de volta aos itens vivos
+        # (em ordem) — sem recriar tiles nem re-renderizar thumbnails.
         live_items = self._grid.items()
         for live, saved in zip(live_items, res["items"]):
             live.__dict__.update(saved.__dict__)

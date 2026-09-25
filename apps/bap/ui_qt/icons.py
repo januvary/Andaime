@@ -59,10 +59,9 @@ def _resolve_item_page(
     loader: "Callable[[GridItem], bytes | None] | None" = None,
     scale: float = 2.0,
 ):
-    """Resolve um item em ``(qimage, image_path)`` para renderização.
+    """Resolve item em ``(qimage, image_path)`` para renderização.
 
-    Para PDFs, renderiza a página via ``andaime.pdf``. Para imagens em disco,
-    devolve o caminho para carga direta via ``QImage(path)``.
+    PDFs via ``andaime.pdf``; imagens via ``QImage(path)``.
     """
     page_no = item.page or 0
 
